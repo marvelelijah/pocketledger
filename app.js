@@ -40,7 +40,7 @@ function txRow(t, tag, opts) {
   const check = opts.check === undefined || opts.check === null ? '' : `<div class="check">${opts.check ? '✓' : ''}</div>`;
   return `<div class="tx" data-action="${opts.action || 'open'}" data-id="${esc(t.id)}">
     ${check}
-    <div class="ic" style="background:${c.color}2e">${c.icon}</div>
+    <div class="ic" style="color:${c.color};border-color:${c.color}55;background:${c.color}14">${c.icon}</div>
     <div class="mid">
       <div class="t1">${esc(t.simpleName)}</div>
       <div class="raw">${esc(t.rawName)}</div>
@@ -120,11 +120,11 @@ function potEntryRow(e) {
       ? `<div class="muted small ded">Deducted ${usd(-e.amount)}${Math.abs(-e.amount - e.exact) > 0.004 ? ' (exact ' + usd(e.exact) + ')' : ''}</div>` : '';
     return `<div class="rv-lite">${txRow(t, e.kind === 'extra' ? 'Extra income' : '', { action: sel ? 'toggleSel' : 'open', check: sel ? !!ui.selected[t.id] : null })}${ded}</div>`;
   }
-  const icons = { budget: '📅', extra: '💵', transfer: '🔁', manual: '✏️', adjust: '⚖️', tx: '🧾' };
+  const icons = { budget: '▦', extra: '↓', transfer: '⇄', manual: '✎', adjust: '≈', tx: '▪' };
   const undo = (e.kind === 'manual' || e.kind === 'transfer')
     ? `<button class="link small" data-action="undoLog" data-id="${esc(e.id)}">Undo</button>` : '';
   return `<div class="tx" style="cursor:default">
-    <div class="ic" style="background:#9ca3af2e">${icons[e.kind] || '•'}</div>
+    <div class="ic" style="color:var(--fg-dim)">${icons[e.kind] || '·'}</div>
     <div class="mid"><div class="t1">${esc(e.label)}</div><div class="when">${fmtShort(e.date)}</div></div>
     <div class="right"><div class="amt ${e.amount > 0 ? 'pos' : ''}">${signed(e.amount)}</div>${undo}</div>
   </div>`;
@@ -192,12 +192,12 @@ function activityView() {
   const chip = (key, label, color, icon) => {
     const on = key === null ? !ui.filter : ui.filter === key;
     return `<button class="chip" data-action="filter" data-cat="${key || ''}"
-      style="background:${on ? color : color + '26'};color:${on ? '#fff' : color}">${icon ? icon + ' ' : ''}${label}</button>`;
+      style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? icon + ' ' : ''}${label}</button>`;
   };
   return `<h1>Activity</h1>
   <input id="search" type="search" placeholder="Search name or merchant" value="${esc(ui.search)}" data-change="search" data-live="1" style="margin-bottom:10px">
   <div class="chips">
-    ${chip(null, 'All', '#0f766e', '')}
+    ${chip(null, 'All', '#A3B89C', '')}
     ${Object.entries(CATS).map(([k, c]) => chip(k, c.title, c.color, c.icon)).join('')}
   </div>
   <div id="actList">${activityListHTML()}</div>`;
@@ -210,7 +210,7 @@ function spendingBar() {
   const p = L.pct;
   const color = p == null ? 'var(--accent)' : p > 0.5 ? 'var(--accent)' : p > 0.2 ? 'var(--orange)' : 'var(--red)';
   return `<div class="stick"><div class="card spendbar" data-action="openPot" data-id="spending">
-    <div class="row"><span class="muted small">💳 Spending left this month ›</span>
+    <div class="row"><span class="muted small">◈ spending left this month ›</span>
       <span class="small muted">${L.available > 0 ? Math.round((p || 0) * 100) + '% left' : ''}</span></div>
     <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}">${usd(L.left)}</div>
       ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
@@ -237,7 +237,7 @@ function reviewView() {
         </div>
         <button class="link small" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>
       </div>`).join('')}</div>`
-    : `<div class="card">${emptyBox('All caught up ✅', 'Tap ＋ Purchase when you buy something.')}</div>`}
+    : `<div class="card">${emptyBox('all caught up ✓', 'Tap ＋ Purchase when you buy something.')}</div>`}
   ${rec.length ? `<div class="day">Recently sorted</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
 }
 
@@ -416,7 +416,7 @@ function budgetView() {
       ${numInput(e.amount, `data-change="fixedAmt" data-id="${e.id}" data-live="1"`, 'width:100px')}
       <button class="link" data-action="fixedDel" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}
     <button class="link" data-action="fixedAdd">＋ Add expense</button>
-    <div class="field"><span>💰 Savings (% of earnings)</span>
+    <div class="field"><span>◆ Savings %</span>
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
     <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.fixed)}</b></div>
@@ -540,7 +540,7 @@ function txModal(id) {
     <div class="card hero">
       <div class="amt-big ${t.amount > 0 ? 'pos' : ''}">${usd(t.amount)}</div>
       <div style="font-weight:700;margin-top:4px">${esc(t.simpleName)}</div>
-      <span class="pill" style="background:${c.color}">${c.icon} ${c.title}</span>
+      <span class="pill" style="color:${c.color};border-color:${c.color}">${c.icon} ${c.title}</span>
     </div>
     <div class="card"><h2>Original</h2>
       <div class="field"><span class="muted">Bank description</span><div class="mono" style="max-width:62%">${esc(t.rawName)}</div></div>
@@ -661,7 +661,7 @@ function modalHTML() {
 
 /* ---------- render ---------- */
 
-const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget'], ['plan', '✅', 'To-do']];
+const TABS = [['review', '▣', 'Review'], ['home', '⌂', 'Home'], ['activity', '≣', 'Activity'], ['income', '$', 'Income'], ['budget', '◔', 'Budget'], ['plan', '☐', 'To-do']];
 
 function render() {
   const y = window.scrollY;

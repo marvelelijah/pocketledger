@@ -9,6 +9,7 @@ This repo is published with GitHub Pages. Open the live app link above in **Safa
 
 ## How it works
 - **Review (opens first):** a bar at the top shows how much of this month's spending money is left. Tap **＋ Purchase** when you buy something, then tap a pot to deduct from it. Purchases are rounded when deducted (nearest dollar by default; change it in the Budget tab's Month-end check).
+- **Look:** a terminal style borrowed from elijahhalford.com (IBM Plex Mono, outlined sections, lowercase labels) on warm charcoal and cream. Icons are plain Unicode symbols, no emoji.
 - **Home:** your pots (Spending, Savings, plus any you add with "＋ Add pot or goal"). Tap a pot to open its page: balance, goal progress, money in, money out. Tap a transaction to edit it, or use **Select** to move several at once.
 - **Income:** regular sources are matched automatically by bank text. A source marked "varies month to month" (like freelance) has no expected amount. Use ＋ to count any other deposit as extra income.
 - **Budget (always manual):** this month's income deposits are listed under each source and totaled for you (tap Edit only to fix a difference). Then set constant expenses and the savings percentage and tap Apply. Updating a month replaces its numbers so nothing double counts. 

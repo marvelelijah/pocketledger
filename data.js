@@ -8,17 +8,17 @@ const FEATURES = {
 };
 
 const CATS = {
-  food:          { title: 'Food & Drink',   color: '#f97316', icon: '🍴' },
-  groceries:     { title: 'Groceries',      color: '#22c55e', icon: '🛒' },
-  gas:           { title: 'Gas',            color: '#eab308', icon: '⛽' },
-  videoCamera:   { title: 'Video & Camera', color: '#a855f7', icon: '📷', taxDeductible: true },
-  bills:         { title: 'Bills',          color: '#3b82f6', icon: '⚡' },
-  shopping:      { title: 'Shopping',       color: '#ec4899', icon: '🛍️' },
-  entertainment: { title: 'Entertainment',  color: '#14b8a6', icon: '🎬' },
-  health:        { title: 'Health',         color: '#ef4444', icon: '💊' },
-  income:        { title: 'Income',         color: '#10b981', icon: '💵' },
-  transfer:      { title: 'Transfer',       color: '#6366f1', icon: '🔁' },
-  other:         { title: 'Other',          color: '#9ca3af', icon: '❔' },
+  food:          { title: 'Food & Drink',   color: '#f97316', icon: '❖' },
+  groceries:     { title: 'Groceries',      color: '#22c55e', icon: '▤' },
+  gas:           { title: 'Gas',            color: '#eab308', icon: '▲' },
+  videoCamera:   { title: 'Video & Camera', color: '#a855f7', icon: '◉', taxDeductible: true },
+  bills:         { title: 'Bills',          color: '#3b82f6', icon: '⌁' },
+  shopping:      { title: 'Shopping',       color: '#ec4899', icon: '◇' },
+  entertainment: { title: 'Entertainment',  color: '#14b8a6', icon: '▷' },
+  health:        { title: 'Health',         color: '#ef4444', icon: '✚' },
+  income:        { title: 'Income',         color: '#10b981', icon: '↓' },
+  transfer:      { title: 'Transfer',       color: '#6366f1', icon: '⇄' },
+  other:         { title: 'Other',          color: '#9ca3af', icon: '◌' },
 };
 
 /* ---------- helpers ---------- */
@@ -151,7 +151,9 @@ const creditProvider = {
 
 const STORAGE_KEY = 'pocketledger.v1';   // key name kept so existing data is found and migrated
 const STATE_VERSION = 2;
-const POT_ICONS = ['💳', '🏦', '🎯', '✈️', '🏠', '🚗', '📷', '🎁', '🛟', '🎓'];
+const POT_ICONS = ['◈', '◆', '◎', '➤', '⌂', '◭', '◉', '✧', '◍', '✦'];
+/* Older saved pots used emoji; this maps them to the plain symbols. */
+const ICON_UPGRADE = { '💳': '◈', '🏦': '◆', '🎯': '◎', '✈️': '➤', '🏠': '⌂', '🚗': '◭', '📷': '◉', '🎁': '✧', '🛟': '◍', '🎓': '✦' };
 
 const round2 = n => Math.round((n || 0) * 100) / 100;
 
@@ -174,8 +176,8 @@ function defaultState() {
     useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
     savingsPercent: 10,   // % of the month's earnings set aside for the Savings pot
     pots: [
-      { id: 'spending', name: 'Spending', icon: '💳', balance: 0, target: null, core: true },
-      { id: 'savings', name: 'Savings', icon: '🏦', balance: 0, target: 5000, core: true },
+      { id: 'spending', name: 'Spending', icon: '◈', balance: 0, target: null, core: true },
+      { id: 'savings', name: 'Savings', icon: '◆', balance: 0, target: 5000, core: true },
     ],
     potLog: [],           // every movement in or out of a pot
     roundMode: 'nearest', // how spending is rounded when deducted from a pot: 'off' | 'nearest' | 'up'
@@ -202,6 +204,7 @@ function loadState() {
 /* Brings data saved by the first version of the app up to date. */
 function migrate(old) {
   const s = Object.assign(defaultState(), old);
+  for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
   if (old.version >= STATE_VERSION) return s;
 
   s.created = old.created || new Date().toISOString();
@@ -388,7 +391,7 @@ function ignoreTx(id) {
 }
 
 function addPot(name, icon, balance, target) {
-  const pot = { id: uid(), name: name || 'New pot', icon: icon || '🎯', balance: 0, target: target > 0 ? target : null, core: false };
+  const pot = { id: uid(), name: name || 'New pot', icon: icon || '◎', balance: 0, target: target > 0 ? target : null, core: false };
   S.pots.push(pot);
   if (balance) logEntry(pot.id, balance, 'Starting balance', 'manual');
   save();
