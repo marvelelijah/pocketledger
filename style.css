@@ -45,9 +45,8 @@ h2::before { content: '▸ '; }
 .stat { font: 500 15px/1.2 'IBM Plex Mono', monospace; margin-top: 4px; letter-spacing: -.5px; overflow-wrap: anywhere; }
 
 .bar { height: 8px; background: transparent; border: 1px solid var(--line); overflow: hidden; margin: 8px 0 4px; }
-.bar > div { height: 100%; background: var(--sage); }
+.bar > div { height: 100%; width: 0; background: var(--sage); transition: width .9s cubic-bezier(.22, 1, .36, 1), background-color .5s; }
 .bar.thick { height: 14px; }
-.bar > div { transition: width .25s; }
 
 /* Transactions */
 .tx { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
@@ -119,7 +118,7 @@ textarea { resize: vertical; }
 .scrim { position: fixed; inset: 0; background: rgba(8, 8, 6, .7); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
 .sheet { background: var(--bg); border-top: 1px solid var(--fg-dim); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
   padding: 14px 20px calc(24px + env(safe-area-inset-bottom)); }
-.sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: var(--fg-dim); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.sheet-head { position: sticky; top: -14px; background: var(--bg); z-index: 2; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: var(--fg-dim); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .sheet-head b { font-size: 13px; font-weight: 500; text-transform: lowercase; }
 .hero { text-align: center; padding: 10px 14px; }
 .hero .amt-big { font: 500 38px/1.1 'IBM Plex Mono', monospace; letter-spacing: -1px; }
@@ -158,3 +157,75 @@ textarea { resize: vertical; }
 .earn { padding: 8px 0; border-top: 1px solid var(--line); }
 .earn:first-of-type { border-top: 0; }
 .earn .tx { padding: 6px 0 6px 8px; }
+
+/* ---------- emoji, tinted ---------- */
+.emo { display: inline-block; font-style: normal; line-height: 1; }
+#tabbar button span.i { font-size: 19px; }
+.ic { font-size: 18px; }
+.btn.primary .emo { filter: grayscale(1) brightness(.2); }
+
+/* ---------- in-app pickers and dialogs ---------- */
+.sel { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; background: var(--bg); border: 1px solid var(--line);
+  padding: 8px 10px; font-size: 16px; color: var(--fg); text-align: left; min-width: 0; }
+.field .sel { width: 170px; justify-content: flex-end; }
+.selbar .sel { flex: 1; }
+.sheet.small { max-height: 70vh; }
+.optlist { display: flex; flex-direction: column; }
+.opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: none; border: 0; border-top: 1px solid var(--line);
+  padding: 13px 4px; text-align: left; font-size: 15px; color: var(--fg-dim); }
+.opt:first-child { border-top: 0; }
+.opt.on { color: var(--fg); }
+.optgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.optgrid .opt { justify-content: center; border: 1px solid var(--line); padding: 14px 0; font-size: 22px; }
+.optgrid .opt.on { border-color: var(--sage); background: var(--accent-soft); }
+.grab { width: 38px; height: 4px; background: var(--line); margin: -4px auto 10px; }
+.sheet, .scrim { will-change: transform; }
+.dialog { background: var(--raise); border: 1px solid var(--fg-dim); width: calc(100% - 40px); max-width: 360px; padding: 18px 16px 16px; align-self: center; }
+.scrim[data-layer="dialog"] { align-items: center; z-index: 12; }
+.scrim[data-layer="picker"] { z-index: 11; }
+.dtitle { color: var(--sage); font-weight: 500; margin-bottom: 6px; }
+.dmsg { color: var(--fg); line-height: 1.5; }
+#ghost-root { position: fixed; inset: 0; pointer-events: none; z-index: 20; }
+
+/* ---------- motion ---------- */
+@keyframes fadeIn { from { opacity: 0; } }
+@keyframes fadeOut { to { opacity: 0; } }
+@keyframes sheetUp { from { transform: translateY(105%); } }
+@keyframes sheetDown { to { transform: translateY(105%); } }
+@keyframes dialogIn { from { opacity: 0; transform: scale(.9) translateY(8px); } }
+@keyframes dialogOut { to { opacity: 0; transform: scale(.94); } }
+@keyframes screenIn { from { opacity: 0; transform: translate(var(--dx, 0), 14px); } }
+@keyframes tabPop { 0% { transform: scale(.7); } 55% { transform: scale(1.22); } 100% { transform: scale(1); } }
+
+.scrim.in { animation: fadeIn .28s ease both; }
+.scrim.in .sheet { animation: sheetUp .5s cubic-bezier(.16, 1, .3, 1) backwards; }
+.scrim.in .dialog { animation: dialogIn .38s cubic-bezier(.34, 1.56, .64, 1) backwards; }
+.scrim.out { animation: fadeOut .3s ease forwards; }
+.scrim.out .sheet { animation: sheetDown .32s cubic-bezier(.5, 0, .9, .5) forwards; }
+.scrim.out .dialog { animation: dialogOut .22s ease forwards; }
+
+#app.enter > * { animation: screenIn .5s cubic-bezier(.16, 1, .3, 1) backwards; }
+#app.enter > *:nth-child(2) { animation-delay: .04s; }
+#app.enter > *:nth-child(3) { animation-delay: .08s; }
+#app.enter > *:nth-child(4) { animation-delay: .12s; }
+#app.enter > *:nth-child(5) { animation-delay: .16s; }
+#app.enter > *:nth-child(6) { animation-delay: .20s; }
+#app.enter > *:nth-child(n+7) { animation-delay: .24s; }
+#tabbar button.pop span.i { animation: tabPop .45s cubic-bezier(.34, 1.56, .64, 1); }
+#tabbar button.on::before { animation: fadeIn .3s ease backwards; }
+
+/* springy press feedback */
+.btn, .tx, .card.pot, .spendbar, .chip, .seg button, #tabbar button, .sel, .opt, .link { transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), background-color .2s, border-color .2s, color .2s; }
+.btn:active, .card.pot:active, .spendbar:active, .chip:active, .sel:active { transform: scale(.96); transition-duration: .08s; }
+.tx:active, .opt:active { transform: scale(.985); transition-duration: .08s; }
+.seg button:active, #tabbar button:active, .link:active { transform: scale(.92); transition-duration: .08s; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
+}
+
+/* keep the slide-in motion from ever causing sideways scroll */
+html { overflow-x: hidden; }
+#app { overflow-x: clip; }
+.opt { justify-content: flex-start; }
+.opt .check { margin-left: auto; }

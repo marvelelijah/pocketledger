@@ -5,7 +5,7 @@ const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
 const ui = {
-  tab: 'review', modal: null, filter: null, search: '', syncing: false, resetScroll: false,
+  tab: 'review', modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -19,6 +19,28 @@ const fmtShort = iso => new Date(iso).toLocaleString('en-US', { dateStyle: 'medi
 const fmtFull = iso => new Date(iso).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'medium' });
 const monthName = d => d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
 const monthLabel = key => { const [y, m] = key.split('-').map(Number); return monthName(new Date(y, m - 1, 1)); };
+
+/* Emoji, tinted to a color so they sit in the palette instead of shouting. */
+const SAGE = '#a9bea1', DIM = '#9c9786';
+const tintCache = {};
+function tintFilter(hex) {
+  if (tintCache[hex]) return tintCache[hex];
+  const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, dl = mx - mn;
+  let h = 0, s = 0;
+  if (dl > 0) {
+    s = dl / (1 - Math.abs(2 * l - 1));
+    h = mx === r ? ((g - b) / dl) % 6 : mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4;
+    h = (h * 60 + 360) % 360;
+  }
+  return (tintCache[hex] = `grayscale(1) sepia(1) hue-rotate(${Math.round(h - 38)}deg) saturate(${(0.25 + s * 1.1).toFixed(2)})`);
+}
+const emo = (ch, color) => `<span class="emo" style="filter:${tintFilter(color || SAGE)}">${ch}</span>`;
+const emoDark = ch => `<span class="emo" style="filter:grayscale(1) brightness(.2)">${ch}</span>`;
+
+/* Progress fill and counting numbers: both are animated after each render (see animateUI). */
+const fill = (key, pct, style) => `<div data-bar="${esc(key)}" data-w="${Math.round(pct)}" ${style ? `style="${style}"` : ''}></div>`;
+const counted = (key, val) => `data-count="${esc(key)}" data-val="${val}"`;
 
 /* ---------- shared pieces ---------- */
 
@@ -40,7 +62,7 @@ function txRow(t, tag, opts) {
   const check = opts.check === undefined || opts.check === null ? '' : `<div class="check">${opts.check ? '✓' : ''}</div>`;
   return `<div class="tx" data-action="${opts.action || 'open'}" data-id="${esc(t.id)}">
     ${check}
-    <div class="ic" style="color:${c.color};border-color:${c.color}55;background:${c.color}14">${c.icon}</div>
+    <div class="ic" style="color:${c.color};border-color:${c.color}55;background:${c.color}14">${emo(c.icon, c.color)}</div>
     <div class="mid">
       <div class="t1">${esc(t.simpleName)}</div>
       <div class="raw">${esc(t.rawName)}</div>
@@ -61,9 +83,9 @@ const numInput = (v, attrs, style) => `<input type="number" inputmode="decimal" 
 function potCard(p) {
   const pct = p.target > 0 ? Math.min(Math.max(p.balance / p.target, 0), 1) : null;
   return `<div class="card pot" data-action="openPot" data-id="${esc(p.id)}">
-    <div class="muted small">${p.icon} ${esc(p.name)} ›</div>
-    <div class="big ${p.balance < 0 ? 'neg' : ''}">${usd(p.balance)}</div>
-    ${pct === null ? '' : `<div class="bar"><div style="width:${Math.round(pct * 100)}%"></div></div><div class="muted small">of ${usd(p.target)} goal</div>`}
+    <div class="muted small">${emo(p.icon)} ${esc(p.name)} ›</div>
+    <div class="big ${p.balance < 0 ? 'neg' : ''}" ${counted('pot-' + p.id, p.balance)}>${usd(p.balance)}</div>
+    ${pct === null ? '' : `<div class="bar">${fill('pot-' + p.id, pct * 100)}</div><div class="muted small">of ${usd(p.target)} goal</div>`}
   </div>`;
 }
 
@@ -83,9 +105,9 @@ function homeView() {
   <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
 
   <div class="grid3" style="margin-top:12px">
-    <div class="card"><div class="muted small">Earned</div><div class="stat pos">${usd(totalEarnings(now))}</div></div>
-    <div class="card"><div class="muted small">Spent</div><div class="stat">${usd(spentIn(now))}</div></div>
-    <div class="card"><div class="muted small">Deductible YTD</div><div class="stat" style="color:${CATS.videoCamera.color}">${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
+    <div class="card"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
+    <div class="card"><div class="muted small">Spent</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
+    <div class="card"><div class="muted small">Deductible YTD</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
 
   ${FEATURES.creditScore ? creditCard() : ''}
@@ -120,11 +142,11 @@ function potEntryRow(e) {
       ? `<div class="muted small ded">Deducted ${usd(-e.amount)}${Math.abs(-e.amount - e.exact) > 0.004 ? ' (exact ' + usd(e.exact) + ')' : ''}</div>` : '';
     return `<div class="rv-lite">${txRow(t, e.kind === 'extra' ? 'Extra income' : '', { action: sel ? 'toggleSel' : 'open', check: sel ? !!ui.selected[t.id] : null })}${ded}</div>`;
   }
-  const icons = { budget: '▦', extra: '↓', transfer: '⇄', manual: '✎', adjust: '≈', tx: '▪' };
+  const icons = { budget: '📅', extra: '💵', transfer: '🔁', manual: '✏️', adjust: '⚖️', tx: '🧾' };
   const undo = (e.kind === 'manual' || e.kind === 'transfer')
     ? `<button class="link small" data-action="undoLog" data-id="${esc(e.id)}">Undo</button>` : '';
   return `<div class="tx" style="cursor:default">
-    <div class="ic" style="color:var(--fg-dim)">${icons[e.kind] || '·'}</div>
+    <div class="ic">${emo(icons[e.kind] || '•', DIM)}</div>
     <div class="mid"><div class="t1">${esc(e.label)}</div><div class="when">${fmtShort(e.date)}</div></div>
     <div class="right"><div class="amt ${e.amount > 0 ? 'pos' : ''}">${signed(e.amount)}</div>${undo}</div>
   </div>`;
@@ -144,12 +166,12 @@ function potView() {
   return `
   <div class="row"><button class="link" data-action="tab" data-tab="home">‹ Home</button>
     <button class="link" data-action="editPot" data-id="${esc(p.id)}">Edit</button></div>
-  <h1>${p.icon} ${esc(p.name)}</h1>
+  <h1>${emo(p.icon)} ${esc(p.name)}</h1>
 
   <div class="card">
     <div class="muted small">Balance</div>
-    <div class="big ${p.balance < 0 ? 'neg' : ''}" style="font-size:34px">${usd(p.balance)}</div>
-    ${pct === null ? '' : `<div class="bar"><div style="width:${Math.round(pct * 100)}%"></div></div>
+    <div class="big ${p.balance < 0 ? 'neg' : ''}" style="font-size:34px" ${counted('potpage-' + p.id, p.balance)}>${usd(p.balance)}</div>
+    ${pct === null ? '' : `<div class="bar">${fill('pot-' + p.id, pct * 100)}</div>
       <div class="muted small">${Math.round(pct * 100)}% of ${usd(p.target)} goal</div>`}
     <div class="btn-row"><button class="btn" data-action="moveMoney" data-id="${esc(p.id)}">Move money</button></div>
   </div>
@@ -163,7 +185,7 @@ function potView() {
   <div class="muted small" style="margin:0 4px">Tap a transaction to edit its category or pot.</div>
 
   ${ui.selectMode && nSel ? `<div class="selbar"><span><b>${nSel}</b> selected</span>
-    <select id="bulkTarget">${others.map(o => `<option value="${esc(o.id)}">Move to ${esc(o.name)}</option>`).join('')}<option value="none">Back to Review</option></select>
+    ${selBtn('bulkTarget', '', 'flex:1')}
     <button class="btn primary" data-action="bulkMove">Move</button></div>` : ''}`;
 }
 
@@ -192,7 +214,7 @@ function activityView() {
   const chip = (key, label, color, icon) => {
     const on = key === null ? !ui.filter : ui.filter === key;
     return `<button class="chip" data-action="filter" data-cat="${key || ''}"
-      style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? icon + ' ' : ''}${label}</button>`;
+      style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
   return `<h1>Activity</h1>
   <input id="search" type="search" placeholder="Search name or merchant" value="${esc(ui.search)}" data-change="search" data-live="1" style="margin-bottom:10px">
@@ -210,11 +232,11 @@ function spendingBar() {
   const p = L.pct;
   const color = p == null ? 'var(--accent)' : p > 0.5 ? 'var(--accent)' : p > 0.2 ? 'var(--orange)' : 'var(--red)';
   return `<div class="stick"><div class="card spendbar" data-action="openPot" data-id="spending">
-    <div class="row"><span class="muted small">◈ spending left this month ›</span>
+    <div class="row"><span class="muted small">${emo(potById('spending').icon)} spending left this month ›</span>
       <span class="small muted">${L.available > 0 ? Math.round((p || 0) * 100) + '% left' : ''}</span></div>
-    <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}">${usd(L.left)}</div>
+    <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}" ${counted('spend', L.left)}>${usd(L.left)}</div>
       ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
-    ${p == null ? '' : `<div class="bar thick"><div style="width:${Math.round(p * 100)}%;background:${color}"></div></div>`}
+    ${p == null ? '' : `<div class="bar thick">${fill('spend', p * 100, 'background:' + color)}</div>`}
   </div></div>`;
 }
 
@@ -233,11 +255,11 @@ function reviewView() {
         ${txRow(t)}
         <div class="muted small" style="margin:2px 0 6px">Deduct this from…</div>
         <div class="btn-row">
-          ${S.pots.map((pot, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-action="assign" data-id="${esc(t.id)}" data-pot="${esc(pot.id)}">${pot.icon} ${esc(pot.name)}</button>`).join('')}
+          ${S.pots.map((pot, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-action="assign" data-id="${esc(t.id)}" data-pot="${esc(pot.id)}">${i === 0 ? emoDark(pot.icon) : emo(pot.icon)} ${esc(pot.name)}</button>`).join('')}
         </div>
         <button class="link small" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>
       </div>`).join('')}</div>`
-    : `<div class="card">${emptyBox('all caught up ✓', 'Tap ＋ Purchase when you buy something.')}</div>`}
+    : `<div class="card">${emptyBox('all caught up ' + emo('✅'), 'Tap ＋ Purchase when you buy something.')}</div>`}
   ${rec.length ? `<div class="day">Recently sorted</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
 }
 
@@ -259,7 +281,7 @@ function incomeView() {
       const pct = s.expectedAmount > 0 ? Math.min(got / s.expectedAmount, 1) : 0;
       return `<div style="padding:6px 0">
         <div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
-        <div class="bar"><div style="width:${Math.round(pct * 100)}%"></div></div>
+        <div class="bar">${fill('src-' + s.id, pct * 100)}</div>
         <div class="muted small">of ${usd(s.expectedAmount)} expected</div></div>`;
     }).join('') || '<div class="muted">No income sources yet.</div>'}
     <button class="link" data-action="editSources">Edit income sources</button>
@@ -307,30 +329,27 @@ function discHTML(d) {
     <button class="btn primary full" data-action="redistribute">${d > 0 ? 'Add' : 'Take'} ${usd(Math.abs(d))} ${d > 0 ? 'to' : 'from'} the pot below</button>`;
 }
 
+const checkKeys = () => [...new Set([monthKey(new Date()), ...S.budgetRuns.map(r => r.monthKey)])].sort().reverse();
+
 function checkCard() {
-  const keys = [...new Set([monthKey(new Date()), ...S.budgetRuns.map(r => r.monthKey)])].sort().reverse();
+  const keys = checkKeys();
   if (!ui.checkMonth || !keys.includes(ui.checkMonth)) ui.checkMonth = keys[0];
   const key = ui.checkMonth;
   const rs = roundingStats(key);
   const d = discrepancy(key, ui.actual);
   return `<div class="card"><h2>Month-end check</h2>
-    <select data-change="checkMonth">${keys.map(k => `<option value="${k}" ${k === key ? 'selected' : ''}>${monthLabel(k)}</option>`).join('')}</select>
+    ${selBtn('checkMonth', '', '', 'width:100%')}
     <div class="field" style="margin-top:8px"><span>Spent from pots (exact)</span><span>${usd(rs.exact)}</span></div>
     <div class="field"><span>Deducted (rounded)</span><span>${usd(rs.deducted)}</span></div>
     <div class="field"><span>Rounding difference</span><b class="${rs.diff > 0 ? 'pos' : rs.diff < 0 ? 'neg' : ''}">${signed(rs.diff)}</b></div>
     <div class="field"><span>All pots add up to</span><b id="pots-total">${usd(potsTotal())}</b></div>
     <div class="field"><span>Round spending when deducting</span>
-      <select data-change="roundMode" style="width:150px">
-        <option value="nearest" ${S.roundMode === 'nearest' ? 'selected' : ''}>Nearest dollar</option>
-        <option value="up" ${S.roundMode === 'up' ? 'selected' : ''}>Round up</option>
-        <option value="off" ${S.roundMode === 'off' ? 'selected' : ''}>Exact cents</option></select></div>
+      ${selBtn('roundMode', '')}</div>
     <div class="field"><span>Real money you have for them <span class="muted small">(optional)</span></span>
       ${ui.actual == null ? numInput(0, 'id="actual" data-change="actual" data-live="1" placeholder="0"', 'width:120px').replace('value="0"', 'value=""') : numInput(ui.actual, 'id="actual" data-change="actual" data-live="1"', 'width:120px')}</div>
     <div class="muted small">Leave it blank to check only the rounding. Enter your real count to catch any other missing or extra dollars.</div>
     <div id="disc-box" style="margin-top:6px">${discHTML(d)}</div>
-    <div class="field"><span>Put it in</span><select id="adjTarget" data-change="adjTarget" style="width:180px">
-      ${S.pots.map(p => `<option value="${esc(p.id)}" ${ui.adjTarget === p.id ? 'selected' : ''}>${p.icon} ${esc(p.name)}</option>`).join('')}
-      <option value="all" ${ui.adjTarget === 'all' ? 'selected' : ''}>Split across all pots</option></select></div>
+    <div class="field"><span>Put it in</span>${selBtn('adjTarget', '')}</div>
   </div>`;
 }
 
@@ -360,7 +379,7 @@ function historyDetail(run) {
     ${line('Difference', signed(rs.diff))}
     <div class="day">Income that month</div>
     ${income.length ? income.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted small">None counted.</div>'}
-    ${byPot.map(g => `<div class="day">Spent from ${g.p.icon} ${esc(g.p.name)} · ${usd(-r2(g.items.reduce((a, e) => a + e.amount, 0)))}</div>
+    ${byPot.map(g => `<div class="day">Spent from ${emo(g.p.icon)} ${esc(g.p.name)} · ${usd(-r2(g.items.reduce((a, e) => a + e.amount, 0)))}</div>
       ${g.items.map(e => txRow(txById(e.txId))).join('')}`).join('')}
     ${unsorted.length ? `<div class="day">Not sorted into a pot</div>${unsorted.map(t => txRow(t)).join('')}` : ''}
   </div>`;
@@ -416,7 +435,7 @@ function budgetView() {
       ${numInput(e.amount, `data-change="fixedAmt" data-id="${e.id}" data-live="1"`, 'width:100px')}
       <button class="link" data-action="fixedDel" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}
     <button class="link" data-action="fixedAdd">＋ Add expense</button>
-    <div class="field"><span>◆ Savings %</span>
+    <div class="field"><span>${emo('💰')} Savings %</span>
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
     <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.fixed)}</b></div>
@@ -501,7 +520,8 @@ const VIEWS = { home: homeView, pot: potView, activity: activityView, review: re
 /* ---------- modals ---------- */
 
 function sheet(title, inner, doneAction) {
-  return `<div class="scrim"><div class="sheet">
+  return `<div class="scrim" data-layer="sheet"><div class="sheet">
+    <div class="grab"></div>
     <div class="sheet-head"><b>${title}</b><button class="link" data-action="${doneAction || 'close'}">Done</button></div>
     ${inner}</div></div>`;
 }
@@ -511,7 +531,7 @@ function seg(options, current, action, extra) {
     `<button class="${current === val ? 'on' : ''}" data-action="${action}" data-pot="${esc(val)}" ${extra || ''}>${label}</button>`).join('')}</div>`;
 }
 
-const potOptions = () => S.pots.map(p => [p.id, p.icon + ' ' + esc(p.name)]);
+const potOptions = () => S.pots.map(p => [p.id, emo(p.icon) + ' ' + esc(p.name)]);
 
 function txModal(id) {
   const t = txById(id);
@@ -530,7 +550,8 @@ function txModal(id) {
   } else {
     const src = sourceName(t.incomeSourceID);
     pots = `<div class="card"><h2>Income</h2>
-      ${src ? `<div class="pos">✓ Counted automatically as ${esc(src)}</div>`
+      ${src ? `<div class="pos">✓ Counted automatically as ${esc(src)}</div>
+            <button class="btn full" style="margin-top:8px" data-action="addExtra" data-id="${esc(t.id)}">Count as extra income instead</button>`
         : t.extraIncomeLabel ? `<div class="pos">✓ Extra income: ${esc(t.extraIncomeLabel)} → ${esc(potName(t.extraIncomePot))}</div>
             <button class="btn danger full" style="margin-top:8px" data-action="removeExtra" data-id="${esc(t.id)}">Remove from extra income</button>`
         : `<button class="btn full" data-action="addExtra" data-id="${esc(t.id)}">Count as extra income</button>`}
@@ -538,9 +559,9 @@ function txModal(id) {
   }
   return sheet('Transaction', `
     <div class="card hero">
-      <div class="amt-big ${t.amount > 0 ? 'pos' : ''}">${usd(t.amount)}</div>
+      <div class="amt-big ${t.amount > 0 ? 'pos' : ''}" ${counted('hero-' + t.id, t.amount)}>${usd(t.amount)}</div>
       <div style="font-weight:700;margin-top:4px">${esc(t.simpleName)}</div>
-      <span class="pill" style="color:${c.color};border-color:${c.color}">${c.icon} ${c.title}</span>
+      <span class="pill" style="color:${c.color};border-color:${c.color}">${emo(c.icon, c.color)} ${c.title}</span>
     </div>
     <div class="card"><h2>Original</h2>
       <div class="field"><span class="muted">Bank description</span><div class="mono" style="max-width:62%">${esc(t.rawName)}</div></div>
@@ -550,13 +571,11 @@ function txModal(id) {
     <div class="card"><h2>How it was read</h2>
       <div class="field"><span class="muted">Simplified as</span><div style="text-align:right">${esc(t.simpleName)}</div></div>
       <div class="row"><span class="muted">Confidence</span>${badge(t)}</div>
-      <div class="bar"><div style="width:${t.userConfirmed ? 100 : bar}%"></div></div>
+      <div class="bar">${fill('conf-' + t.id, t.userConfirmed ? 100 : bar)}</div>
       <div class="muted small">Low confidence usually means an unfamiliar merchant. Changing the category teaches the app for every transaction from this merchant.</div>
     </div>
     <div class="card"><h2>Category</h2>
-      <select data-change="setcat" data-id="${esc(t.id)}">
-        ${Object.entries(CATS).map(([k, v]) => `<option value="${k}" ${k === t.category ? 'selected' : ''}>${v.icon} ${v.title}</option>`).join('')}
-      </select>
+      ${selBtn('setcat', t.id, '', 'width:100%')}
       ${c.taxDeductible ? '<div class="muted small" style="margin-top:8px">Counted toward your tax-deductible total.</div>' : ''}
     </div>
     ${pots}`);
@@ -577,14 +596,16 @@ function addTxModal() {
 
 function extraModal() {
   const m = ui.modal;
-  const cands = S.transactions.filter(t => t.amount > 0 && !isIncomeCounted(t));
+  const cands = S.transactions.filter(t => t.amount > 0 && !t.extraIncomeLabel);   // includes job deposits
+  const chosen = m.selected && txById(m.selected);
   const labels = ['Tips', 'Gift', 'Refund', 'Side gig', 'Other'];
   return sheet('Extra income', `
     <div class="card"><h2>Pick a deposit from your history</h2>
-      ${cands.length ? cands.map(t => txRow(t, '', { action: 'pickExtra', check: m.selected === t.id })).join('') : '<div class="muted">No uncounted deposits.</div>'}
+      ${cands.length ? cands.map(t => txRow(t, incomeTag(t), { action: 'pickExtra', check: m.selected === t.id })).join('') : '<div class="muted">No deposits yet.</div>'}
+      ${chosen && chosen.incomeSourceID ? `<div class="muted small" style="margin-top:8px">This deposit currently counts as ${esc(sourceName(chosen.incomeSourceID))}. Making it extra income moves it out of that job's budget earnings and into the pot you pick below.</div>` : ''}
     </div>
     <div class="card"><h2>What was it?</h2>
-      <select data-change="extraLabel">${labels.map(l => `<option ${l === m.label ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      ${selBtn('extraLabel', '', '', 'width:100%')}
       <div style="height:10px"></div>
       <div class="muted small" style="margin-bottom:6px">Add it to…</div>
       ${seg(potOptions(), m.pot, 'extraPot')}
@@ -613,7 +634,7 @@ function potEditModal() {
   return sheet(existing ? 'Edit pot' : 'New pot or goal', `
     <div class="card stack">
       <input placeholder="Name (e.g. Camera fund, Trip)" value="${esc(f.name)}" data-change="potName" data-live="1">
-      <div class="field"><span>Icon</span><select data-change="potIcon" style="width:90px">${POT_ICONS.map(i => `<option ${i === f.icon ? 'selected' : ''}>${i}</option>`).join('')}</select></div>
+      <div class="field"><span>Icon</span>${selBtn('potIcon', '', '', 'width:90px')}</div>
       <div class="field"><span>${existing ? 'Balance' : 'Starting balance'}</span>${numInput(f.balance, 'data-change="potBalance" data-live="1"')}</div>
       <div class="field"><span>Goal target <span class="muted small">(optional)</span></span>${numInput(f.target || 0, 'data-change="potTarget" data-live="1"')}</div>
       <div class="muted small">Leave the goal target at 0 for a pot without a goal.</div>
@@ -624,11 +645,10 @@ function potEditModal() {
 
 function moveModal() {
   const m = ui.modal;
-  const opts = sel => S.pots.map(p => `<option value="${esc(p.id)}" ${p.id === sel ? 'selected' : ''}>${p.icon} ${esc(p.name)}</option>`).join('');
   return sheet('Move money', `
     <div class="card stack">
-      <div class="field"><span>From</span><select data-change="moveFrom" style="width:190px">${opts(m.from)}</select></div>
-      <div class="field"><span>To</span><select data-change="moveTo" style="width:190px">${opts(m.to)}</select></div>
+      <div class="field"><span>From</span>${selBtn('moveFrom', '', '', 'width:190px')}</div>
+      <div class="field"><span>To</span>${selBtn('moveTo', '', '', 'width:190px')}</div>
       <div class="field"><span>Amount</span>${numInput(m.amount || 0, 'data-change="moveAmount" data-live="1"')}</div>
     </div>
     <button class="btn primary full" data-action="doMove">Move</button>`);
@@ -644,6 +664,59 @@ function noteModal() {
     </div>
     <button class="btn danger full" data-action="delNote" data-id="${n.id}">Delete note</button>`);
 }
+
+/* In-app replacements for the phone's own pop-up menus and alerts. */
+function selBtn(field, id, style, w) {
+  const d = pickDef(field, id);
+  const cur = d && d.options.find(o => o[0] === d.current);
+  return `<button class="sel" data-action="openSel" data-field="${field}" data-id="${esc(id)}" style="${[style, w].filter(Boolean).join(';')}">${cur ? cur[1] : '—'} <span class="muted">▾</span></button>`;
+}
+
+function pickDef(field, id) {
+  const m = ui.modal;
+  const pots = () => S.pots.map(p => [p.id, emo(p.icon) + ' ' + esc(p.name)]);
+  switch (field) {
+    case 'checkMonth': return { title: 'Month', options: checkKeys().map(k => [k, monthLabel(k)]), current: ui.checkMonth };
+    case 'roundMode': return { title: 'Round spending', options: [['nearest', 'Nearest dollar'], ['up', 'Round up'], ['off', 'Exact cents']], current: S.roundMode };
+    case 'adjTarget': return { title: 'Put it in', options: [...pots(), ['all', 'Split across all pots']], current: ui.adjTarget };
+    case 'setcat': { const t = txById(id); return { title: 'Category', options: Object.entries(CATS).map(([k, v]) => [k, emo(v.icon, v.color) + ' ' + v.title]), current: t && t.category }; }
+    case 'extraLabel': return { title: 'What was it?', options: ['Tips', 'Gift', 'Refund', 'Side gig', 'Other'].map(l => [l, l]), current: m && m.label };
+    case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
+    case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
+    case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
+    case 'bulkTarget': {
+      const others = S.pots.filter(x => x.id !== ui.potId);
+      const cur = ui.bulkTarget && (ui.bulkTarget === 'none' || others.some(o => o.id === ui.bulkTarget)) ? ui.bulkTarget : (others[0] ? others[0].id : 'none');
+      return { title: 'Move selected to', options: [...others.map(o => [o.id, 'Move to ' + esc(o.name)]), ['none', 'Back to Review']], current: cur };
+    }
+  }
+  return null;
+}
+
+function pickerHTML() {
+  const p = ui.picker, d = pickDef(p.field, p.id);
+  if (!d) return '';
+  return `<div class="scrim" data-layer="picker"><div class="sheet small">
+    <div class="grab"></div>
+    <div class="sheet-head"><b>${d.title}</b><button class="link" data-action="closePick">Cancel</button></div>
+    <div class="${d.grid ? 'optgrid' : 'optlist'}">${d.options.map(([v, l]) =>
+      `<button class="opt ${v === d.current ? 'on' : ''}" data-action="choose" data-v="${esc(v)}">${l}${v === d.current && !d.grid ? '<span class="check">✓</span>' : ''}</button>`).join('')}</div>
+  </div></div>`;
+}
+
+function dialogHTML() {
+  const d = ui.dialog;
+  return `<div class="scrim" data-layer="dialog"><div class="dialog">
+    ${d.title ? `<div class="dtitle">${esc(d.title)}</div>` : ''}
+    <div class="dmsg">${esc(d.message)}</div>
+    ${d.code ? `<textarea readonly rows="5" style="margin-top:8px;font-size:12px">${esc(d.code)}</textarea>` : ''}
+    <div class="btn-row">${d.cancel === false ? '' : '<button class="btn" data-action="dlgCancel">cancel</button>'}
+      <button class="btn ${d.danger ? 'danger' : 'primary'}" data-action="dlgOk">${esc(d.ok || 'ok')}</button></div>
+  </div></div>`;
+}
+
+const askConfirm = (message, ok, onOk, danger) => { ui.dialog = { message, ok, onOk, danger }; };
+const askAlert = (message, title) => { ui.dialog = { message, title, cancel: false, ok: 'ok' }; };
 
 function modalHTML() {
   const m = ui.modal;
@@ -661,29 +734,99 @@ function modalHTML() {
 
 /* ---------- render ---------- */
 
-const TABS = [['review', '▣', 'Review'], ['home', '⌂', 'Home'], ['activity', '≣', 'Activity'], ['income', '$', 'Income'], ['budget', '◔', 'Budget'], ['plan', '☐', 'To-do']];
+const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget'], ['plan', '✅', 'To-do']];
+
+const ghostRoot = document.createElement('div');
+ghostRoot.id = 'ghost-root';
+document.body.appendChild(ghostRoot);
+
+let lastTab = null;
+const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k)), 0);
 
 function render() {
   const y = window.scrollY;
   const oldSheet = modalRoot.querySelector('.sheet');
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
+  const tabChanged = ui.tab !== lastTab;
 
+  app.classList.remove('enter');
   app.innerHTML = VIEWS[ui.tab]();
+  if (tabChanged) {
+    app.style.setProperty('--dx', (lastTab === null || tabIndex(ui.tab) >= tabIndex(lastTab) ? 1 : -1) * 18 + 'px');
+    app.classList.add('enter');
+  }
   // remember what the live-patched areas currently show (see setHTMLIfChanged)
   if ($('disc-box')) $('disc-box').__html = discHTML(discrepancy(ui.checkMonth, ui.actual));
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
   const active = ui.tab === 'pot' ? 'home' : ui.tab;
   tabbar.innerHTML = TABS.map(([k, icon, label]) =>
-    `<button class="${active === k ? 'on' : ''}" data-action="tab" data-tab="${k}"><span class="i">${icon}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
-  modalRoot.innerHTML = ui.modal ? modalHTML() : '';
+    `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
+
+  // pop-ups: slide/pop in when they appear, slide/pop out when they go
+  const now = [ui.modal && 'sheet', ui.picker && 'picker', ui.dialog && 'dialog'].filter(Boolean);
+  const before = [...modalRoot.children].filter(el => el.dataset && el.dataset.layer);
+  const beforeNames = before.map(el => el.dataset.layer);
+  before.forEach(el => {
+    if (!now.includes(el.dataset.layer) && !ui.skipGhost[el.dataset.layer]) {
+      const g = el.cloneNode(true);
+      g.classList.add('out');
+      ghostRoot.appendChild(g);
+      setTimeout(() => g.remove(), 380);
+    }
+  });
+  ui.skipGhost = {};
+  modalRoot.innerHTML = (ui.modal ? modalHTML() : '') + (ui.picker ? pickerHTML() : '') + (ui.dialog ? dialogHTML() : '');
+  [...modalRoot.children].forEach(el => { if (!beforeNames.includes(el.dataset.layer)) el.classList.add('in'); });
   syncHistory();
-  document.body.style.overflow = ui.modal ? 'hidden' : '';
+  document.body.style.overflow = now.length ? 'hidden' : '';
 
   window.scrollTo(0, ui.resetScroll ? 0 : y);
   ui.resetScroll = false;
   const newSheet = modalRoot.querySelector('.sheet');
   if (newSheet && oldSheet) newSheet.scrollTop = sheetY;
+
+  animateUI(tabChanged || (ui.modal && !beforeNames.includes('sheet')));
+  lastTab = ui.tab;
+}
+
+/* Progress bars ramp from where they were; money counts up or down to its new value. */
+const barState = {}, numState = {};
+let animToken = 0;
+function animateUI(entering) {
+  const token = ++animToken;
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const bars = [...document.querySelectorAll('[data-bar]')];
+  bars.forEach(el => {
+    const k = el.dataset.bar, w = +el.dataset.w;
+    const from = reduce ? w : (barState[k] != null ? barState[k] : 0);
+    barState[k] = w;
+    el.style.transition = 'none';
+    el.style.width = from + '%';
+  });
+  void document.body.offsetWidth;
+  bars.forEach(el => { el.style.transition = ''; el.style.width = el.dataset.w + '%'; });
+
+  const jobs = [];
+  document.querySelectorAll('[data-count]').forEach(el => {
+    const k = el.dataset.count, to = +el.dataset.val;
+    let from = numState[k];
+    if (from == null) from = entering ? 0 : to;
+    if (reduce) from = to;
+    numState[k] = from;
+    if (Math.abs(from - to) > 0.004) { jobs.push({ el, k, from, to }); el.textContent = usd(from); }
+    else numState[k] = to;
+  });
+  if (!jobs.length) return;
+  const t0 = performance.now(), D = 700;
+  const step = t => {
+    if (token !== animToken) return;
+    const p = Math.min((t - t0) / D, 1), e = 1 - Math.pow(1 - p, 3);
+    jobs.forEach(j => { const v = j.from + (j.to - j.from) * e; numState[j.k] = p === 1 ? j.to : v; j.el.textContent = usd(p === 1 ? j.to : v); });
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 /* ---------- actions ---------- */
@@ -739,18 +882,28 @@ async function shareCode() {
 
 async function copyCode() {
   const code = await encodeBackup();
-  try { await navigator.clipboard.writeText(code); S.lastExport = new Date().toISOString(); save(); render(); alert('Backup code copied. Paste it into an email or note to yourself.'); }
-  catch (e) { prompt('Copy this backup code:', code); }
+  try {
+    await navigator.clipboard.writeText(code);
+    S.lastExport = new Date().toISOString(); save();
+    askAlert('Backup code copied. Paste it into an email or note to yourself.');
+  } catch (e) {
+    ui.dialog = { title: 'Copy this backup code', message: 'Press and hold in the box, choose Select All, then Copy.', code, cancel: false, ok: 'done' };
+  }
+  render();
 }
 
 async function restoreCode() {
   const box = $('restoreText');
   try {
     const obj = await decodeBackup(box ? box.value : '');
-    if (!confirm('Replace everything on this phone with this backup?')) return;
-    replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null; render();
-    alert('Backup restored.');
-  } catch (e) { alert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.'); }
+    askConfirm('Replace everything on this phone with this backup?', 'restore', () => {
+      replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null;
+      askAlert('Backup restored.');
+    }, true);
+  } catch (e) {
+    askAlert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.');
+  }
+  render();
 }
 
 function openPotEdit(id) {
@@ -769,6 +922,13 @@ const ACTIONS = {
   filter: d => { ui.filter = (ui.filter === d.cat || !d.cat) ? null : d.cat; },
   refresh: () => { doSync(); return false; },
 
+  // in-app pickers and dialogs
+  openSel: d => { ui.picker = { field: d.field, id: d.id }; },
+  closePick: () => { ui.picker = null; },
+  choose: d => { const p = ui.picker; ui.picker = null; if (p) handleField({ dataset: { change: p.field, id: p.id }, type: 'select', value: d.v }, true); },
+  dlgCancel: () => { ui.dialog = null; },
+  dlgOk: () => { const f = ui.dialog && ui.dialog.onOk; ui.dialog = null; if (f) f(); },
+
   // pots
   openPot: d => { ui.tab = 'pot'; ui.potId = d.id; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; },
   addPot: () => openPotEdit(null),
@@ -785,9 +945,9 @@ const ACTIONS = {
     ui.modal = null;
   },
   deletePot: d => {
-    if (!confirm('Delete this pot? Purchases sorted into it go back to Review, and its history is removed.')) return false;
-    deletePot(d.id);
-    ui.modal = null; ui.tab = 'home';
+    askConfirm('Delete this pot? Purchases sorted into it go back to Review, and its history is removed.', 'delete', () => {
+      deletePot(d.id); ui.modal = null; ui.tab = 'home';
+    }, true);
   },
   moveMoney: d => {
     const to = S.pots.find(p => p.id !== d.id);
@@ -795,14 +955,14 @@ const ACTIONS = {
   },
   doMove: () => {
     const m = ui.modal;
-    if (!moveMoney(m.from, m.to, m.amount)) { alert('Pick two different pots and an amount above $0.'); return false; }
+    if (!moveMoney(m.from, m.to, m.amount)) { askAlert('Pick two different pots and an amount above $0.'); return; }
     ui.modal = null;
   },
   undoLog: d => undoLog(d.id),
   toggleSelectMode: () => { ui.selectMode = !ui.selectMode; ui.selected = {}; },
   toggleSel: d => { if (ui.selected[d.id]) delete ui.selected[d.id]; else ui.selected[d.id] = true; },
   bulkMove: () => {
-    const target = $('bulkTarget').value;
+    const target = pickDef('bulkTarget', '').current;
     Object.keys(ui.selected).forEach(id => assign(id, target === 'none' ? null : target));
     ui.selected = {}; ui.selectMode = false;
   },
@@ -813,12 +973,13 @@ const ACTIONS = {
   txPot: d => { ui.modal.pot = d.pot; },
   saveTx: () => {
     const m = ui.modal;
-    if (!addManualTx(m.kind, m.amount, m.name, m.kind === 'purchase' && m.pot !== 'none' ? m.pot : null)) { alert('Enter an amount above $0 and a name.'); return false; }
+    if (!addManualTx(m.kind, m.amount, m.name, m.kind === 'purchase' && m.pot !== 'none' ? m.pot : null)) { askAlert('Enter an amount above $0 and a name.'); return; }
     ui.modal = null;
   },
   startFresh: () => {
-    if (!confirm('Remove the sample transactions and start with empty pots? Your income sources, expenses, to-dos and notes stay.')) return false;
-    startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {};
+    askConfirm('Remove the sample transactions and start with empty pots? Your income sources, expenses, to-dos and notes stay.', 'start fresh', () => {
+      startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {};
+    }, true);
   },
 
   // income
@@ -849,7 +1010,7 @@ const ACTIONS = {
   clearDone: () => clearDoneTodos(),
   addNote: () => { ui.modal = { type: 'note', id: addNote() }; },
   openNote: d => { ui.modal = { type: 'note', id: d.id }; },
-  delNote: d => { if (!confirm('Delete this note?')) return false; deleteNote(d.id); ui.modal = null; },
+  delNote: d => askConfirm('Delete this note?', 'delete', () => { deleteNote(d.id); ui.modal = null; }, true),
 
   // backup
   export: () => { exportData(); return false; },
@@ -860,7 +1021,11 @@ const ACTIONS = {
 };
 
 document.addEventListener('click', e => {
-  if (e.target.classList && e.target.classList.contains('scrim')) { closeModal(); render(); return; }
+  if (e.target.classList && e.target.classList.contains('scrim')) {
+    const layer = e.target.dataset.layer;
+    if (layer === 'dialog') ui.dialog = null; else if (layer === 'picker') ui.picker = null; else closeModal();
+    render(); return;
+  }
   const el = e.target.closest('[data-action]');
   if (!el) return;
   const fn = ACTIONS[el.dataset.action];
@@ -891,6 +1056,7 @@ function handleField(el, final) {
     case 'checkMonth': if (final) { ui.checkMonth = v; ui.actual = null; render(); } return;
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
+    case 'bulkTarget': ui.bulkTarget = v; return;
     // income sources
     case 'srcName': { const s = find(S.incomeSources); if (s) { s.name = v; save(); } return; }
     case 'srcAmt': { const s = find(S.incomeSources); if (s) { s.expectedAmount = num(v); save(); } return; }
@@ -916,8 +1082,11 @@ function handleField(el, final) {
     case 'import':
       if (final && el.files && el.files[0]) {
         el.files[0].text().then(text => {
-          try { const obj = JSON.parse(text); if (!confirm('Replace everything on this phone with this file?')) return; replaceState(obj); ui.budgetInputs = {}; ui.actual = null; render(); }
-          catch (err) { alert('That file could not be imported.'); }
+          try {
+            const obj = JSON.parse(text);
+            askConfirm('Replace everything on this phone with this file?', 'restore', () => { replaceState(obj); ui.budgetInputs = {}; ui.actual = null; }, true);
+          } catch (err) { askAlert('That file could not be imported.'); }
+          render();
         });
       }
       return;
@@ -940,9 +1109,10 @@ function syncHistory() {
 try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''); } catch (e) { /* ignore */ }
 window.addEventListener('popstate', e => {
   const st = e.state;
-  if (!st || st.pl !== 'app' || ui.modal) {            // the very first entry, or a sheet is open: stay in the app
-    const hadModal = !!ui.modal;
-    if (hadModal) { closeModal(); render(); }
+  if (!st || st.pl !== 'app' || ui.modal || ui.picker || ui.dialog) {   // the very first entry, or a pop-up is open: stay in the app
+    const hadPopup = !!(ui.modal || ui.picker || ui.dialog);
+    if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal();
+    if (hadPopup) render();
     try { history.pushState(navState(), ''); } catch (err) { /* ignore */ }
     return;
   }
@@ -951,6 +1121,50 @@ window.addEventListener('popstate', e => {
   render();
   popping = false;
 });
+
+/* Drag a pop-up down to close it. Starts from the handle/header, or from anywhere when scrolled to the top. */
+let drag = null;
+const layerClose = layer => { if (layer === 'picker') ui.picker = null; else if (layer === 'dialog') ui.dialog = null; else closeModal(); };
+document.addEventListener('touchstart', e => {
+  const sheet = e.target.closest && e.target.closest('.sheet');
+  if (!sheet || e.touches.length !== 1 || e.target.closest('input, textarea')) { drag = null; return; }
+  const fromHead = !!e.target.closest('.grab, .sheet-head');
+  if (!fromHead && sheet.scrollTop > 0) { drag = null; return; }
+  drag = { sheet, scrim: sheet.parentElement, layer: sheet.parentElement.dataset.layer, y0: e.touches[0].clientY, t0: performance.now(), dy: 0, active: false, fromHead };
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!drag) return;
+  const dy = e.touches[0].clientY - drag.y0;
+  if (!drag.active) {
+    if (dy > 8 && (drag.fromHead || drag.sheet.scrollTop <= 0)) { drag.active = true; drag.sheet.style.transition = 'none'; drag.scrim.style.transition = 'none'; }
+    else { if (dy < -8) drag = null; return; }
+  }
+  if (e.cancelable) e.preventDefault();
+  drag.dy = Math.max(dy, 0);
+  drag.sheet.style.transform = `translateY(${drag.dy}px)`;
+  drag.scrim.style.background = `rgba(8, 8, 6, ${(0.7 * (1 - Math.min(drag.dy / drag.sheet.offsetHeight, 1))).toFixed(3)})`;
+}, { passive: false });
+function endDrag() {
+  if (!drag) return;
+  const g = drag; drag = null;
+  if (!g.active) return;
+  const v = g.dy / Math.max(performance.now() - g.t0, 1);
+  if (g.dy > Math.min(130, g.sheet.offsetHeight * 0.3) || v > 0.7) {
+    g.sheet.style.transition = 'transform .22s cubic-bezier(.4, 0, 1, 1)';
+    g.sheet.style.transform = 'translateY(100%)';
+    g.scrim.style.transition = 'background .22s';
+    g.scrim.style.background = 'rgba(8, 8, 6, 0)';
+    setTimeout(() => { ui.skipGhost[g.layer] = true; layerClose(g.layer); render(); }, 200);
+  } else {
+    g.sheet.style.transition = 'transform .4s cubic-bezier(.34, 1.56, .64, 1)';
+    g.sheet.style.transform = '';
+    g.scrim.style.transition = 'background .3s';
+    g.scrim.style.background = '';
+    setTimeout(() => { g.sheet.style.transition = ''; g.scrim.style.transition = ''; }, 420);
+  }
+}
+document.addEventListener('touchend', endDrag);
+document.addEventListener('touchcancel', endDrag);
 
 // No pinch or double-tap zoom.
 document.addEventListener('gesturestart', e => e.preventDefault());
