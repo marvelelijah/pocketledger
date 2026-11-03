@@ -42,27 +42,27 @@ function monthKey(d) {
 function sameMonth(a, b) { return monthKey(a) === monthKey(b); }
 
 /* ---------- transaction simplifier ---------- */
-/* Turns "SQ *BLUE BOTTLE COFFEE 0231 ORLANDO FL" into "Coffee" + a 0..1 confidence.
+/* Turns "SQ *CORNER COFFEE CO 0231 ANYTOWN" into "Coffee" + a 0..1 confidence.
    Known merchant = rule's own score (0.6-0.97); unknown = 0.35; recategorized by you = 0.99.
    When you add Plaid later you can use its merchant name and category confidence instead. */
 
 const RULES = [
-  [['WAWA'], 'Fuel or snacks at Wawa', 'gas', 0.72],
-  [['SHELL', 'CHEVRON', 'EXXON', 'SUNOCO', 'RACETRAC'], 'Gas station fill-up', 'gas', 0.93],
+  [['RACETRAC', 'QUIKTRIP', 'CIRCLE K'], 'Fuel or snacks at a gas station', 'gas', 0.72],
+  [['SHELL', 'CHEVRON', 'EXXON', 'SUNOCO'], 'Gas station fill-up', 'gas', 0.93],
   [['PUBLIX'], 'Groceries at Publix', 'groceries', 0.97],
   [['WALMART', 'WAL-MART'], 'Shopping at Walmart', 'shopping', 0.7],
   [['TARGET'], 'Shopping at Target', 'shopping', 0.7],
   [['ALDI', 'KROGER', 'TRADER JOE', 'WHOLE FOODS'], 'Grocery run', 'groceries', 0.94],
   [['CHICK-FIL-A', 'MCDONALD', 'WENDY', 'BURGER KING', 'TACO BELL', 'CHIPOTLE'], 'Fast food', 'food', 0.95],
-  [['BLUE BOTTLE', 'STARBUCKS', 'DUNKIN'], 'Coffee', 'food', 0.94],
+  [['COFFEE', 'STARBUCKS', 'DUNKIN'], 'Coffee', 'food', 0.94],
   [['TACO'], 'Meal at a taco spot', 'food', 0.8],
   [['DOORDASH', 'UBER EATS', 'GRUBHUB'], 'Food delivery', 'food', 0.95],
-  [['ADORAMA', 'B&H', 'BHPHOTO', 'BEST BUY'], 'Camera / video gear', 'videoCamera', 0.9],
+  [['ADORAMA', 'B&H', 'BHPHOTO', 'BEST BUY', 'CAMERA'], 'Camera / video gear', 'videoCamera', 0.9],
   [['ADOBE'], 'Adobe subscription (editing software)', 'videoCamera', 0.92],
   [['SPOTIFY'], 'Spotify subscription', 'entertainment', 0.97],
   [['NETFLIX', 'HULU', 'DISNEY PLUS', 'DISNEYPLUS', 'HBO'], 'Streaming subscription', 'entertainment', 0.96],
   [['AMZN', 'AMAZON'], 'Amazon order', 'shopping', 0.75],
-  [['DUKE ENERGY', 'FPL', 'TECO'], 'Electric bill', 'bills', 0.97],
+  [['POWER CO', 'ELECTRIC', 'FPL', 'DUKE ENERGY'], 'Electric bill', 'bills', 0.97],
   [['VERIZON', 'AT&T', 'T-MOBILE', 'TMOBILE'], 'Phone bill', 'bills', 0.95],
   [['CVS', 'WALGREENS'], 'Pharmacy', 'health', 0.88],
   [['PAYROLL', 'DIRECT DEP'], 'Paycheck', 'income', 0.9],
@@ -112,24 +112,24 @@ const accountProvider = {
   async fetchTransactions() {
     // [month, day, hour, minute, bank description, amount, account]
     const rows = [
-      [11, 3, 9, 40, 'ZELLE FROM J SMITH', 20.0, 'acct-chk'],
-      [11, 3, 8, 12, 'WAWA 8071 ORLANDO FL', -42.18, 'acct-cc'],
-      [11, 2, 15, 42, 'ADORAMA CAMERA NY', -189.99, 'acct-cc'],
+      [11, 3, 9, 40, 'ZELLE FROM SAMPLE PERSON', 20.0, 'acct-chk'],
+      [11, 3, 8, 12, 'QUIKTRIP 8071 ANYTOWN', -42.18, 'acct-cc'],
+      [11, 2, 15, 42, 'SAMPLE CAMERA SHOP', -189.99, 'acct-cc'],
       [11, 2, 12, 31, 'CHICK-FIL-A #01234', -11.47, 'acct-cc'],
       [11, 1, 9, 5, 'ADOBE *CREATIVE CLOUD', -59.99, 'acct-cc'],
       [11, 1, 9, 0, 'SPOTIFY USA', -11.99, 'acct-cc'],
-      [10, 31, 18, 20, 'PUBLIX #1488 WINTER PARK FL', -87.32, 'acct-chk'],
-      [10, 30, 7, 0, 'SCHOOL DISTRICT PAYROLL', 1250.0, 'acct-chk'],
+      [10, 31, 18, 20, 'KROGER #1488 ANYTOWN', -87.32, 'acct-chk'],
+      [10, 30, 7, 0, 'ACME CORP PAYROLL', 1250.0, 'acct-chk'],
       [10, 30, 20, 11, 'VENMO CASHOUT', 45.0, 'acct-chk'],
-      [10, 29, 13, 55, 'SQ *BLUE BOTTLE COFFEE', -6.75, 'acct-cc'],
+      [10, 29, 13, 55, 'SQ *CORNER COFFEE CO', -6.75, 'acct-cc'],
       [10, 28, 17, 30, 'SHELL OIL 57444', -38.5, 'acct-cc'],
-      [10, 27, 11, 10, 'B&H PHOTO VIDEO 800-606-6969', -312.4, 'acct-cc'],
+      [10, 27, 11, 10, 'SAMPLE PHOTO VIDEO 555-0100', -312.4, 'acct-cc'],
       [10, 25, 19, 45, 'NETFLIX.COM', -15.49, 'acct-cc'],
-      [10, 24, 10, 2, 'ACH DEPOSIT FREELANCE EDIT LLC', 600.0, 'acct-chk'],
+      [10, 24, 10, 2, 'ACH DEPOSIT FREELANCE CLIENT LLC', 600.0, 'acct-chk'],
       [10, 23, 14, 12, 'AMZN MKTP US*2K4XY91', -23.18, 'acct-cc'],
       [10, 22, 12, 40, 'TST* LOCAL TACO SHOP', -14.2, 'acct-cc'],
-      [10, 20, 8, 0, 'DUKE ENERGY', -96.12, 'acct-chk'],
-      [10, 16, 7, 0, 'SCHOOL DISTRICT PAYROLL', 1250.0, 'acct-chk'],
+      [10, 20, 8, 0, 'ANYTOWN POWER CO', -96.12, 'acct-chk'],
+      [10, 16, 7, 0, 'ACME CORP PAYROLL', 1250.0, 'acct-chk'],
       [10, 15, 16, 20, 'CVS/PHARMACY #4411', -18.9, 'acct-cc'],
       [10, 14, 21, 15, 'XYZ HOLDINGS 4412', -27.0, 'acct-cc'],
     ];
@@ -171,6 +171,7 @@ function defaultState() {
       { id: uid(), name: 'Phone', amount: 55 },
       { id: uid(), name: 'Insurance', amount: 120 },
     ],
+    useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
     savingsPercent: 10,   // % of the month's earnings set aside for the Savings pot
     pots: [
       { id: 'spending', name: 'Spending', icon: '💳', balance: 0, target: null, core: true },
@@ -266,6 +267,7 @@ function replaceState(obj) {
 let syncError = null;
 
 async function sync() {
+  if (!S.useSampleData) { syncError = null; return; }   // own-data mode: purchases are added by hand (or a real provider later)
   try {
     S.accounts = await accountProvider.fetchAccounts();
     const raw = await accountProvider.fetchTransactions();
@@ -321,7 +323,7 @@ const needsReview = t => isExpense(t) && !t.pot && !t.isIgnored;
 const isIncomeCounted = t => !!(t.incomeSourceID || t.extraIncomeLabel);
 const pending = () => S.transactions.filter(needsReview);
 const recentlyReviewed = () => S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored)).slice(0, 6);
-const accountName = id => (S.accounts.find(a => a.id === id) || {}).name || 'Unknown account';
+const accountName = id => id === 'manual' ? 'Added by hand' : ((S.accounts.find(a => a.id === id) || {}).name || 'Unknown account');
 const sourceName = id => id ? (S.incomeSources.find(s => s.id === id) || {}).name : null;
 
 /* ---------- pots (every change goes through the log, so each pot can show what came in and out) ---------- */
@@ -439,6 +441,60 @@ function undoLog(entryId) {
   save();
 }
 
+/* ---------- your own data: add purchases by hand, clear the sample data ---------- */
+
+/* kind: 'purchase' | 'deposit'. potId (purchases only): deduct straight away, or null to decide in Review. */
+function addManualTx(kind, amount, name, potId, date) {
+  amount = round2(Math.abs(amount));
+  name = String(name || '').trim();
+  if (!(amount > 0) || !name) return null;
+  const signedAmt = kind === 'deposit' ? amount : -amount;
+  const s = simplify(name, signedAmt, S.learned);
+  const tx = {
+    id: 'man-' + uid(), accountID: 'manual', rawName: name, date: (date || new Date()).toISOString(), amount: signedAmt,
+    simpleName: s.phrase, confidence: s.confidence, category: s.category, userConfirmed: false,
+    pot: null, isIgnored: false, incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
+  };
+  if (signedAmt > 0) {
+    const src = matchingSource(name);
+    if (src) { tx.incomeSourceID = src.id; tx.category = 'income'; }
+  }
+  S.transactions.push(tx);
+  S.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (signedAmt < 0 && potId && potById(potId)) assign(tx.id, potId);
+  save();
+  return tx.id;
+}
+
+/* Removes the sample transactions and starts every pot at $0. Your income sources, expenses, to-dos and notes stay. */
+function startFresh() {
+  S.useSampleData = false;
+  S.accounts = [];
+  S.transactions = [];
+  S.potLog = [];
+  S.budgetRuns = [];
+  S.adjustments = [];
+  S.learned = {};
+  S.lastSync = null;
+  for (const p of S.pots) p.balance = 0;
+  save();
+}
+
+/* The spending bar on Review: how much of this month's spending money is left.
+   available = what the pot held at the start of the month + everything that came in since. */
+function spendingLevel(now) {
+  const pot = potById('spending');
+  const key = monthKey(now || new Date());
+  const month = S.potLog.filter(e => e.potId === 'spending' && monthKey(e.date) === key);
+  const net = round2(month.reduce((a, e) => a + e.amount, 0));
+  const inflow = round2(month.filter(e => e.amount > 0).reduce((a, e) => a + e.amount, 0));
+  const available = round2(pot.balance - net + inflow);
+  const left = pot.balance;
+  const spent = round2(Math.max(available - left, 0));
+  const pct = available > 0 ? Math.min(Math.max(left / available, 0), 1) : null;
+  return { left, available, spent, pct };
+}
+
 /* ---------- categories ---------- */
 
 function setCategory(id, category) {
@@ -510,7 +566,7 @@ function applyBudget(breakdown, date) {
 
   const run = {
     monthKey: key, earnings, fixedTotal: fixed, savingsPercent: pct, savingsAmount, leftover,
-    earningsBreakdown: breakdown.map(b => ({ sourceId: b.sourceId, name: b.name, amount: round2(b.amount) })),
+    earningsBreakdown: breakdown.map(b => ({ sourceId: b.sourceId, name: b.name, amount: round2(b.amount), edited: !!b.edited })),
     fixedItems: S.fixedExpenses.map(e => ({ name: e.name, amount: round2(e.amount) })),
     ranAt: new Date().toISOString(),
   };
@@ -584,3 +640,45 @@ function daysSinceBackup() {
   return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000);
 }
 const backupDue = () => daysSinceBackup() >= 7;
+
+/* ---------- backup code (text you can email to yourself and paste back in) ---------- */
+/* Format: "PL1:" + base64(gzip(json)) + "~"   ("PL0:" = same without compression where the browser can't gzip). */
+
+function bytesToB64(bytes) {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+function b64ToBytes(b64) {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function pipeBytes(bytes, stream) {
+  const buf = await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer();
+  return new Uint8Array(buf);
+}
+
+async function encodeBackup(state) {
+  const raw = new TextEncoder().encode(JSON.stringify(state || S));
+  if (typeof CompressionStream !== 'undefined') {
+    try { return 'PL1:' + bytesToB64(await pipeBytes(raw, new CompressionStream('gzip'))) + '~'; } catch (e) { /* fall through */ }
+  }
+  return 'PL0:' + bytesToB64(raw) + '~';
+}
+
+/* Accepts a whole email: finds the code inside it, ignoring line breaks. Returns the parsed state or throws. */
+async function decodeBackup(text) {
+  const m = /(PL[01]):([A-Za-z0-9+\/=\s]+)~/.exec(String(text));
+  if (!m) throw new Error('No backup code found');
+  const bytes = b64ToBytes(m[2].replace(/\s+/g, ''));
+  let raw = bytes;
+  if (m[1] === 'PL1') {
+    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot read compressed codes');
+    raw = await pipeBytes(bytes, new DecompressionStream('gzip'));
+  }
+  const obj = JSON.parse(new TextDecoder().decode(raw));
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.pots)) throw new Error('Not a PocketLedger backup');
+  return obj;
+}

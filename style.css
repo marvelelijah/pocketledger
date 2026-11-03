@@ -162,3 +162,14 @@ textarea { font: inherit; color: var(--text); background: var(--bg); border: 1px
 .field { min-width: 0; }
 .field input.wide { min-width: 0; }
 .mono { min-width: 0; }
+
+* { touch-action: manipulation; }
+input, select, textarea { font-size: 16px; }
+.stick { position: sticky; top: 0; z-index: 4; margin: 0 -16px; padding: 0 16px; background: var(--bg); }
+.spendbar { cursor: pointer; margin-bottom: 8px; }
+.spendbar .big { margin-top: 0; }
+.bar.thick { height: 12px; }
+.bar > div { transition: width .25s; }
+.earn { padding: 8px 0; border-top: 1px solid var(--line); }
+.earn:first-of-type { border-top: 0; }
+.earn .tx { padding: 6px 0 6px 8px; }

@@ -1,0 +1,10 @@
+# Never commit real financial data
+pocketledger-backup-*.json
+*.pocketledger
+*backup*.txt
+.env
+.env.*
+*.key
+*.pem
+node_modules/
+.DS_Store

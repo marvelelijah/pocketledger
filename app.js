@@ -5,9 +5,9 @@ const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
 const ui = {
-  tab: 'home', modal: null, filter: null, search: '', syncing: false, resetScroll: false,
+  tab: 'review', modal: null, filter: null, search: '', syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
-  budgetInputs: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
+  budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
 
 const $ = id => document.getElementById(id);
@@ -67,15 +67,17 @@ function potCard(p) {
   </div>`;
 }
 
+function backupBanner() {
+  return backupDue() ? `<div class="card banner"><b>Time for a backup</b>
+    <div class="small">${S.lastExport ? daysSinceBackup() + ' days since your last backup.' : 'You haven\'t backed up yet.'} Your data lives only on this phone.</div>
+    <button class="btn full" style="margin-top:8px" data-action="shareCode">Email myself a backup code</button></div>` : '';
+}
+
 function homeView() {
   const now = new Date();
   return `
   <div class="row"><h1>Home</h1>
-    <button class="link" data-action="refresh">${ui.syncing ? 'Syncing…' : 'Refresh'}</button></div>
-
-  ${backupDue() ? `<div class="card banner"><b>Time for a backup</b>
-    <div class="small">${S.lastExport ? daysSinceBackup() + ' days since your last backup.' : 'You haven\'t backed up yet.'} Your data lives only on this phone.</div>
-    <button class="btn full" style="margin-top:8px" data-action="export">Back up now</button></div>` : ''}
+    ${S.useSampleData ? `<button class="link" data-action="refresh">${ui.syncing ? 'Syncing…' : 'Refresh'}</button>` : ''}</div>
 
   <div class="grid2">${S.pots.map(potCard).join('')}</div>
   <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
@@ -93,15 +95,12 @@ function homeView() {
       <div class="row" style="padding:6px 0">
         <div><div style="font-weight:600">${esc(a.name)}</div><div class="muted small">${esc(a.institution)}</div></div>
         <b class="${a.balance < 0 ? 'neg' : ''}">${usd(a.balance)}</b>
-      </div>`).join('') : '<div class="muted">No accounts yet.</div>'}
+      </div>`).join('') : '<div class="muted small">No accounts linked. Purchases you add with ＋ on Review show up in Activity.</div>'}
     ${S.lastSync ? `<div class="muted small" style="margin-top:6px">Updated ${fmtShort(S.lastSync)}</div>` : ''}
     ${syncError ? `<div class="err">${esc(syncError)}</div>` : ''}
     ${lastSaveError ? `<div class="err">Couldn't save: ${esc(lastSaveError)}</div>` : ''}
-  </div>
-
-  <div class="card"><h2>Recent transactions</h2>
-    ${S.transactions.length ? S.transactions.slice(0, 8).map(t => txRow(t, incomeTag(t))).join('') : emptyBox('Nothing yet', 'Pull in your accounts with Refresh.')}
   </div>`;
+
 }
 
 function creditCard() {
@@ -206,10 +205,28 @@ function activityView() {
 
 /* ---------- review ---------- */
 
+function spendingBar() {
+  const L = spendingLevel();
+  const p = L.pct;
+  const color = p == null ? 'var(--accent)' : p > 0.5 ? 'var(--accent)' : p > 0.2 ? 'var(--orange)' : 'var(--red)';
+  return `<div class="stick"><div class="card spendbar" data-action="openPot" data-id="spending">
+    <div class="row"><span class="muted small">💳 Spending left this month ›</span>
+      <span class="small muted">${L.available > 0 ? Math.round((p || 0) * 100) + '% left' : ''}</span></div>
+    <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}">${usd(L.left)}</div>
+      ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
+    ${p == null ? '' : `<div class="bar thick"><div style="width:${Math.round(p * 100)}%;background:${color}"></div></div>`}
+  </div></div>`;
+}
+
 function reviewView() {
   const p = pending();
   const rec = recentlyReviewed();
-  return `<h1>Review</h1>
+  return `${spendingBar()}
+  <div class="row"><h1>Review</h1><button class="btn" data-action="addTx">＋ Purchase</button></div>
+  ${backupBanner()}
+  ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
+    <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
+    <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
   ${p.length ? `<div class="day" style="margin-top:0">Needs a pot (${p.length})</div>
     <div class="card">${p.map(t => `
       <div class="rv">
@@ -220,7 +237,7 @@ function reviewView() {
         </div>
         <button class="link small" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>
       </div>`).join('')}</div>`
-    : `<div class="card">${emptyBox('All caught up ✅', 'New purchases will show up here.')}</div>`}
+    : `<div class="card">${emptyBox('All caught up ✅', 'Tap ＋ Purchase when you buy something.')}</div>`}
   ${rec.length ? `<div class="day">Recently sorted</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
 }
 
@@ -259,15 +276,19 @@ function incomeView() {
 const srcById = id => S.incomeSources.find(s => s.id === id);
 
 function earningAmounts() {
-  const run = runFor(new Date());
+  const now = new Date();
+  const run = runFor(now);
   return S.incomeSources.map(s => {
-    let amount;
-    if (ui.budgetInputs[s.id] != null) amount = ui.budgetInputs[s.id];
-    else {
-      const prev = run && (run.earningsBreakdown || []).find(b => b.sourceId === s.id);
-      amount = prev ? prev.amount : (s.variable ? 0 : s.expectedAmount);
-    }
-    return { sourceId: s.id, name: s.name || 'Unnamed source', amount: amount || 0 };
+    const deposits = inMonth(now).filter(t => t.incomeSourceID === s.id);
+    const got = r2(deposits.reduce((a, t) => a + t.amount, 0));
+    const prev = run && (run.earningsBreakdown || []).find(b => b.sourceId === s.id);
+    let amount, mode;
+    if (ui.budgetInputs[s.id] != null) { amount = ui.budgetInputs[s.id]; mode = 'edited'; }
+    else if (!ui.resetEarn[s.id] && prev && prev.edited) { amount = prev.amount; mode = 'edited'; }
+    else if (deposits.length) { amount = got; mode = 'deposits'; }
+    else if (!s.variable && s.expectedAmount > 0) { amount = s.expectedAmount; mode = 'expected'; }
+    else { amount = 0; mode = 'none'; }
+    return { sourceId: s.id, name: s.name || 'Unnamed source', amount: amount || 0, mode, edited: mode === 'edited', deposits, got };
   });
 }
 
@@ -298,6 +319,11 @@ function checkCard() {
     <div class="field"><span>Deducted (rounded)</span><span>${usd(rs.deducted)}</span></div>
     <div class="field"><span>Rounding difference</span><b class="${rs.diff > 0 ? 'pos' : rs.diff < 0 ? 'neg' : ''}">${signed(rs.diff)}</b></div>
     <div class="field"><span>All pots add up to</span><b id="pots-total">${usd(potsTotal())}</b></div>
+    <div class="field"><span>Round spending when deducting</span>
+      <select data-change="roundMode" style="width:150px">
+        <option value="nearest" ${S.roundMode === 'nearest' ? 'selected' : ''}>Nearest dollar</option>
+        <option value="up" ${S.roundMode === 'up' ? 'selected' : ''}>Round up</option>
+        <option value="off" ${S.roundMode === 'off' ? 'selected' : ''}>Exact cents</option></select></div>
     <div class="field"><span>Real money you have for them <span class="muted small">(optional)</span></span>
       ${ui.actual == null ? numInput(0, 'id="actual" data-change="actual" data-live="1" placeholder="0"', 'width:120px').replace('value="0"', 'value=""') : numInput(ui.actual, 'id="actual" data-change="actual" data-live="1"', 'width:120px')}</div>
     <div class="muted small">Leave it blank to check only the rounding. Enter your real count to catch any other missing or extra dollars.</div>
@@ -359,21 +385,29 @@ function budgetView() {
   const now = new Date();
   const run = runFor(now);
   const c = budgetCalc();
+  const extra = countedIncome(now).filter(t => t.extraIncomeLabel);
   return `<h1>Budget</h1>
   <div class="card row"><b style="font-size:17px">${monthName(now)}</b>
     <span class="badge ${run ? 'b-hi' : 'b-mid'}">${run ? 'Applied' : 'Not applied yet'}</span></div>
 
   <div class="card"><h2>Earnings this month</h2>
     ${c.rows.map(r => {
-      const s = srcById(r.sourceId);
-      const got = r2(receivedFrom(s, now));
-      return `<div class="field"><span>${esc(r.name)}${s.variable ? ' <span class="muted small">(varies)</span>' : ''}</span>
-          ${numInput(r.amount, `data-change="earnInput" data-id="${s.id}" data-live="1"`, 'width:110px')}</div>
-        ${s.variable ? `<div class="muted small" style="margin:-2px 0 6px">Received so far this month: <b>${usd(got)}</b>
-          ${got > 0 ? `<button class="link small" data-action="useReceived" data-id="${s.id}">Use ${usd(got)}</button>` : ''}</div>` : ''}`;
+      const note = r.mode === 'expected' ? 'No deposit yet, using your expected amount'
+        : r.mode === 'none' ? (S.incomeSources.find(x => x.id === r.sourceId).variable ? 'Nothing received this month' : 'Nothing received yet')
+        : r.mode === 'edited' ? `Edited${r.deposits.length ? ' · deposits total ' + usd(r.got) : ''}` : '';
+      return `<div class="earn">
+        <div class="row"><b>${esc(r.name)}</b>
+          ${r.edited ? numInput(r.amount, `data-change="earnInput" data-id="${r.sourceId}" data-live="1"`, 'width:110px')
+            : `<b>${usd(r.amount)}</b>`}</div>
+        ${r.deposits.map(t => txRow(t)).join('')}
+        <div class="row"><span class="muted small">${note}</span>
+          ${r.edited ? `<button class="link small" data-action="resetEarn" data-id="${r.sourceId}">Reset</button>`
+            : `<button class="link small" data-action="editEarn" data-id="${r.sourceId}">Edit</button>`}</div>
+      </div>`;
     }).join('') || '<div class="muted">Add an income source on the Income tab.</div>'}
-    <div class="field"><span><b>Earnings to budget</b></span><b id="earn-total">${usd(c.earn)}</b></div>
-    <div class="muted small">Variable income like freelance starts at $0. Add it here only in the months you want it in your budget.</div>
+    ${extra.length ? `<div class="day">Extra income · already in your pots</div>${extra.map(t => txRow(t, incomeTag(t))).join('')}` : ''}
+    <div class="field" style="border-top:1px solid var(--line);margin-top:6px"><span><b>Earnings to budget</b></span><b id="earn-total">${usd(c.earn)}</b></div>
+    <div class="muted small">Pulled from the deposits on your Income tab. Tap Edit only to fix a difference.</div>
   </div>
 
   <div class="card"><h2>Constant monthly expenses</h2>
@@ -389,33 +423,26 @@ function budgetView() {
   </div>
 
   <div class="card"><h2>Result</h2>
-    <div class="field"><span>Earnings</span><span style="text-align:right" id="res-earn">${usd(c.earn)}</span></div>
-    <div class="field"><span>Constant expenses</span><span style="text-align:right" id="res-fixed">− ${usd(c.fixed)}</span></div>
-    <div class="field"><span>Savings</span><span style="text-align:right" id="res-save">− ${usd(c.save)}</span></div>
     <div class="field"><span><b>Added to Spending</b></span><b id="res-left" class="${c.left < 0 ? 'neg' : 'pos'}">${usd(c.left)}</b></div>
+    <div class="field"><span><b>Added to Savings</b></span><b id="res-save" class="pos">${usd(c.save)}</b></div>
     <button class="btn primary full" data-action="applyBudget">${run ? "Update this month's budget" : 'Apply ' + now.toLocaleString('en-US', { month: 'long' }) + ' budget'}</button>
     <div class="muted small" style="margin-top:8px">Nothing happens until you tap this. Updating a month that's already applied replaces its numbers, so nothing is counted twice.</div>
   </div>
 
   ${checkCard()}
 
-  <div class="card"><h2>Rounding &amp; pot balances</h2>
-    <div class="field"><span>Round spending when deducting</span>
-      <select data-change="roundMode" style="width:150px">
-        <option value="nearest" ${S.roundMode === 'nearest' ? 'selected' : ''}>Nearest dollar</option>
-        <option value="up" ${S.roundMode === 'up' ? 'selected' : ''}>Round up</option>
-        <option value="off" ${S.roundMode === 'off' ? 'selected' : ''}>Exact cents</option></select></div>
-    <div class="muted small" style="margin-bottom:6px">Applies to purchases you sort from now on.</div>
-    ${S.pots.map(p => `<div class="field"><span>${p.icon} ${esc(p.name)}</span>${numInput(p.balance, `data-change="potBal" data-id="${esc(p.id)}"`, 'width:120px')}</div>`).join('')}
-    <div class="muted small">Editing a balance records a manual adjustment on that pot's page.</div>
-  </div>
-
   ${historyCard()}
 
-  <div class="card"><h2>Backup</h2>
-    <div class="muted small" style="margin-bottom:8px">${S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'No backup yet.'} Your data lives only on this phone. Export weekly and at the end of each month.</div>
-    <div class="btn-row"><button class="btn" data-action="export">Export</button><button class="btn" data-action="import">Import</button></div>
+  <div class="card"><h2>Backup &amp; restore</h2>
+    <div class="muted small" style="margin-bottom:8px">${S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'No backup yet.'} Your data lives only on this phone, so keep a copy somewhere private.</div>
+    <button class="btn primary full" data-action="shareCode">Email myself a backup code</button>
+    <div class="muted small" style="margin:6px 0 10px">Opens the share sheet. Choose Mail and send it to yourself. It can't send by itself; a web page has no way to email on its own.</div>
+    <div class="btn-row"><button class="btn" data-action="copyCode">Copy code</button><button class="btn" data-action="export">Save file</button></div>
+    <div class="day">Restore</div>
+    <textarea id="restoreText" rows="3" placeholder="Paste your backup code (or the whole email) here"></textarea>
+    <div class="btn-row"><button class="btn" data-action="restoreCode">Restore from code</button><button class="btn" data-action="import">Import file</button></div>
     <input type="file" id="importFile" accept="application/json,.json" hidden data-change="import">
+    <div class="muted small" style="margin-top:8px">Restoring replaces everything on this phone. The code contains your financial data, so keep that email private and never post it online.</div>
   </div>`;
 }
 
@@ -428,12 +455,10 @@ function patchBudget() {
   const c = budgetCalc();
   const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
   set('earn-total', usd(c.earn));
-  set('res-earn', usd(c.earn));
-  set('res-fixed', '− ' + usd(c.fixed));
-  set('res-save', '− ' + usd(c.save));
   set('fixed-total', usd(c.fixed));
   set('save-amt', usd(c.save));
   set('res-left', usd(c.left));
+  set('res-save', usd(c.save));
   const l = $('res-left');
   if (l) l.className = c.left < 0 ? 'neg' : 'pos';
 }
@@ -537,6 +562,19 @@ function txModal(id) {
     ${pots}`);
 }
 
+function addTxModal() {
+  const m = ui.modal;
+  const buy = m.kind === 'purchase';
+  return sheet(buy ? 'Add a purchase' : 'Add a deposit', `
+    <div class="card stack">
+      ${seg([['purchase', 'Purchase'], ['deposit', 'Deposit']], m.kind, 'txKind')}
+      <div class="field"><span>Amount</span><input type="number" inputmode="decimal" step="any" placeholder="0.00" value="${m.amount || ''}" data-change="txAmount" data-live="1" style="width:130px"></div>
+      <input placeholder="${buy ? 'Where? (e.g. Kroger, gas, coffee)' : 'From? (e.g. payroll, tips)'}" value="${esc(m.name)}" data-change="txName" data-live="1">
+      ${buy ? `<div class="muted small">Deduct from…</div>${seg([...potOptions(), ['none', 'Decide later']], m.pot, 'txPot')}` : '<div class="muted small">Deposits whose text matches an income source are counted automatically.</div>'}
+    </div>
+    <button class="btn primary full" data-action="saveTx">Add ${buy ? 'purchase' : 'deposit'}</button>`);
+}
+
 function extraModal() {
   const m = ui.modal;
   const cands = S.transactions.filter(t => t.amount > 0 && !isIncomeCounted(t));
@@ -612,6 +650,7 @@ function modalHTML() {
   switch (m.type) {
     case 'tx': return txModal(m.id);
     case 'extra': return extraModal();
+    case 'addTx': return addTxModal();
     case 'sources': return sourcesModal();
     case 'potEdit': return potEditModal();
     case 'move': return moveModal();
@@ -622,7 +661,7 @@ function modalHTML() {
 
 /* ---------- render ---------- */
 
-const TABS = [['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['review', '📥', 'Review'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget'], ['plan', '✅', 'To-do']];
+const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget'], ['plan', '✅', 'To-do']];
 
 function render() {
   const y = window.scrollY;
@@ -638,6 +677,7 @@ function render() {
   tabbar.innerHTML = TABS.map(([k, icon, label]) =>
     `<button class="${active === k ? 'on' : ''}" data-action="tab" data-tab="${k}"><span class="i">${icon}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
   modalRoot.innerHTML = ui.modal ? modalHTML() : '';
+  syncHistory();
   document.body.style.overflow = ui.modal ? 'hidden' : '';
 
   window.scrollTo(0, ui.resetScroll ? 0 : y);
@@ -678,6 +718,39 @@ async function exportData() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   S.lastExport = new Date().toISOString(); save(); render();
+}
+
+const BACKUP_HEADER = 'PocketLedger backup. Keep this email private; it contains your financial data.\nTo restore: Budget tab > Backup & restore > paste this whole email > Restore from code.\n\n';
+
+async function shareCode() {
+  const code = await encodeBackup();
+  const text = BACKUP_HEADER + code.replace(/(.{64})/g, '$1\n');
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'PocketLedger backup ' + new Date().toISOString().slice(0, 10), text });
+      S.lastExport = new Date().toISOString(); save(); render();
+      return;
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') return;
+  }
+  await copyCode();
+}
+
+async function copyCode() {
+  const code = await encodeBackup();
+  try { await navigator.clipboard.writeText(code); S.lastExport = new Date().toISOString(); save(); render(); alert('Backup code copied. Paste it into an email or note to yourself.'); }
+  catch (e) { prompt('Copy this backup code:', code); }
+}
+
+async function restoreCode() {
+  const box = $('restoreText');
+  try {
+    const obj = await decodeBackup(box ? box.value : '');
+    if (!confirm('Replace everything on this phone with this backup?')) return;
+    replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null; render();
+    alert('Backup restored.');
+  } catch (e) { alert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.'); }
 }
 
 function openPotEdit(id) {
@@ -734,6 +807,20 @@ const ACTIONS = {
     ui.selected = {}; ui.selectMode = false;
   },
 
+  // adding by hand
+  addTx: () => { ui.modal = { type: 'addTx', kind: 'purchase', amount: 0, name: '', pot: 'spending' }; },
+  txKind: d => { ui.modal.kind = d.pot; },
+  txPot: d => { ui.modal.pot = d.pot; },
+  saveTx: () => {
+    const m = ui.modal;
+    if (!addManualTx(m.kind, m.amount, m.name, m.kind === 'purchase' && m.pot !== 'none' ? m.pot : null)) { alert('Enter an amount above $0 and a name.'); return false; }
+    ui.modal = null;
+  },
+  startFresh: () => {
+    if (!confirm('Remove the sample transactions and start with empty pots? Your income sources, expenses, to-dos and notes stay.')) return false;
+    startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {};
+  },
+
   // income
   addExtra: d => { ui.modal = { type: 'extra', selected: d.id || null, label: 'Tips', pot: 'spending' }; },
   pickExtra: d => { ui.modal.selected = d.id; },
@@ -747,8 +834,9 @@ const ACTIONS = {
   // budget
   fixedAdd: () => { S.fixedExpenses.push({ id: uid(), name: '', amount: 0 }); save(); },
   fixedDel: d => { S.fixedExpenses = S.fixedExpenses.filter(e => e.id !== d.id); save(); },
-  useReceived: d => { const s = srcById(d.id); ui.budgetInputs[d.id] = r2(receivedFrom(s, new Date())); },
-  applyBudget: () => { applyBudget(budgetCalc().rows); ui.budgetInputs = {}; },
+  editEarn: d => { const r = budgetCalc().rows.find(x => x.sourceId === d.id); delete ui.resetEarn[d.id]; ui.budgetInputs[d.id] = r ? r.amount : 0; },
+  resetEarn: d => { delete ui.budgetInputs[d.id]; ui.resetEarn[d.id] = true; },
+  applyBudget: () => { applyBudget(budgetCalc().rows); ui.budgetInputs = {}; ui.resetEarn = {}; },
   redistribute: () => {
     const d = discrepancy(ui.checkMonth, ui.actual);
     if (redistribute(ui.checkMonth, d, ui.adjTarget)) ui.actual = null;
@@ -765,6 +853,9 @@ const ACTIONS = {
 
   // backup
   export: () => { exportData(); return false; },
+  shareCode: () => { shareCode(); return false; },
+  copyCode: () => { copyCode(); return false; },
+  restoreCode: () => { restoreCode(); return false; },
   import: () => { const f = $('importFile'); if (f) f.click(); return false; },
 };
 
@@ -797,7 +888,6 @@ function handleField(el, final) {
     case 'fixedName': { const e = find(S.fixedExpenses); if (e) { e.name = v; save(); } return; }
     case 'fixedAmt': { const e = find(S.fixedExpenses); if (e) { e.amount = num(v); save(); patchBudget(); } return; }
     case 'roundMode': S.roundMode = v; save(); return;
-    case 'potBal': if (final) { setPotBalance(d.id, num(v)); patchCheck(); } return;
     case 'checkMonth': if (final) { ui.checkMonth = v; ui.actual = null; render(); } return;
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
@@ -809,6 +899,8 @@ function handleField(el, final) {
     // categories & extra income
     case 'setcat': if (final) { setCategory(d.id, v); render(); } return;
     case 'extraLabel': m.label = v; return;
+    case 'txAmount': m.amount = num(v); return;
+    case 'txName': m.name = v; return;
     // pots
     case 'potName': m.fields.name = v; return;
     case 'potIcon': m.fields.icon = v; return;
@@ -824,7 +916,7 @@ function handleField(el, final) {
     case 'import':
       if (final && el.files && el.files[0]) {
         el.files[0].text().then(text => {
-          try { replaceState(JSON.parse(text)); ui.budgetInputs = {}; ui.actual = null; render(); }
+          try { const obj = JSON.parse(text); if (!confirm('Replace everything on this phone with this file?')) return; replaceState(obj); ui.budgetInputs = {}; ui.actual = null; render(); }
           catch (err) { alert('That file could not be imported.'); }
         });
       }
@@ -836,6 +928,33 @@ document.addEventListener('input', e => { if (e.target.dataset && e.target.datas
 document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.change) handleField(e.target, true); });
 
 /* ---------- start ---------- */
+
+/* Back/forward swipes move between the screens you visited in the app instead of leaving to GitHub. */
+const navState = () => ({ pl: 'app', tab: ui.tab, potId: ui.tab === 'pot' ? ui.potId : null });
+let popping = false;
+function syncHistory() {
+  if (popping) return;
+  const cur = history.state, n = navState();
+  if (!cur || cur.pl !== 'app' || cur.tab !== n.tab || cur.potId !== n.potId) history.pushState(n, '');
+}
+try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''); } catch (e) { /* ignore */ }
+window.addEventListener('popstate', e => {
+  const st = e.state;
+  if (!st || st.pl !== 'app' || ui.modal) {            // the very first entry, or a sheet is open: stay in the app
+    const hadModal = !!ui.modal;
+    if (hadModal) { closeModal(); render(); }
+    try { history.pushState(navState(), ''); } catch (err) { /* ignore */ }
+    return;
+  }
+  popping = true;
+  ui.tab = st.tab; ui.potId = st.potId; ui.selectMode = false; ui.selected = {}; ui.resetScroll = true;
+  render();
+  popping = false;
+});
+
+// No pinch or double-tap zoom.
+document.addEventListener('gesturestart', e => e.preventDefault());
+document.addEventListener('gesturechange', e => e.preventDefault());
 
 render();
 doSync();
