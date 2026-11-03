@@ -21,8 +21,6 @@ const CATS = {
   other:         { title: 'Other',          color: '#9ca3af', icon: '❔' },
 };
 
-const POTS = { spending: 'Spending', savings: 'Savings' };
-
 /* ---------- helpers ---------- */
 
 function uid() {
@@ -151,29 +149,42 @@ const creditProvider = {
 
 /* ---------- state & persistence ---------- */
 
-const STORAGE_KEY = 'pocketledger.v1';
+const STORAGE_KEY = 'pocketledger.v1';   // key name kept so existing data is found and migrated
+const STATE_VERSION = 2;
+const POT_ICONS = ['💳', '🏦', '🎯', '✈️', '🏠', '🚗', '📷', '🎁', '🛟', '🎓'];
+
+const round2 = n => Math.round((n || 0) * 100) / 100;
 
 function defaultState() {
   return {
+    version: STATE_VERSION,
+    created: new Date().toISOString(),
     accounts: [],
     transactions: [],
     incomeSources: [
-      { id: uid(), name: 'Full-time job', expectedAmount: 2500, matchKeyword: 'PAYROLL' },
-      { id: uid(), name: 'Freelance', expectedAmount: 600, matchKeyword: 'FREELANCE' },
+      // variable = no expected amount (e.g. freelance: some months nothing)
+      { id: uid(), name: 'Full-time job', expectedAmount: 2500, variable: false, matchKeyword: 'PAYROLL' },
+      { id: uid(), name: 'Freelance', expectedAmount: 0, variable: true, matchKeyword: 'FREELANCE' },
     ],
     fixedExpenses: [
       { id: uid(), name: 'Rent', amount: 900 },
       { id: uid(), name: 'Phone', amount: 55 },
       { id: uid(), name: 'Insurance', amount: 120 },
     ],
-    spendingPot: 0,
-    savingsPot: 0,
-    savingsGoalName: 'Savings goal',
-    savingsGoalTarget: 5000,
+    savingsPercent: 10,   // % of the month's earnings set aside for the Savings pot
+    pots: [
+      { id: 'spending', name: 'Spending', icon: '💳', balance: 0, target: null, core: true },
+      { id: 'savings', name: 'Savings', icon: '🏦', balance: 0, target: 5000, core: true },
+    ],
+    potLog: [],           // every movement in or out of a pot
+    roundMode: 'nearest', // how spending is rounded when deducted from a pot: 'off' | 'nearest' | 'up'
     budgetRuns: [],
+    adjustments: [],      // month-end redistributions
     learned: {},
-    autoRunBudget: true,
+    todos: [],
+    notes: [],
     lastSync: null,
+    lastExport: null,
     creditScore: null,
   };
 }
@@ -181,11 +192,58 @@ function defaultState() {
 let S = loadState();
 
 function loadState() {
-  try {
-    const raw = typeof localStorage !== 'undefined' && localStorage.getItem(STORAGE_KEY);
-    if (raw) return Object.assign(defaultState(), JSON.parse(raw));
-  } catch (e) { /* fall through */ }
-  return defaultState();
+  let raw = null;
+  try { raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null; } catch (e) { /* ignore */ }
+  if (!raw) return defaultState();
+  try { return migrate(JSON.parse(raw)); } catch (e) { return defaultState(); }
+}
+
+/* Brings data saved by the first version of the app up to date. */
+function migrate(old) {
+  const s = Object.assign(defaultState(), old);
+  if (old.version >= STATE_VERSION) return s;
+
+  s.created = old.created || new Date().toISOString();
+  s.pots = defaultState().pots;
+  s.potLog = [];
+  s.adjustments = [];
+  s.todos = old.todos || [];
+  s.notes = old.notes || [];
+  const sp = s.pots.find(p => p.id === 'spending');
+  const sv = s.pots.find(p => p.id === 'savings');
+  sp.balance = round2(old.spendingPot);
+  sv.balance = round2(old.savingsPot);
+  if (old.savingsGoalTarget != null) sv.target = old.savingsGoalTarget;
+
+  for (const src of s.incomeSources) {
+    if (src.variable === undefined) src.variable = String(src.matchKeyword || '').toUpperCase() === 'FREELANCE';
+    if (src.variable) src.expectedAmount = 0;
+  }
+
+  const entries = [];
+  const add = (potId, amount, label, kind, extra) =>
+    entries.push(Object.assign({ id: uid(), potId, date: new Date().toISOString(), amount: round2(amount), label, kind }, extra || {}));
+  for (const t of s.transactions) {
+    if (t.pot && t.amount < 0) add(t.pot, t.amount, t.simpleName, 'tx', { txId: t.id, date: t.date, exact: Math.abs(t.amount) });
+    if (t.extraIncomeLabel && t.extraIncomePot) add(t.extraIncomePot, t.amount, t.extraIncomeLabel, 'extra', { txId: t.id, date: t.date });
+  }
+  for (const r of s.budgetRuns) {
+    add('spending', r.leftover, 'Budget leftover', 'budget', { monthKey: r.monthKey, date: r.ranAt });
+    r.earningsBreakdown = r.earningsBreakdown || [];
+    r.fixedItems = r.fixedItems || [];
+    r.savingsPercent = r.savingsPercent || 0;
+    r.savingsAmount = r.savingsAmount || 0;
+  }
+  for (const pot of s.pots) {
+    const sum = entries.filter(e => e.potId === pot.id).reduce((a, e) => a + e.amount, 0);
+    const residual = round2(pot.balance - sum);
+    if (Math.abs(residual) >= 0.005) add(pot.id, residual, 'Opening balance', 'manual');
+  }
+  s.potLog = entries;
+
+  delete s.spendingPot; delete s.savingsPot; delete s.savingsGoalName; delete s.savingsGoalTarget; delete s.autoRunBudget;
+  s.version = STATE_VERSION;
+  return s;
 }
 
 let lastSaveError = null;
@@ -199,7 +257,7 @@ function save() {
 }
 
 function replaceState(obj) {
-  S = Object.assign(defaultState(), obj);
+  S = migrate(obj);
   save();
 }
 
@@ -215,7 +273,6 @@ async function sync() {
     if (FEATURES.creditScore) S.creditScore = await creditProvider.fetchLatest();
     S.lastSync = new Date().toISOString();
     syncError = null;
-    runMonthlyBudgetIfNeeded();
   } catch (e) {
     syncError = e.message || String(e);
   }
@@ -267,24 +324,54 @@ const recentlyReviewed = () => S.transactions.filter(t => isExpense(t) && (t.pot
 const accountName = id => (S.accounts.find(a => a.id === id) || {}).name || 'Unknown account';
 const sourceName = id => id ? (S.incomeSources.find(s => s.id === id) || {}).name : null;
 
-/* ---------- pots ---------- */
+/* ---------- pots (every change goes through the log, so each pot can show what came in and out) ---------- */
 
-const round2 = n => Math.round((n || 0) * 100) / 100;
+const potById = id => S.pots.find(p => p.id === id);
+const potName = id => (potById(id) || {}).name || 'Unknown pot';
+const potsTotal = () => round2(S.pots.reduce((a, p) => a + p.balance, 0));
 
-function adjust(pot, delta) {
-  if (pot === 'spending') S.spendingPot = round2(S.spendingPot + delta);
-  else if (pot === 'savings') S.savingsPot = round2(S.savingsPot + delta);
+function logEntry(potId, amount, label, kind, extra) {
+  const pot = potById(potId);
+  if (!pot) return null;
+  amount = round2(amount);
+  const e = Object.assign({ id: uid(), potId, date: new Date().toISOString(), amount, label, kind }, extra || {});
+  S.potLog.push(e);
+  pot.balance = round2(pot.balance + amount);
+  return e;
 }
 
-/* Deduct an expense from a pot (or pass null to send it back to Review).
-   Re-assigning refunds the old pot first, so balances never double count. */
-function assign(id, pot) {
+function removeLogs(pred) {
+  const keep = [];
+  for (const e of S.potLog) {
+    if (pred(e)) {
+      const pot = potById(e.potId);
+      if (pot) pot.balance = round2(pot.balance - e.amount);
+    } else keep.push(e);
+  }
+  S.potLog = keep;
+}
+
+const potEntries = potId => S.potLog.filter(e => e.potId === potId).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+/* How much a purchase takes out of a pot. Rounding means the pot may differ from the exact amount by cents;
+   the month-end check shows and redistributes that difference. */
+function deduction(amount) {
+  const a = Math.abs(amount);
+  if (S.roundMode === 'nearest') return Math.round(a);
+  if (S.roundMode === 'up') return Math.ceil(a - 1e-9);
+  return round2(a);
+}
+
+/* Deduct an expense from a pot (or pass null to send it back to Review). Re-assigning moves it cleanly. */
+function assign(id, potId) {
   const t = txById(id);
   if (!t || !isExpense(t)) return;
-  const amt = Math.abs(t.amount);
-  if (t.pot) adjust(t.pot, amt);
-  if (pot) adjust(pot, -amt);
-  t.pot = pot || null;
+  removeLogs(e => e.kind === 'tx' && e.txId === id);
+  t.pot = null;
+  if (potId && potById(potId)) {
+    logEntry(potId, -deduction(t.amount), t.simpleName, 'tx', { txId: id, date: t.date, exact: Math.abs(t.amount) });
+    t.pot = potId;
+  }
   t.isIgnored = false;
   save();
 }
@@ -292,9 +379,63 @@ function assign(id, pot) {
 function ignoreTx(id) {
   const t = txById(id);
   if (!t) return;
-  if (isExpense(t) && t.pot) adjust(t.pot, Math.abs(t.amount));
+  removeLogs(e => e.kind === 'tx' && e.txId === id);
   t.pot = null;
   t.isIgnored = true;
+  save();
+}
+
+function addPot(name, icon, balance, target) {
+  const pot = { id: uid(), name: name || 'New pot', icon: icon || '🎯', balance: 0, target: target > 0 ? target : null, core: false };
+  S.pots.push(pot);
+  if (balance) logEntry(pot.id, balance, 'Starting balance', 'manual');
+  save();
+  return pot.id;
+}
+
+function updatePot(id, fields) {
+  const pot = potById(id);
+  if (!pot) return;
+  Object.assign(pot, fields);
+  save();
+}
+
+/* Set a pot's balance by hand; the difference is recorded as a manual entry. */
+function setPotBalance(id, newBalance) {
+  const pot = potById(id);
+  if (!pot) return;
+  const diff = round2(newBalance - pot.balance);
+  if (diff) logEntry(id, diff, 'Manual adjustment', 'manual');
+  save();
+}
+
+function deletePot(id) {
+  const pot = potById(id);
+  if (!pot || pot.core) return;
+  for (const t of S.transactions) {
+    if (t.pot === id) t.pot = null;                       // back to Review
+    if (t.extraIncomePot === id) { t.extraIncomeLabel = null; t.extraIncomePot = null; }
+  }
+  S.potLog = S.potLog.filter(e => e.potId !== id);
+  S.pots = S.pots.filter(p => p.id !== id);
+  save();
+}
+
+function moveMoney(fromId, toId, amount) {
+  amount = round2(amount);
+  if (!(amount > 0) || fromId === toId || !potById(fromId) || !potById(toId)) return false;
+  const transferId = uid();
+  logEntry(fromId, -amount, 'Moved to ' + potName(toId), 'transfer', { transferId });
+  logEntry(toId, amount, 'Moved from ' + potName(fromId), 'transfer', { transferId });
+  save();
+  return true;
+}
+
+function undoLog(entryId) {
+  const e = S.potLog.find(x => x.id === entryId);
+  if (!e || !['manual', 'transfer'].includes(e.kind)) return;
+  if (e.kind === 'transfer' && e.transferId) removeLogs(x => x.transferId === e.transferId);
+  else removeLogs(x => x.id === entryId);
   save();
 }
 
@@ -313,24 +454,25 @@ function setCategory(id, category) {
 
 /* ---------- income ---------- */
 
-function markExtraIncome(id, label, pot) {
+function markExtraIncome(id, label, potId) {
   const t = txById(id);
-  if (!t || t.amount <= 0 || isIncomeCounted(t)) return;
+  if (!t || t.amount <= 0 || isIncomeCounted(t) || !potById(potId)) return;
   t.extraIncomeLabel = label;
-  t.extraIncomePot = pot;
-  adjust(pot, t.amount);
+  t.extraIncomePot = potId;
+  logEntry(potId, t.amount, 'Extra income: ' + label, 'extra', { txId: id, date: t.date });
   save();
 }
 
 function removeExtraIncome(id) {
   const t = txById(id);
   if (!t || !t.extraIncomePot) return;
-  adjust(t.extraIncomePot, -t.amount);
+  removeLogs(e => e.kind === 'extra' && e.txId === id);
   t.extraIncomeLabel = null;
   t.extraIncomePot = null;
   save();
 }
 
+const monthTxs = key => S.transactions.filter(t => monthKey(t.date) === key);
 const inMonth = d => S.transactions.filter(t => sameMonth(t.date, d));
 const countedIncome = d => inMonth(d).filter(isIncomeCounted);
 const receivedFrom = (src, d) => inMonth(d).filter(t => t.incomeSourceID === src.id).reduce((a, t) => a + t.amount, 0);
@@ -342,31 +484,103 @@ const taxDeductibleTotal = year => S.transactions
   .filter(t => isExpense(t) && CATS[t.category].taxDeductible && new Date(t.date).getFullYear() === year)
   .reduce((a, t) => a + Math.abs(t.amount), 0);
 
-/* ---------- monthly budget ---------- */
+/* ---------- monthly budget (always applied by you, never automatically) ---------- */
 
-const expectedMonthlyEarnings = () => S.incomeSources.reduce((a, s) => a + (s.expectedAmount || 0), 0);
+/* Only income with a fixed expected amount; variable income (like freelance) is added by hand each month. */
+const expectedMonthlyEarnings = () => S.incomeSources.filter(s => !s.variable).reduce((a, s) => a + (s.expectedAmount || 0), 0);
 const fixedTotal = () => S.fixedExpenses.reduce((a, e) => a + (e.amount || 0), 0);
 const runFor = d => S.budgetRuns.find(r => r.monthKey === monthKey(d));
+const runByKey = key => S.budgetRuns.find(r => r.monthKey === key);
 
-/* Earnings minus constant expenses goes into the Spending pot.
-   Running it again for the same month only applies the difference. */
-function applyBudget(earnings, date) {
+/* breakdown = [{ sourceId, name, amount }] — the earnings you decided to budget this month.
+   Leftover after constant expenses and the savings percentage goes to Spending; the savings share goes to Savings.
+   Applying again for the same month replaces the earlier entries, so nothing is counted twice. */
+function applyBudget(breakdown, date) {
   date = date || new Date();
   const key = monthKey(date);
-  const leftover = earnings - fixedTotal();
-  const run = { monthKey: key, earnings, fixedTotal: fixedTotal(), leftover, ranAt: new Date().toISOString() };
+  const earnings = round2(breakdown.reduce((a, b) => a + (b.amount || 0), 0));
+  const fixed = round2(fixedTotal());
+  const pct = S.savingsPercent || 0;
+  const savingsAmount = round2(earnings * pct / 100);
+  const leftover = round2(earnings - fixed - savingsAmount);
+
+  removeLogs(e => e.kind === 'budget' && e.monthKey === key);
+  logEntry('spending', leftover, 'Budget: left for spending', 'budget', { monthKey: key });
+  if (savingsAmount) logEntry('savings', savingsAmount, 'Budget: savings (' + pct + '% of earnings)', 'budget', { monthKey: key });
+
+  const run = {
+    monthKey: key, earnings, fixedTotal: fixed, savingsPercent: pct, savingsAmount, leftover,
+    earningsBreakdown: breakdown.map(b => ({ sourceId: b.sourceId, name: b.name, amount: round2(b.amount) })),
+    fixedItems: S.fixedExpenses.map(e => ({ name: e.name, amount: round2(e.amount) })),
+    ranAt: new Date().toISOString(),
+  };
   const i = S.budgetRuns.findIndex(r => r.monthKey === key);
-  if (i >= 0) {
-    S.spendingPot = round2(S.spendingPot + leftover - S.budgetRuns[i].leftover);
-    S.budgetRuns[i] = run;
-  } else {
-    S.spendingPot = round2(S.spendingPot + leftover);
-    S.budgetRuns.unshift(run);
-  }
+  if (i >= 0) S.budgetRuns[i] = run; else S.budgetRuns.push(run);
+  S.budgetRuns.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
   save();
+  return run;
 }
 
-function runMonthlyBudgetIfNeeded() {
-  if (!S.autoRunBudget || S.incomeSources.length === 0 || runFor(new Date())) return;
-  applyBudget(expectedMonthlyEarnings());
+/* ---------- month-end check: find and redistribute small discrepancies ---------- */
+
+/* Rounding: what was exactly spent from pots this month vs what was deducted. */
+function roundingStats(key) {
+  let exact = 0, deducted = 0;
+  for (const e of S.potLog) {
+    if (e.kind === 'tx' && monthKey(e.date) === key) { exact += e.exact; deducted += -e.amount; }
+  }
+  exact = round2(exact); deducted = round2(deducted);
+  // positive = you deducted more than you really spent, so you have that much extra in real life
+  return { exact, deducted, diff: round2(deducted - exact) };
 }
+
+const adjustedTotal = key => round2(S.adjustments.filter(a => a.monthKey === key).reduce((a, x) => a + x.amount, 0));
+
+/* actual = what you really have for the pots (or null). Positive result = extra money, negative = missing. */
+function discrepancy(key, actual) {
+  if (actual != null && !isNaN(actual)) return round2(actual - potsTotal());
+  return round2(roundingStats(key).diff - adjustedTotal(key));
+}
+
+/* Put the discrepancy into one pot, or split it evenly across all pots (target = 'all'). */
+function redistribute(key, amount, target) {
+  const cents = Math.round(amount * 100);
+  if (!cents) return false;
+  const targets = target === 'all' ? S.pots.map(p => p.id) : [target];
+  if (!targets.length || targets.some(id => !potById(id))) return false;
+  const base = Math.trunc(cents / targets.length);
+  const rem = cents - base * targets.length;
+  targets.forEach((id, i) => logEntry(id, (base + (i === 0 ? rem : 0)) / 100, 'Month-end adjustment (' + key + ')', 'adjust', { monthKey: key }));
+  S.adjustments.push({ id: uid(), monthKey: key, date: new Date().toISOString(), amount: round2(cents / 100), target });
+  save();
+  return true;
+}
+
+/* ---------- to-do list & notes ---------- */
+
+function addTodo(text) {
+  text = String(text || '').trim();
+  if (!text) return;
+  S.todos.unshift({ id: uid(), text, done: false, created: new Date().toISOString() });
+  save();
+}
+function toggleTodo(id) { const t = S.todos.find(x => x.id === id); if (t) { t.done = !t.done; save(); } }
+function deleteTodo(id) { S.todos = S.todos.filter(t => t.id !== id); save(); }
+function clearDoneTodos() { S.todos = S.todos.filter(t => !t.done); save(); }
+
+function addNote() {
+  const n = { id: uid(), title: '', body: '', updated: new Date().toISOString() };
+  S.notes.unshift(n);
+  save();
+  return n.id;
+}
+function updateNote(id, fields) { const n = S.notes.find(x => x.id === id); if (n) { Object.assign(n, fields, { updated: new Date().toISOString() }); save(); } }
+function deleteNote(id) { S.notes = S.notes.filter(n => n.id !== id); save(); }
+
+/* ---------- backup reminder ---------- */
+
+function daysSinceBackup() {
+  const ref = S.lastExport || S.created;
+  return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000);
+}
+const backupDue = () => daysSinceBackup() >= 7;
