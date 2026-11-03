@@ -34,7 +34,7 @@ Everything you enter is stored in the browser on your phone. The web address onl
 `server/worker.js` is the optional bank-link server. `data.js` holds the logic (categories, simplifier, pots, budget, month-end check). `app.js` is the interface. `style.css`, `index.html`, `sw.js` (offline), `manifest.webmanifest`.
 
 ## Linking real bank accounts
-Profile button → Settings → Bank accounts. It talks to your own private Cloudflare Worker (`server/worker.js`) which holds the Plaid keys; follow `server/README.md`. Until then the app runs on sample data or hand-entered purchases.
+Profile button → Settings → Bank accounts. It talks to your own private Cloudflare Worker (`server/worker.js`) which holds the Plaid keys; follow the step-by-step guide in `server/README.md`. Until then the app runs on sample data or hand-entered purchases.
 
 ## Settings
 The profile button (top right) opens Settings: theme (auto, charcoal, black, paper), accent color, text size, animations, default pot, backup reminder, bank linking, backup & restore, and erase.

@@ -592,8 +592,9 @@ function settingsView() {
   ${backupCard()}
 
   <div class="card"><h2>This phone</h2>
-    <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button><button class="btn danger" data-action="eraseAll">erase all data</button></div>
-    <div class="muted small" style="margin-top:8px">Erasing removes everything stored on this phone (not your bank or server). Back up first.</div>
+    <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button><button class="btn" data-action="clearTx">clear transactions</button></div>
+    <div class="btn-row"><button class="btn danger" data-action="eraseAll">erase all data</button></div>
+    <div class="muted small" style="margin-top:8px">Clear transactions empties your purchases, pot history and budgets but keeps your settings, income sources, expenses, to-dos and notes. (If a bank is linked, unlink it first, or it won't send those purchases again.) Erase removes everything stored on this phone, not your bank or server. Back up first.</div>
   </div>`;
 }
 
@@ -1097,6 +1098,9 @@ const ACTIONS = {
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
+  clearTx: () => askConfirm('Remove all transactions and pot history, and set every pot to $0? Your settings, income sources, expenses, to-dos and notes stay.', 'clear', () => {
+    startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.linkMsg = 'Transactions cleared.';
+  }, true),
   eraseAll: () => askConfirm('Erase everything stored on this phone? Back up first. This cannot be undone.', 'erase', () => {
     eraseEverything(); setLink({}); ui.linkItems = null; ui.linkMsg = ''; ui.tab = 'review'; applySettings(); doSync();
   }, true),
