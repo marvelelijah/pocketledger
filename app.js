@@ -5,7 +5,7 @@ const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
 const ui = {
-  tab: 'review', modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', syncing: false, resetScroll: false,
+  tab: 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -21,7 +21,7 @@ const monthName = d => d.toLocaleString('en-US', { month: 'long', year: 'numeric
 const monthLabel = key => { const [y, m] = key.split('-').map(Number); return monthName(new Date(y, m - 1, 1)); };
 
 /* Emoji, tinted to a color so they sit in the palette instead of shouting. */
-const SAGE = '#a9bea1', DIM = '#9c9786';
+let SAGE = '#a9bea1', DIM = '#9c9786';
 const tintCache = {};
 function tintFilter(hex) {
   if (tintCache[hex]) return tintCache[hex];
@@ -450,9 +450,11 @@ function budgetView() {
 
   ${checkCard()}
 
-  ${historyCard()}
+  ${historyCard()}`;
+}
 
-  <div class="card"><h2>Backup &amp; restore</h2>
+function backupCard() {
+  return `<div class="card"><h2>Backup &amp; restore</h2>
     <div class="muted small" style="margin-bottom:8px">${S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'No backup yet.'} Your data lives only on this phone, so keep a copy somewhere private.</div>
     <button class="btn primary full" data-action="shareCode">Email myself a backup code</button>
     <div class="muted small" style="margin:6px 0 10px">Opens the share sheet. Choose Mail and send it to yourself. It can't send by itself; a web page has no way to email on its own.</div>
@@ -515,7 +517,87 @@ function planView() {
   </div>`;
 }
 
-const VIEWS = { home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView, plan: planView };
+function topbar() {
+  const nm = (S.settings.name || '').trim();
+  const handle = (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@pocketledger';
+  return `<div class="topbar"><span class="prompt">${esc(handle)}</span>
+    <button class="profile" data-action="openSettings" aria-label="Profile and settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}<span>settings</span></button></div>`;
+}
+
+const THEMES = [['auto', 'auto'], ['charcoal', 'charcoal'], ['black', 'black'], ['paper', 'paper']];
+const ACCENTS = [['sage', '#a9bea1'], ['terra', '#de9770'], ['amber', '#dcae62'], ['sky', '#8fb4d9'], ['rose', '#d99aa6']];
+
+function linkStatus() {
+  if (S.settings.linked) return ['linked', 'b-hi'];
+  if (S.useSampleData) return ['sample data', 'b-mid'];
+  return ['not linked', 'b-mid'];
+}
+
+function settingsView() {
+  const st = S.settings, link = getLink();
+  const [statusText, statusCls] = linkStatus();
+  const standalone = window.navigator.standalone === true;
+  return `<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>
+  <h1>Settings</h1>
+
+  <div class="card"><h2>Profile</h2>
+    <div class="field"><span>Your name</span><input class="wide" placeholder="optional" value="${esc(st.name)}" data-change="profileName" autocomplete="off" style="text-align:right"></div>
+    <div class="muted small">Shown only in the top bar on this phone.</div>
+  </div>
+
+  <div class="card"><h2>Appearance</h2>
+    <div class="muted small" style="margin-bottom:6px">Theme</div>
+    ${seg(THEMES, st.theme, 'setTheme')}
+    <div class="muted small" style="margin:12px 0 6px">Accent color</div>
+    <div class="swatches">${ACCENTS.map(([k, c]) => `<button class="swatch ${st.accent === k ? 'on' : ''}" data-action="setAccent" data-pot="${k}" style="background:${c}" aria-label="${k}"></button>`).join('')}</div>
+    <div class="muted small" style="margin:12px 0 6px">Text size</div>
+    ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
+    <div class="muted small" style="margin:12px 0 6px">Animations</div>
+    ${seg([['auto', 'on'], ['off', 'off']], st.motion, 'setMotion')}
+  </div>
+
+  <div class="card"><h2>Preferences</h2>
+    <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
+    <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
+  </div>
+
+  <div class="card"><h2>Bank accounts</h2>
+    <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
+    ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : ''}
+    <div class="day">Your link server</div>
+    <div class="stack">
+      <input id="linkUrl" placeholder="https://pocketledger-link.your-name.workers.dev" value="${esc(link.url || '')}" data-change="linkUrl" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
+      <input id="linkPass" type="password" placeholder="passphrase" value="${esc(link.passphrase || '')}" data-change="linkPass" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="muted small" style="margin-top:6px">Stored only on this phone, and left out of backups.</div>
+    <div class="btn-row">
+      <button class="btn" data-action="checkLink">check connection</button>
+      <button class="btn primary" data-action="linkBank">link a bank</button>
+      ${S.settings.linked ? '<button class="btn" data-action="syncNow">sync now</button>' : ''}
+    </div>
+    ${ui.linkItems && ui.linkItems.length ? `<div class="day">Linked</div>${ui.linkItems.map(i => `<div class="row" style="padding:4px 0"><span>${esc(i.institution)}</span><button class="link small" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></div>`).join('')}` : ''}
+    <div class="field" style="margin-top:8px"><span>Count purchases from</span><input type="date" value="${esc(st.countFrom || '')}" data-change="countFrom" style="width:160px"></div>
+    <div class="muted small">Older purchases are kept in Activity as history and never sent to Review, so your pots start clean.</div>
+    <div class="day">Good to know</div>
+    <div class="muted small info">
+      ▸ Read-only: the app can see balances and purchases. It can't move money.<br>
+      ▸ You sign in to your bank inside Plaid's window. PocketLedger never sees your bank password.<br>
+      ▸ Your Plaid keys and bank access live on your own private server, never in this app or on GitHub.<br>
+      ▸ Plaid's free Trial plan allows up to 10 linked connections. Unlink any time.<br>
+      ▸ Some banks (Chase, for example) send you to their own site to approve. Do the first link in Safari, not the home-screen app${standalone ? ' (you are in the home-screen app now)' : ''}, then come back here and tap check connection.<br>
+      ▸ Setup steps are in <b>server/README.md</b> in your repository.
+    </div>
+  </div>
+
+  ${backupCard()}
+
+  <div class="card"><h2>This phone</h2>
+    <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button><button class="btn danger" data-action="eraseAll">erase all data</button></div>
+    <div class="muted small" style="margin-top:8px">Erasing removes everything stored on this phone (not your bank or server). Back up first.</div>
+  </div>`;
+}
+
+const VIEWS = { settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView, plan: planView };
 
 /* ---------- modals ---------- */
 
@@ -527,7 +609,7 @@ function sheet(title, inner, doneAction) {
 }
 
 function seg(options, current, action, extra) {
-  return `<div class="seg">${options.map(([val, label]) =>
+  return `<div class="seg ${options.length > 3 ? 'many' : ''}">${options.map(([val, label]) =>
     `<button class="${current === val ? 'on' : ''}" data-action="${action}" data-pot="${esc(val)}" ${extra || ''}>${label}</button>`).join('')}</div>`;
 }
 
@@ -684,6 +766,8 @@ function pickDef(field, id) {
     case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
     case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
     case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
+    case 'defaultPot': return { title: 'New purchases come out of', options: pots(), current: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' };
+    case 'backupDays': return { title: 'Backup reminder', options: [['7', 'Every 7 days'], ['14', 'Every 14 days'], ['30', 'Every 30 days'], ['0', 'Off']], current: String(S.settings.backupDays) };
     case 'bulkTarget': {
       const others = S.pots.filter(x => x.id !== ui.potId);
       const cur = ui.bulkTarget && (ui.bulkTarget === 'none' || others.some(o => o.id === ui.bulkTarget)) ? ui.bulkTarget : (others[0] ? others[0].id : 'none');
@@ -750,7 +834,7 @@ function render() {
   const tabChanged = ui.tab !== lastTab;
 
   app.classList.remove('enter');
-  app.innerHTML = VIEWS[ui.tab]();
+  app.innerHTML = (ui.tab === 'settings' ? '' : topbar()) + VIEWS[ui.tab]();
   if (tabChanged) {
     app.style.setProperty('--dx', (lastTab === null || tabIndex(ui.tab) >= tabIndex(lastTab) ? 1 : -1) * 18 + 'px');
     app.classList.add('enter');
@@ -795,7 +879,7 @@ const barState = {}, numState = {};
 let animToken = 0;
 function animateUI(entering) {
   const token = ++animToken;
-  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduce = (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) || S.settings.motion === 'off';
 
   const bars = [...document.querySelectorAll('[data-bar]')];
   bars.forEach(el => {
@@ -906,6 +990,89 @@ async function restoreCode() {
   render();
 }
 
+/* ---------- linking ---------- */
+
+async function checkLink() {
+  ui.linkMsg = 'Checking…'; render();
+  try {
+    const st = await linkApi('/status');
+    ui.linkItems = st.items || [];
+    if (!ui.linkItems.length) {
+      S.settings.linked = false; save();
+      ui.linkMsg = 'Connected to your server. No bank is linked yet, so tap link a bank.';
+    } else {
+      ui.linkMsg = 'Connected. ' + ui.linkItems.length + (ui.linkItems.length === 1 ? ' bank' : ' banks') + ' linked.';
+      if (S.useSampleData) {
+        askConfirm('Your server has a linked bank. Clear the sample data and bring in your real accounts?', 'clear & sync', async () => {
+          startFresh(); S.settings.linked = true; save();
+          ui.linkMsg = 'Syncing…'; render();
+          await doSync(); ui.linkMsg = syncError || 'Synced.'; render();
+        });
+      } else if (!S.settings.linked) {
+        S.settings.linked = true; save();
+        doSync().then(() => { ui.linkMsg = syncError || 'Synced.'; render(); });
+      }
+    }
+  } catch (e) { ui.linkMsg = e.message; }
+  render();
+}
+
+function loadPlaid() {
+  return new Promise((resolve, reject) => {
+    if (window.Plaid) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Could not load the bank window from Plaid. Check your connection.'));
+    document.head.appendChild(s);
+  });
+}
+
+const PLAID_TOKEN_KEY = 'pocketledger.linktoken';
+function plaidHandlers() {
+  return {
+    onSuccess: async (publicToken, meta) => {
+      ui.linkMsg = 'Saving…'; render();
+      try {
+        await linkApi('/exchange', { public_token: publicToken, institution: meta && meta.institution && meta.institution.name });
+        try { localStorage.removeItem(PLAID_TOKEN_KEY); } catch (e) { /* ignore */ }
+        S.settings.linked = true;
+        if (!S.settings.countFrom) S.settings.countFrom = firstOfMonthISO();
+        save();
+        ui.linkMsg = 'Linked. Fetching your transactions…'; render();
+        await doSync();
+        const st = await linkApi('/status').catch(() => null);
+        if (st) ui.linkItems = st.items;
+        ui.linkMsg = syncError ? syncError : 'Linked and synced. If nothing shows yet, wait a minute and tap sync now.';
+      } catch (e) { ui.linkMsg = e.message; }
+      ui.tab = 'settings'; render();
+    },
+    onExit: err => { if (err) ui.linkMsg = err.display_message || err.error_message || 'Linking stopped.'; else ui.linkMsg = 'Linking cancelled.'; render(); },
+  };
+}
+
+async function openPlaid() {
+  ui.linkMsg = 'Opening the bank window…'; render();
+  try {
+    const r = await linkApi('/link-token', {});
+    try { localStorage.setItem(PLAID_TOKEN_KEY, r.link_token); } catch (e) { /* ignore */ }
+    await loadPlaid();
+    Plaid.create(Object.assign({ token: r.link_token }, plaidHandlers())).open();
+  } catch (e) { ui.linkMsg = e.message; render(); }
+}
+
+/* Banks that use OAuth send you back here with ?oauth_state_id=…; pick the flow up where it left off. */
+async function resumePlaid() {
+  let token = null;
+  try { token = localStorage.getItem(PLAID_TOKEN_KEY); } catch (e) { /* ignore */ }
+  if (!token) return;
+  ui.tab = 'settings'; ui.linkMsg = 'Finishing your bank link…'; render();
+  try {
+    await loadPlaid();
+    Plaid.create(Object.assign({ token, receivedRedirectUri: location.href }, plaidHandlers())).open();
+  } catch (e) { ui.linkMsg = e.message; render(); }
+}
+
 function openPotEdit(id) {
   const p = id ? potById(id) : null;
   ui.modal = { type: 'potEdit', id: id || null,
@@ -921,6 +1088,33 @@ const ACTIONS = {
   ignore: d => ignoreTx(d.id),
   filter: d => { ui.filter = (ui.filter === d.cat || !d.cat) ? null : d.cat; },
   refresh: () => { doSync(); return false; },
+
+  // settings
+  openSettings: () => { if (ui.tab !== 'settings') ui.prevTab = ui.tab; ui.tab = 'settings'; ui.resetScroll = true; },
+  closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
+  setTheme: d => { S.settings.theme = d.pot; save(); applySettings(); },
+  setAccent: d => { S.settings.accent = d.pot; save(); applySettings(); },
+  setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
+  setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
+  reloadApp: () => { location.reload(); return false; },
+  eraseAll: () => askConfirm('Erase everything stored on this phone? Back up first. This cannot be undone.', 'erase', () => {
+    eraseEverything(); setLink({}); ui.linkItems = null; ui.linkMsg = ''; ui.tab = 'review'; applySettings(); doSync();
+  }, true),
+  checkLink: () => { checkLink(); return false; },
+  linkBank: () => {
+    if (S.useSampleData) askConfirm('Linking real accounts clears the sample data first. Continue?', 'continue', () => { startFresh(); openPlaid(); });
+    else { openPlaid(); return false; }
+  },
+  syncNow: () => { ui.linkMsg = 'Syncing…'; doSync().then(() => { ui.linkMsg = syncError ? syncError : 'Synced just now.'; render(); }); },
+  unlinkItem: d => askConfirm('Unlink this bank? Your history in the app stays; no new purchases will arrive.', 'unlink', async () => {
+    try {
+      await linkApi('/unlink', { item_id: d.id });
+      const st = await linkApi('/status'); ui.linkItems = st.items;
+      if (!st.items.length) S.settings.linked = false;
+      save(); ui.linkMsg = 'Unlinked.';
+    } catch (e) { ui.linkMsg = e.message; }
+    render();
+  }, true),
 
   // in-app pickers and dialogs
   openSel: d => { ui.picker = { field: d.field, id: d.id }; },
@@ -968,7 +1162,7 @@ const ACTIONS = {
   },
 
   // adding by hand
-  addTx: () => { ui.modal = { type: 'addTx', kind: 'purchase', amount: 0, name: '', pot: 'spending' }; },
+  addTx: () => { ui.modal = { type: 'addTx', kind: 'purchase', amount: 0, name: '', pot: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' }; },
   txKind: d => { ui.modal.kind = d.pot; },
   txPot: d => { ui.modal.pot = d.pot; },
   saveTx: () => {
@@ -1057,6 +1251,12 @@ function handleField(el, final) {
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
     case 'bulkTarget': ui.bulkTarget = v; return;
+    case 'defaultPot': S.settings.defaultPot = v; save(); return;
+    case 'backupDays': S.settings.backupDays = +v; save(); return;
+    case 'profileName': S.settings.name = v.trim().slice(0, 30); save(); if (final) render(); return;
+    case 'countFrom': S.settings.countFrom = v || null; save(); return;
+    case 'linkUrl': setLink(Object.assign(getLink(), { url: v.trim() })); return;
+    case 'linkPass': setLink(Object.assign(getLink(), { passphrase: v.trim() })); return;
     // income sources
     case 'srcName': { const s = find(S.incomeSources); if (s) { s.name = v; save(); } return; }
     case 'srcAmt': { const s = find(S.incomeSources); if (s) { s.expectedAmount = num(v); save(); } return; }
@@ -1122,6 +1322,20 @@ window.addEventListener('popstate', e => {
   popping = false;
 });
 
+function applySettings() {
+  const st = S.settings, root = document.documentElement;
+  const theme = st.theme === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'paper' : 'charcoal') : st.theme;
+  root.dataset.theme = theme; root.dataset.accent = st.accent; root.dataset.motion = st.motion;
+  root.style.setProperty('--ts', st.textSize);
+  const cs = getComputedStyle(root);
+  const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
+  SAGE = read('--sage', SAGE); DIM = read('--fg-dim', DIM);
+  Object.keys(tintCache).forEach(k => delete tintCache[k]);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = read('--bg', '#1b1a16');
+}
+try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (S.settings.theme === 'auto') { applySettings(); render(); } }); } catch (e) { /* older browsers */ }
+
 /* Drag a pop-up down to close it. Starts from the handle/header, or from anywhere when scrolled to the top. */
 let drag = null;
 const layerClose = layer => { if (layer === 'picker') ui.picker = null; else if (layer === 'dialog') ui.dialog = null; else closeModal(); };
@@ -1170,8 +1384,9 @@ document.addEventListener('touchcancel', endDrag);
 document.addEventListener('gesturestart', e => e.preventDefault());
 document.addEventListener('gesturechange', e => e.preventDefault());
 
+applySettings();
 render();
-doSync();
+if (/oauth_state_id=/.test(location.search)) resumePlaid(); else doSync();
 
 // Ask the browser to keep this app's data even when storage is tight.
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

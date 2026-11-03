@@ -1,5 +1,5 @@
 // Network-first so updates arrive; falls back to cache when offline.
-const CACHE = 'pocketledger-v5';
+const CACHE = 'pocketledger-v6';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './manifest.webmanifest', './icon-180.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,6 +17,9 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+  // only cache this app's own files and its fonts; never bank data or Plaid
+  const host = new URL(e.request.url).hostname;
+  if (host !== location.hostname && host !== 'fonts.googleapis.com' && host !== 'fonts.gstatic.com') return;
   e.respondWith(
     fetch(e.request)
       .then(res => {

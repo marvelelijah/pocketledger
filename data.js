@@ -174,6 +174,17 @@ function defaultState() {
       { id: uid(), name: 'Insurance', amount: 120 },
     ],
     useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
+    settings: {
+      name: '',            // only shown on this phone
+      theme: 'charcoal',   // auto | charcoal | black | paper
+      accent: 'sage',      // sage | terra | amber | sky | rose
+      textSize: 1,
+      motion: 'auto',      // auto | off
+      backupDays: 7,       // 0 = no reminder
+      defaultPot: 'spending',
+      linked: false,       // true once real bank accounts are linked (see server/README.md)
+      countFrom: null,     // YYYY-MM-DD: purchases before this day are kept as history, not sent to Review
+    },
     savingsPercent: 10,   // % of the month's earnings set aside for the Savings pot
     pots: [
       { id: 'spending', name: 'Spending', icon: '💳', balance: 0, target: null, core: true },
@@ -204,6 +215,7 @@ function loadState() {
 /* Brings data saved by the first version of the app up to date. */
 function migrate(old) {
   const s = Object.assign(defaultState(), old);
+  s.settings = Object.assign({}, defaultState().settings, old.settings || {});
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
   if (old.version >= STATE_VERSION) return s;
 
@@ -270,6 +282,7 @@ function replaceState(obj) {
 let syncError = null;
 
 async function sync() {
+  if (S.settings.linked && linkConfigured()) return syncLinked();
   if (!S.useSampleData) { syncError = null; return; }   // own-data mode: purchases are added by hand (or a real provider later)
   try {
     S.accounts = await accountProvider.fetchAccounts();
@@ -289,7 +302,8 @@ function matchingSource(rawName) {
   return S.incomeSources.find(s => s.matchKeyword && upper.includes(s.matchKeyword.toUpperCase()));
 }
 
-function ingest(raws) {
+function ingest(raws, opts) {
+  opts = opts || {};
   const known = new Set(S.transactions.map(t => t.id));
   for (const r of raws) {
     if (known.has(r.id)) continue;
@@ -297,7 +311,7 @@ function ingest(raws) {
     const tx = {
       id: r.id, accountID: r.accountID, rawName: r.rawName, date: r.date, amount: r.amount,
       simpleName: s.phrase, confidence: s.confidence, category: s.category, userConfirmed: false,
-      pot: null, isIgnored: false, incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
+      pot: null, isIgnored: !!(opts.countFrom && r.amount < 0 && new Date(r.date) < opts.countFrom), incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
     };
     if (r.amount > 0) {
       const src = matchingSource(r.rawName);
@@ -648,7 +662,7 @@ function daysSinceBackup() {
   const ref = S.lastExport || S.created;
   return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000);
 }
-const backupDue = () => daysSinceBackup() >= 7;
+const backupDue = () => S.settings.backupDays > 0 && daysSinceBackup() >= S.settings.backupDays;
 
 /* ---------- backup code (text you can email to yourself and paste back in) ---------- */
 /* Format: "PL1:" + base64(gzip(json)) + "~"   ("PL0:" = same without compression where the browser can't gzip). */
@@ -690,4 +704,81 @@ async function decodeBackup(text) {
   const obj = JSON.parse(new TextDecoder().decode(raw));
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.pots)) throw new Error('Not a PocketLedger backup');
   return obj;
+}
+
+/* ---------- real bank accounts (through your own link server, see server/README.md) ---------- */
+/* The server address and passphrase live in their own storage key, so they are never in a backup or backup code. */
+
+const LINK_KEY = 'pocketledger.link';
+function getLink() { try { return JSON.parse(localStorage.getItem(LINK_KEY)) || {}; } catch (e) { return {}; } }
+function setLink(obj) { try { localStorage.setItem(LINK_KEY, JSON.stringify(obj)); } catch (e) { /* ignore */ } }
+const linkConfigured = () => { const l = getLink(); return !!(l.url && l.passphrase); };
+
+async function linkApi(path, body) {
+  const l = getLink();
+  if (!l.url || !l.passphrase) throw new Error('Add your server address and passphrase first.');
+  if (!/^https:\/\//i.test(l.url)) throw new Error('The server address must start with https://');
+  let res;
+  try {
+    res = await fetch(l.url.replace(/\/+$/, '') + path, {
+      method: body ? 'POST' : 'GET',
+      headers: Object.assign({ Authorization: 'Bearer ' + l.passphrase }, body ? { 'Content-Type': 'application/json' } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (e) { throw new Error('Could not reach your server. Check the address and your connection.'); }
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* not json */ }
+  if (!res.ok) throw new Error((data && data.error) || 'The server answered ' + res.status);
+  return data;
+}
+
+function removeTx(id) {
+  removeLogs(e => e.txId === id);
+  S.transactions = S.transactions.filter(t => t.id !== id);
+}
+
+const firstOfMonthISO = () => { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-01'; };
+
+/* res = { accounts, added, modified, removed } from the server */
+function ingestLinked(res) {
+  if (res.accounts && res.accounts.length) S.accounts = res.accounts;
+  if (!S.settings.countFrom) S.settings.countFrom = firstOfMonthISO();
+  const from = new Date(S.settings.countFrom + 'T00:00:00');
+  const norm = t => ({ id: t.id, accountID: t.accountID, rawName: t.rawName, amount: round2(t.amount), date: new Date(t.date).toISOString() });
+  for (const t of res.added || []) {
+    const old = t.pendingId && txById(t.pendingId);
+    if (old) {                                   // the bank replaced a pending purchase with the posted one: keep your sorting
+      const pot = old.pot, ign = old.isIgnored;
+      removeTx(old.id);
+      ingest([norm(t)], { countFrom: from });
+      const nt = txById(t.id);
+      if (nt && pot) assign(nt.id, pot); else if (nt && ign) ignoreTx(nt.id);
+    } else ingest([norm(t)], { countFrom: from });
+  }
+  for (const t of res.modified || []) {
+    const x = txById(t.id), n = norm(t);
+    if (!x) { ingest([n], { countFrom: from }); continue; }
+    x.amount = n.amount; x.date = n.date; x.rawName = n.rawName;
+    if (x.pot) assign(x.id, x.pot);              // re-deduct if the amount changed
+  }
+  for (const id of res.removed || []) removeTx(id);
+  S.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  save();
+}
+
+async function syncLinked() {
+  try {
+    let res, guard = 0;
+    do { res = await linkApi('/sync'); ingestLinked(res); guard++; } while (res.more && guard < 6);
+    S.lastSync = new Date().toISOString();
+    syncError = null;
+  } catch (e) { syncError = e.message || String(e); }
+  save();
+}
+
+/* Wipe everything on this phone (not your server), back to a fresh install. */
+function eraseEverything() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+  S = defaultState();
+  save();
 }

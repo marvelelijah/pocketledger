@@ -19,7 +19,7 @@ This repo is published with GitHub Pages. Open the live app link above in **Safa
 
 ## Your data and backups
 Everything you enter is stored in the browser on your phone. The web address only serves the app's code, and this repository contains no real financial data (only made-up sample transactions).
-- **Email myself a backup code** (Budget → Backup & restore): opens the share sheet; choose Mail and send it to yourself. To restore after your data is erased, paste the whole email into "Restore from code". A web page can't send email by itself, so this is one tap each time. The Review screen reminds you after 7 days.
+- **Email myself a backup code** (Settings → Backup & restore): opens the share sheet; choose Mail and send it to yourself. To restore after your data is erased, paste the whole email into "Restore from code". A web page can't send email by itself, so this is one tap each time. The Review screen reminds you after 7 days.
 - **Save file / Import file** and **Copy code** work too.
 - **Start fresh:** the sample data is clearly labeled on Review; "Clear sample data & start fresh" removes it so only your own purchases remain.
 
@@ -31,8 +31,13 @@ Everything you enter is stored in the browser on your phone. The web address onl
 - The page asks search engines not to index it (`noindex`), which is a courtesy, not security.
 
 ## Files
-`data.js` holds the logic (categories, simplifier, pots, budget, month-end check). `app.js` is the interface. `style.css`, `index.html`, `sw.js` (offline), `manifest.webmanifest`.
+`server/worker.js` is the optional bank-link server. `data.js` holds the logic (categories, simplifier, pots, budget, month-end check). `app.js` is the interface. `style.css`, `index.html`, `sw.js` (offline), `manifest.webmanifest`.
+
+## Linking real bank accounts
+Profile button → Settings → Bank accounts. It talks to your own private Cloudflare Worker (`server/worker.js`) which holds the Plaid keys; follow `server/README.md`. Until then the app runs on sample data or hand-entered purchases.
+
+## Settings
+The profile button (top right) opens Settings: theme (auto, charcoal, black, paper), accent color, text size, animations, default pot, backup reminder, bank linking, backup & restore, and erase.
 
 ## Later
-- **Real bank connection:** replace `accountProvider` in `data.js` with one that calls your own small server, which talks to Plaid (Plaid keys must never live in the app).
 - **Credit score:** make `creditProvider.fetchLatest()` return `{ score, bureau, date }` and set `FEATURES.creditScore = true`.
