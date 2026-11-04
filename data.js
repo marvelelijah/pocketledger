@@ -1200,6 +1200,7 @@ function ingestLinked(res) {
   for (const id of res.removed || []) removeTx(id);
   S.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   healOrphans();
+  boostRepeats();
   save();
 }
 
@@ -1233,8 +1234,26 @@ function eraseEverything() {
 if (DEMO && !S.demoSeeded) seedDemo();   // after everything above is defined
 
 /* On every start: remember each purchase's account name (so it survives an account being removed), and tidy leftovers. */
+/* A name you see over and over is a name the app can trust more: +8% per repeat, up to 92%. Never overrides a category you set. */
+function boostRepeats() {
+  const groups = {};
+  for (const t of S.transactions) { const k = merchantKey(t.rawName); (groups[k] = groups[k] || []).push(t); }
+  let ch = false;
+  for (const g of Object.values(groups)) {
+    for (const t of g) {
+      if (t.baseConf === undefined) t.baseConf = t.confidence;
+      if (t.confidence >= 0.99 || t.userConfirmed) continue;
+      const want = g.length > 1 ? Math.min(0.92, Math.max(t.baseConf, t.baseConf + 0.08 * (g.length - 1))) : t.baseConf;
+      const w = Math.round(want * 100) / 100;
+      if (w !== t.confidence) { t.confidence = w; ch = true; }
+    }
+  }
+  return ch;
+}
+
 (function boot() {
   let ch = false;
+  if (boostRepeats()) ch = true;
   for (const t of S.transactions) if (!t.acctLabel && t.accountID !== 'manual') { const l = accLabel(t.accountID); if (l) { t.acctLabel = l; ch = true; } }
   if (healOrphans()) ch = true;
   if (ch) save();

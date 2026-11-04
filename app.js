@@ -611,7 +611,6 @@ function budgetView() {
       <button class="link" data-action="fixedDel" data-id="${e.id}" aria-label="Remove">✕</button></div>
       <input class="small-in" placeholder="bank text that identifies it (optional)" value="${esc(e.matchKeyword || '')}" autocapitalize="characters" autocorrect="off" data-change="fixedKey" data-id="${e.id}" data-live="1">`).join('')}
     <div class="btn-row" style="margin-top:6px"><button class="btn" data-action="fixedAdd">＋ Add expense</button><button class="btn" data-action="pasteExpenses">Paste a list</button></div>
-    <div class="muted small" style="margin:6px 0">When a bank charge contains an expense's bank text, it's marked "Fixed expense" automatically and skips Review, because the budget already covers it.</div>
     <div class="field"><span>${emo('💰')} Savings %</span>
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
@@ -758,7 +757,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-04 c';
+const APP_VERSION = '2026-11-04 d';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -805,6 +804,7 @@ function settingsView() {
   <div class="card"><h2>You</h2>
     <div class="field"><span>Name</span><input class="wide" placeholder="optional" value="${esc(st.name)}" data-change="profileName" autocomplete="off" style="text-align:right"></div>
     <div class="field"><span>Open on</span>${selBtn('startTab', '')}</div>
+    <div class="field"><span>Screen switcher</span>${selBtn('nav', '')}</div>
     <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
     <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
   </div>
@@ -1001,6 +1001,7 @@ function pickDef(field, id) {
     case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
     case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
     case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
+    case 'nav': return { title: 'Screen switcher', options: [['bar', 'Tab bar'], ['stack', 'Stack button']], current: S.settings.nav || 'bar' };
     case 'startTab': return { title: 'Open on', options: TABS.map(t => [t[0], t[2]]), current: S.settings.startTab || 'review' };
     case 'defaultPot': return { title: 'New purchases come out of', options: pots(), current: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' };
     case 'backupDays': return { title: 'Backup reminder', options: [['7', 'Every 7 days'], ['14', 'Every 14 days'], ['30', 'Every 30 days'], ['0', 'Off']], current: String(S.settings.backupDays) };
@@ -1163,8 +1164,15 @@ function render() {
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
   const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'income' : ui.tab;
-  const cur = TABS[tabIndex(active)];
-  tabbar.innerHTML = `<button class="${tabChanged ? 'pop' : ''}" data-action="openStack" aria-label="Switch screen"><span class="i">${emo(cur[1], SAGE)}</span><span class="lbl">${cur[2]}</span><span class="grid">▤</span>${n && active !== 'review' ? `<span class="pip">${n}</span>` : ''}</button>`;
+  if (S.settings.nav === 'stack') {
+    const cur = TABS[tabIndex(active)];
+    tabbar.className = 'single';
+    tabbar.innerHTML = `<button class="${tabChanged ? 'pop' : ''}" data-action="openStack" aria-label="Switch screen"><span class="i">${emo(cur[1], SAGE)}</span><span class="lbl">${cur[2]}</span><span class="grid">▤</span>${n && active !== 'review' ? `<span class="pip">${n}</span>` : ''}</button>`;
+  } else {
+    tabbar.className = '';
+    tabbar.innerHTML = TABS.map(([k, icon, label]) =>
+      `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
+  }
   paintStackLayer();
 
   // pop-ups: slide/pop in when they appear, slide/pop out when they go
@@ -1665,6 +1673,7 @@ function handleField(el, final) {
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
     case 'bulkTarget': ui.bulkTarget = v; return;
+    case 'nav': S.settings.nav = v; save(); render(); return;
     case 'startTab': S.settings.startTab = v; save(); return;
     case 'defaultPot': S.settings.defaultPot = v; save(); return;
     case 'backupDays': S.settings.backupDays = +v; save(); return;
