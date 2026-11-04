@@ -59,3 +59,9 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 - **Review → "mark all as already sorted"** clears everything waiting, for when you've caught up outside the app.
 - **Home → Deductible** opens the list of what is being counted, by month and by name.
 - **Budget → Paste a list** reads your monthly expenses from text (Name, amount per line; "Savings 20%" sets the percentage).
+
+## Screens, demo mode and editing
+- One floating button switches screens: it opens an isometric stack of the screens. Swipe or scroll to shuffle, tap the front one to open it. Settings → *Open on* picks the screen the app starts on.
+- Settings → *Demo mode* shows the app with entirely made-up data (amber frame and a DEMO tag). Your real data and bank link are never read in demo mode and come back when you exit.
+- Entries you add by hand can be edited or deleted from their detail sheet.
+- Settings shows the app version at the bottom so you can confirm you are on the latest copy.

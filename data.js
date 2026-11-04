@@ -48,6 +48,7 @@ function sameMonth(a, b) { return monthKey(a) === monthKey(b); }
 
 /* [keywords found in the bank text, display name, category, confidence] */
 const MERCHANTS = [
+  [['ATM WITHDRAW', 'WITHDRAWAL ATM', 'WITHDRAWL ATM', 'ATM CASH', 'CASH WITHDRAW', 'ATM WDL', 'WDL ATM'], 'Cash', 'other', 0.9],
   // gas
   [['RACETRAC'], 'RaceTrac', 'gas', 0.93], [['QUIKTRIP'], 'QuikTrip', 'gas', 0.9], [['CIRCLE K'], 'Circle K', 'gas', 0.9],
   [['SHELL OIL', 'SHELL SERVICE', 'SHELL '], 'Shell', 'gas', 0.93], [['CHEVRON'], 'Chevron', 'gas', 0.95], [['EXXON'], 'Exxon', 'gas', 0.95],
@@ -126,7 +127,7 @@ function bankCategory(pfc) {
   return { cat, conf: PFC_CONF[pfc.c] || 0.5, own, label: (CATS[cat] || CATS.other).title.toLowerCase() };
 }
 
-const NOISE_WORDS = new Set(['PURCHASE', 'POS', 'DEBIT', 'CARD', 'CHECKCARD', 'CKCD', 'RECURRING', 'PAYMENT', 'THE', 'INC', 'LLC', 'LTD', 'CORP', 'AUTHORIZED', 'ON', 'WWW', 'COM', 'HTTPS', 'VISA', 'ACH', 'WEB', 'ID', 'PPD', 'CCD', 'NO', 'REF', 'FL', 'GA', 'AL', 'TX', 'NC', 'SC', 'CA', 'NY']);
+const NOISE_WORDS = new Set(['PURCHASE', 'POS', 'DEBIT', 'CARD', 'CHECKCARD', 'CKCD', 'RECURRING', 'PAYMENT', 'THE', 'INC', 'LLC', 'LTD', 'CORP', 'AUTHORIZED', 'ON', 'WWW', 'COM', 'HTTPS', 'VISA', 'ACH', 'WEB', 'FROM', 'TO', 'OF', 'AT', 'FOR', 'WITHDRAWAL', 'WITHDRAWL', 'WITHDRAW', 'WDL', 'DEPOSIT', 'DEP', 'ATM', 'POINT', 'SALE', 'ID', 'PPD', 'CCD', 'NO', 'REF', 'FL', 'GA', 'AL', 'TX', 'NC', 'SC', 'CA', 'NY']);
 
 /* A tidy name from messy bank text: "SQ *CORNER COFFEE CO 0231 ORLANDO FL" -> "Corner Coffee". */
 function prettyName(raw) {
@@ -240,7 +241,12 @@ const creditProvider = {
 
 /* ---------- state & persistence ---------- */
 
-const STORAGE_KEY = 'pocketledger.v1';   // key name kept so existing data is found and migrated
+/* Demo mode keeps a separate, made-up copy of the app so you can show it off. Your real data and bank link are never read or shown. */
+const DEMO_KEY = 'pocketledger.demo';
+let DEMO = false;
+try { DEMO = typeof localStorage !== 'undefined' && localStorage.getItem(DEMO_KEY) === '1'; } catch (e) { /* ignore */ }
+function setDemo(on) { try { if (on) localStorage.setItem(DEMO_KEY, '1'); else localStorage.removeItem(DEMO_KEY); } catch (e) { /* ignore */ } }
+const STORAGE_KEY = DEMO ? 'pocketledger.demo.v1' : 'pocketledger.v1';   // normal key name kept so existing data is found and migrated
 const STATE_VERSION = 2;
 const POT_ICONS = ['💳', '🏦', '🎯', '✈️', '🏠', '🚗', '📷', '🎁', '🛟', '🎓'];
 /* Pots saved while the app briefly used plain symbols get their emoji back. */
@@ -379,6 +385,37 @@ function replaceState(obj) {
   save();
 }
 
+/* ---------- demo mode: everything below is invented ---------- */
+function seedDemo() {
+  const day = (ago, h, m) => { const x = new Date(); x.setDate(x.getDate() - ago); x.setHours(h, m, 0, 0); return x.toISOString(); };
+  S = defaultState();
+  S.demoSeeded = true; S.useSampleData = false;
+  S.settings.name = 'Demo';
+  S.accounts = [
+    { id: 'd-chk', name: 'Everyday Checking', official: 'Everyday Checking', institution: 'Demo Bank', kind: 'checking', subtype: 'checking', mask: '1234', balance: 4210.55, current: 4210.55 },
+    { id: 'd-sav', name: 'Rainy Day Savings', official: 'Rainy Day Savings', institution: 'Demo Bank', kind: 'savings', subtype: 'savings', mask: '5678', balance: 6200, current: 6200 },
+    { id: 'd-cc', name: 'Rewards Card', official: 'Rewards Card', institution: 'Demo Bank', kind: 'credit', subtype: 'credit card', mask: '9012', balance: 286.4, current: 286.4, limit: 5000 },
+  ];
+  S.fixedExpenses = [{ id: uid(), name: 'Rent', amount: 950, matchKeyword: 'RENT' }, { id: uid(), name: 'Phone', amount: 55, matchKeyword: 'PHONE' }, { id: uid(), name: 'Insurance', amount: 120, matchKeyword: 'INSURANCE' }];
+  S.pots.find(p => p.id === 'savings').target = 8000;
+  const rows = [
+    [0, 9, 40, 'ZELLE FROM SAMPLE PERSON', 20, 'd-chk'], [1, 8, 12, 'QUIKTRIP 8071 ANYTOWN', -42.18, 'd-cc'], [2, 15, 42, 'SAMPLE CAMERA SHOP', -189.99, 'd-cc'],
+    [2, 12, 31, 'CHICK-FIL-A #01234', -11.47, 'd-cc'], [3, 9, 5, 'ADOBE *CREATIVE CLOUD', -59.99, 'd-cc'], [3, 9, 0, 'SPOTIFY USA', -11.99, 'd-cc'],
+    [4, 18, 20, 'KROGER #1488 ANYTOWN', -87.32, 'd-chk'], [5, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [6, 13, 55, 'SQ *CORNER COFFEE CO', -6.75, 'd-cc'],
+    [7, 17, 30, 'SHELL OIL 57444', -38.5, 'd-cc'], [8, 19, 45, 'NETFLIX.COM', -15.49, 'd-cc'], [9, 10, 2, 'ACH DEPOSIT FREELANCE CLIENT LLC', 600, 'd-chk'],
+    [10, 14, 12, 'AMZN MKTP US*2K4XY91', -23.18, 'd-cc'], [11, 12, 40, 'TST* LOCAL TACO SHOP', -14.2, 'd-cc'], [12, 8, 0, 'ANYTOWN POWER CO', -96.12, 'd-chk'],
+    [13, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [14, 16, 20, 'CVS/PHARMACY #4411', -18.9, 'd-cc'], [15, 20, 5, 'TARGET 00012345', -64.31, 'd-cc'],
+    [16, 12, 15, 'PUBLIX #0456', -72.88, 'd-chk'], [18, 9, 30, 'STARBUCKS STORE 1182', -5.85, 'd-cc'], [19, 18, 10, 'KROGER #1488 ANYTOWN', -101.4, 'd-chk'],
+    [20, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [22, 21, 0, 'REGAL CINEMAS', -28, 'd-cc'], [24, 13, 0, 'SHELL OIL 57444', -41.25, 'd-cc'],
+  ];
+  ingest(rows.map((r, i) => ({ id: 'demo-' + i, accountID: r[5], rawName: r[3], amount: r[4], date: day(r[0], r[1], r[2]) })));
+  logEntry('spending', 1800, 'Demo starting balance', 'budget');
+  logEntry('savings', 2400, 'Demo starting balance', 'budget');
+  const open = new Set(['demo-0', 'demo-1', 'demo-3']);   // leave a few for Review so there is something to sort
+  for (const t of S.transactions) if (t.amount < 0 && !t.isIgnored && !open.has(t.id)) assign(t.id, 'spending');
+  save();
+}
+
 /* ---------- sync ---------- */
 
 let syncError = null;
@@ -410,6 +447,7 @@ function fixedMatch(rawName) {
   return S.fixedExpenses.find(e => e.matchKeyword && up.includes(String(e.matchKeyword).toUpperCase()));
 }
 
+const accLabel = id => { const a = S.accounts.find(x => x.id === id); return a ? (a.institution ? a.institution + ' · ' : '') + a.name : ''; };
 function ingest(raws, opts) {
   opts = opts || {};
   const known = new Set(S.transactions.map(t => t.id));
@@ -419,7 +457,7 @@ function ingest(raws, opts) {
     const tx = {
       id: r.id, accountID: r.accountID, rawName: r.rawName, date: r.date, amount: r.amount,
       simpleName: s.phrase, confidence: s.confidence, category: s.category, why: s.why, userConfirmed: false,
-      merchant: r.merchant || '', pfc: r.pfc || null,
+      merchant: r.merchant || '', pfc: r.pfc || null, acctLabel: accLabel(r.accountID),
       pot: null, isIgnored: false, ignoredWhy: null, incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
     };
     if (r.amount < 0) {
@@ -455,7 +493,7 @@ const needsReview = t => isExpense(t) && !t.pot && !t.isIgnored;
 const isIncomeCounted = t => !!(t.incomeSourceID || t.extraIncomeLabel);
 const pending = () => S.transactions.filter(needsReview);
 const recentlyReviewed = () => S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored)).slice(0, 6);
-const accountName = id => id === 'manual' ? 'Added by hand' : ((S.accounts.find(a => a.id === id) || {}).name || 'Earlier link (account removed)');
+const accountName = id => id === 'manual' ? 'Added by hand' : ((S.accounts.find(a => a.id === id) || {}).name || 'Older account');
 const accountById = id => S.accounts.find(a => a.id === id);
 /* Savings accounts send their purchases/fees to the Savings pot by default; everything else to your default pot. */
 function accountDefaultPot(accountID) {
@@ -554,6 +592,11 @@ function healOrphans() {
     if (pot && !near.pot && !near.isIgnored) assign(near.id, pot);
     else if (ign && !near.pot && !near.isIgnored) ignoreTx(near.id, why);
     fixed++;
+  }
+  // anything still unmatched that's older than your start date is history, not something to sort
+  const from = S.settings.countFrom ? new Date(S.settings.countFrom + 'T00:00:00') : null;
+  for (const o of S.transactions) {
+    if (o.accountID !== 'manual' && !have.has(o.accountID) && !o.pot && !o.isIgnored && o.amount < 0 && from && new Date(o.date) < from) { o.isIgnored = true; o.ignoredWhy = 'Before start date'; fixed++; }
   }
   if (fixed) save();
   return fixed;
@@ -1064,8 +1107,8 @@ async function decodeBackup(text) {
 /* The server address and passphrase live in their own storage key, so they are never in a backup or backup code. */
 
 const LINK_KEY = 'pocketledger.link';
-function getLink() { try { return JSON.parse(localStorage.getItem(LINK_KEY)) || {}; } catch (e) { return {}; } }
-function setLink(obj) { try { localStorage.setItem(LINK_KEY, JSON.stringify(obj)); } catch (e) { /* ignore */ } }
+function getLink() { if (DEMO) return {}; try { return JSON.parse(localStorage.getItem(LINK_KEY)) || {}; } catch (e) { return {}; } }
+function setLink(obj) { if (DEMO) return; try { localStorage.setItem(LINK_KEY, JSON.stringify(obj)); } catch (e) { /* ignore */ } }
 const linkConfigured = () => { const l = getLink(); return !!(l.url && l.passphrase); };
 
 async function linkApi(path, body) {
@@ -1091,6 +1134,24 @@ async function linkApi(path, body) {
   try { data = await res.json(); } catch (e) { /* not json */ }
   if (!res.ok) throw new Error((data && data.error) || 'The server answered ' + res.status);
   return data;
+}
+
+/* Edit a transaction that was added by hand. Returns false if it isn't one or the fields are invalid. */
+function updateManualTx(id, f) {
+  const t = txById(id);
+  if (!t || !String(t.id).startsWith('man-')) return false;
+  const amount = round2(Math.abs(f.amount)), name = String(f.name || '').trim();
+  if (!(amount > 0) || !name) return false;
+  removeLogs(e => e.txId === id);
+  const signed = f.kind === 'deposit' ? amount : -amount;
+  const s = simplify(name, signed, S.learned);
+  const dt = f.date ? new Date(f.date + 'T12:00:00') : new Date(t.date);
+  Object.assign(t, { rawName: name, amount: signed, date: (isNaN(dt) ? new Date(t.date) : dt).toISOString(), simpleName: s.phrase, confidence: s.confidence, category: s.category, pot: null, isIgnored: false });
+  if (signed > 0) { t.incomeSourceID = null; t.extraIncomeLabel = null; t.extraIncomePot = null; }
+  S.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (signed < 0 && f.potId && potById(f.potId)) assign(id, f.potId);
+  save();
+  return true;
 }
 
 function removeTx(id) {
@@ -1168,3 +1229,13 @@ function eraseEverything() {
   S = defaultState();
   save();
 }
+
+if (DEMO && !S.demoSeeded) seedDemo();   // after everything above is defined
+
+/* On every start: remember each purchase's account name (so it survives an account being removed), and tidy leftovers. */
+(function boot() {
+  let ch = false;
+  for (const t of S.transactions) if (!t.acctLabel && t.accountID !== 'manual') { const l = accLabel(t.accountID); if (l) { t.acctLabel = l; ch = true; } }
+  if (healOrphans()) ch = true;
+  if (ch) save();
+})();

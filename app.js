@@ -4,8 +4,9 @@ const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
+const TAB_KEYS = ['review', 'home', 'activity', 'income', 'budget', 'plan'];
 const ui = {
-  tab: 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
+  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', stack: false, stackIdx: 0, linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -268,12 +269,13 @@ function activityView() {
     return `<button class="chip" data-action="filter" data-cat="${key || ''}"
       style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
-  return `<h1>Activity</h1>
-  ${searchBox('search', ui.search, 'search', 'Search activity')}
+  const open = ui.findOpen || ui.search || ui.filter;
+  return `<div class="row"><h1>Activity</h1><button class="link" data-action="toggleFind" aria-label="Search and filter">${open ? '✕' : '🔍'}</button></div>
+  ${open ? `${searchBox('search', ui.search, 'search', 'Search')}
   <div class="chips">
     ${chip(null, 'All', '#A3B89C', '')}
     ${Object.entries(CATS).map(([k, c]) => chip(k, c.title, c.color, c.icon)).join('')}
-  </div>
+  </div>` : ''}
   ${ui.afilter ? `<div class="row" style="margin-bottom:8px"><span class="muted small">Showing only ${esc(accountTitle(ui.afilter))}</span><button class="link small" data-action="clearAfilter">show all ✕</button></div>` : ''}
   <div id="actList">${activityListHTML()}</div>`;
 }
@@ -297,7 +299,9 @@ const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savi
 const accountTitle = id => {
   if (id === 'manual') return 'Added by hand';
   const a = accountById(id);
-  return a ? (a.institution ? a.institution + ' · ' : '') + a.name : 'Earlier link (account removed)';
+  if (a) return (a.institution ? a.institution + ' · ' : '') + a.name;
+  const t = S.transactions.find(x => x.accountID === id && x.acctLabel);
+  return t ? t.acctLabel : 'Older account';
 };
 
 function assignButtons(t) {
@@ -309,7 +313,6 @@ function assignButtons(t) {
 function reviewItem(t) {
   return `<div class="rv">
     ${txRow(t)}
-    <div class="muted small" style="margin:2px 0 6px">Deduct this from…</div>
     <div class="btn-row">${assignButtons(t)}</div>
     <button class="link small" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>
   </div>`;
@@ -348,14 +351,14 @@ function reviewChips() {
 
 function reviewView() {
   return `${spendingBar()}
-  <div class="row"><h1>Review</h1><button class="btn" data-action="addTx">＋ Purchase</button></div>
+  <div class="row"><h1>Review</h1><span><button class="link" data-action="toggleFind" aria-label="Search">${ui.findOpen || ui.rsearch ? '✕' : '🔍'}</button> <button class="btn" data-action="addTx">＋ Purchase</button></span></div>
   ${backupBanner()}
   ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
     <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
     <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
-  ${pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} as already sorted ›</button>` : ''}
+  ${pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} sorted ›</button>` : ''}
   ${reviewChips()}
-  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search purchases')}
+  ${ui.findOpen || ui.rsearch ? searchBox('rsearch', ui.rsearch, 'rsearch', 'Search') : ''}
   <div id="rvList">${reviewListHTML()}</div>`;
 }
 
@@ -741,8 +744,8 @@ function renderWhenIdle(tries) {
 
 function topbar() {
   const nm = (S.settings.name || '').trim();
-  const handle = (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@pocketledger';
-  return `<div class="topbar"><span class="prompt">${esc(handle)}${syncLabel() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
+  const handle = DEMO ? 'demo@pocketledger' : (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@pocketledger';
+  return `<div class="topbar"><span class="prompt">${esc(handle)}${DEMO ? '<span class="demo-tag">DEMO</span>' : ''}${syncLabel() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
     <button class="profile" data-action="openSettings" aria-label="Profile and settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}<span>settings</span></button></div>`;
 }
 
@@ -755,68 +758,72 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
+const APP_VERSION = '2026-11-04 c';
+
+const LINKED_ROW = (i, mine) => {
+  const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
+  return `<div class="row" style="padding:4px 0"><span>${esc(i.institution)}<div class="muted small">${mine.length ? mine.length + ' account' + (mine.length === 1 ? '' : 's') + ': ' + mine.map(a => esc(a.name.replace(/ ··\d+$/, ''))).join(', ') : 'no accounts yet. Tap choose accounts.'}</div>${prob ? `<div class="err">${esc(prob)}</div>` : ''}</span><span><button class="link small" data-action="chooseAccts" data-id="${esc(i.item_id)}">choose accounts</button> <button class="link small" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></span></div>`;
+};
+
 function settingsView() {
   const st = S.settings, link = getLink();
   const [statusText, statusCls] = linkStatus();
   const standalone = window.navigator.standalone === true;
-  return `<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>
-  <h1>Settings</h1>
-
-  <div class="card"><h2>Profile</h2>
-    <div class="field"><span>Your name</span><input class="wide" placeholder="optional" value="${esc(st.name)}" data-change="profileName" autocomplete="off" style="text-align:right"></div>
-    <div class="muted small">Shown only in the top bar on this phone.</div>
-  </div>
-
-  <div class="card"><h2>Appearance</h2>
-    <div class="muted small" style="margin-bottom:6px">Theme</div>
-    ${seg(THEMES, st.theme, 'setTheme')}
-    <div class="muted small" style="margin:12px 0 6px">Accent color</div>
-    <div class="swatches">${ACCENTS.map(([k, c]) => `<button class="swatch ${st.accent === k ? 'on' : ''}" data-action="setAccent" data-pot="${k}" style="background:${c}" aria-label="${k}"></button>`).join('')}</div>
-    <div class="muted small" style="margin:12px 0 6px">Text size</div>
-    ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
-    <div class="muted small" style="margin:12px 0 6px">Animations</div>
-    ${seg([['auto', 'on'], ['off', 'off']], st.motion, 'setMotion')}
-  </div>
-
-  <div class="card"><h2>Preferences</h2>
-    <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
-    <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
-  </div>
-
+  const demoCard = DEMO
+    ? `<div class="card demo-card"><h2>Demo mode is on</h2><div class="muted small">Everything here is made up. Your real data is safe and hidden.</div>
+        <div class="btn-row"><button class="btn primary" data-action="demoOff">exit demo</button><button class="btn" data-action="demoReset">reset demo</button></div></div>`
+    : `<div class="card"><h2>Demo mode</h2><div class="muted small">Show the app with made-up numbers.</div>
+        <div class="btn-row"><button class="btn" data-action="demoOn">start demo</button></div></div>`;
+  const bank = DEMO ? '' : `
   <div class="card"><h2>Bank accounts</h2>
     <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
     ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : ''}
-    <div class="day">Your link server</div>
-    <div class="stack">
-      <input id="linkUrl" placeholder="https://pocketledger-link.your-name.workers.dev" value="${esc(link.url || '')}" data-change="linkUrl" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
+    <div class="stack" style="margin-top:8px">
+      <input id="linkUrl" placeholder="Link server address" value="${esc(link.url || '')}" data-change="linkUrl" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
       <input id="linkPass" type="password" placeholder="passphrase" value="${esc(link.passphrase || '')}" data-change="linkPass" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
     </div>
-    <div class="muted small" style="margin-top:6px">Stored only on this phone, and left out of backups.</div>
     <div class="btn-row">
       <button class="btn" data-action="checkLink">check connection</button>
       <button class="btn primary" data-action="linkBank">link a bank</button>
       ${S.settings.linked ? '<button class="btn" data-action="syncNow">sync now</button>' : ''}
     </div>
-    ${ui.linkItems && ui.linkItems.length ? `<div class="day">Linked</div>${ui.linkItems.map(i => { const mine = S.accounts.filter(a => a.itemId === i.item_id || (!a.itemId && a.institution === i.institution)); return `<div class="row" style="padding:4px 0"><span>${esc(i.institution)}<div class="muted small">${mine.length ? mine.length + ' account' + (mine.length === 1 ? '' : 's') + ': ' + mine.map(a => esc(a.name.replace(/ ··\d+$/, ''))).join(', ') : 'no accounts received yet. Tap choose accounts.'}</div>${(bankProblems.find(p => p.startsWith(i.institution + ':')) || '') ? `<div class="err">${esc(bankProblems.find(p => p.startsWith(i.institution + ':')))}</div>` : ''}</span><span><button class="link small" data-action="chooseAccts" data-id="${esc(i.item_id)}">choose accounts</button> <button class="link small" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></span></div>`; }).join('')}` : ''}
+    ${ui.linkItems && ui.linkItems.length ? `<div class="day">Linked</div>${ui.linkItems.map(i => { const mine = S.accounts.filter(a => a.itemId === i.item_id || (!a.itemId && a.institution === i.institution)); return LINKED_ROW(i, mine); }).join('')}` : ''}
     <div class="field" style="margin-top:8px"><span>Count purchases from</span><input type="date" value="${esc(st.countFrom || '')}" data-change="countFrom" style="width:160px"></div>
-    <div class="muted small">Older purchases are kept in Activity as history and never sent to Review, so your pots start clean.</div>
-    <div class="day">Good to know</div>
-    <div class="muted small info">
-      ▸ Read-only: the app can see balances and purchases. It can't move money.<br>
-      ▸ You sign in to your bank inside Plaid's window. PocketLedger never sees your bank password.<br>
-      ▸ Your Plaid keys and bank access live on your own private server, never in this app or on GitHub.<br>
-      ▸ Plaid's free Trial plan allows up to 10 linked connections. Unlink any time.<br>
-      ▸ Some banks (Chase, for example) send you to their own site to approve. Do the first link in Safari, not the home-screen app${standalone ? ' (you are in the home-screen app now)' : ''}, then come back here and tap check connection.<br>
-      ▸ Setup steps are in <b>server/README.md</b> in your repository.
-    </div>
+    <details class="info"><summary>Good to know</summary>
+      <div class="muted small">
+      ▸ Read-only: it can see balances and purchases, never move money.<br>
+      ▸ Your bank password goes to Plaid's window, never to this app.<br>
+      ▸ Keys live on your private server, not in the app or on GitHub.<br>
+      ▸ Some banks (Chase) need the first link done in Safari${standalone ? ' (you are in the home-screen app now)' : ''}.<br>
+      ▸ Setup steps: <b>server/README.md</b>.
+      </div></details>
+  </div>
+  ${backupCard()}`;
+  return `<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>
+  <h1>Settings</h1>
+  ${DEMO ? '' : ''}
+  <div class="card"><h2>You</h2>
+    <div class="field"><span>Name</span><input class="wide" placeholder="optional" value="${esc(st.name)}" data-change="profileName" autocomplete="off" style="text-align:right"></div>
+    <div class="field"><span>Open on</span>${selBtn('startTab', '')}</div>
+    <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
+    <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
   </div>
 
-  ${backupCard()}
+  <div class="card"><h2>Look</h2>
+    ${seg(THEMES, st.theme, 'setTheme')}
+    <div class="swatches" style="margin-top:12px">${ACCENTS.map(([k, c]) => `<button class="swatch ${st.accent === k ? 'on' : ''}" data-action="setAccent" data-pot="${k}" style="background:${c}" aria-label="${k}"></button>`).join('')}</div>
+    <div class="muted small" style="margin:12px 0 6px">Text size</div>
+    ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
+    <div class="muted small" style="margin:12px 0 6px">Animations</div>
+    ${seg([['auto', 'on'], ['off', 'off']], st.motion, 'setMotion')}
+  </div>
+  ${bank}
+  ${demoCard}
 
   <div class="card"><h2>This phone</h2>
-    <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button><button class="btn" data-action="clearTx">clear transactions</button></div>
-    <div class="btn-row"><button class="btn danger" data-action="eraseAll">erase all data</button></div>
-    <div class="muted small" style="margin-top:8px">Clear transactions empties your purchases, pot history and budgets but keeps your settings, income sources, expenses, to-dos and notes. (If a bank is linked, unlink it first, or it won't send those purchases again.) Erase removes everything stored on this phone, not your bank or server. Back up first.</div>
+    <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button>${DEMO ? '' : '<button class="btn" data-action="clearTx">clear transactions</button>'}</div>
+    ${DEMO ? '' : '<div class="btn-row"><button class="btn danger" data-action="eraseAll">erase all data</button></div>'}
+    <div class="muted small" style="margin-top:8px">Version ${APP_VERSION}</div>
   </div>`;
 }
 
@@ -872,6 +879,7 @@ function txModal(id) {
       <div class="field"><span class="muted">Bank description</span><div class="mono" style="max-width:62%">${esc(t.rawName)}</div></div>
       <div class="field"><span class="muted">Date &amp; time</span><div style="text-align:right">${fmtFull(t.date)}</div></div>
       <div class="field"><span class="muted">Account</span><div>${esc(accountName(t.accountID))}</div></div>
+      ${String(t.id).startsWith('man-') ? `<button class="btn full" style="margin-top:8px" data-action="editTx" data-id="${esc(t.id)}">Edit</button>` : ''}
     </div>
     <div class="card"><h2>How it was read</h2>
       <div class="field"><span class="muted">Simplified as</span><div style="text-align:right">${esc(t.simpleName)}</div></div>
@@ -890,14 +898,17 @@ function txModal(id) {
 function addTxModal() {
   const m = ui.modal;
   const buy = m.kind === 'purchase';
-  return sheet(buy ? 'Add a purchase' : 'Add a deposit', `
+  const ed = !!m.editId;
+  return sheet(ed ? 'Edit entry' : buy ? 'Add a purchase' : 'Add a deposit', `
     <div class="card stack">
       ${seg([['purchase', 'Purchase'], ['deposit', 'Deposit']], m.kind, 'txKind')}
       <div class="field"><span>Amount</span><input type="number" inputmode="decimal" step="any" placeholder="0.00" value="${m.amount || ''}" data-change="txAmount" data-live="1" style="width:130px"></div>
       <input placeholder="${buy ? 'Where? (e.g. Kroger, gas, coffee)' : 'From? (e.g. payroll, tips)'}" value="${esc(m.name)}" data-change="txName" data-live="1">
       ${buy ? `<div class="muted small">Deduct from…</div>${seg([...potOptions(), ['none', 'Decide later']], m.pot, 'txPot')}` : '<div class="muted small">Deposits whose text matches an income source are counted automatically.</div>'}
+      ${ed ? `<div class="field"><span>Date</span><input type="date" value="${esc(m.date || '')}" data-change="txDate" data-live="1" style="width:150px"></div>` : ''}
     </div>
-    <button class="btn primary full" data-action="saveTx">Add ${buy ? 'purchase' : 'deposit'}</button>`);
+    <button class="btn primary full" data-action="saveTx">${ed ? 'Save' : 'Add ' + (buy ? 'purchase' : 'deposit')}</button>
+    ${ed ? `<button class="btn danger full" data-action="deleteTx" data-id="${esc(m.editId)}">Delete entry</button>` : ''}`);
 }
 
 function extraModal() {
@@ -990,6 +1001,7 @@ function pickDef(field, id) {
     case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
     case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
     case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
+    case 'startTab': return { title: 'Open on', options: TABS.map(t => [t[0], t[2]]), current: S.settings.startTab || 'review' };
     case 'defaultPot': return { title: 'New purchases come out of', options: pots(), current: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' };
     case 'backupDays': return { title: 'Backup reminder', options: [['7', 'Every 7 days'], ['14', 'Every 14 days'], ['30', 'Every 30 days'], ['0', 'Off']], current: String(S.settings.backupDays) };
     case 'bulkTarget': {
@@ -1023,6 +1035,7 @@ function dialogHTML() {
   </div></div>`;
 }
 
+const localDay = iso => { const d = new Date(iso); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const askConfirm = (message, ok, onOk, danger) => { ui.dialog = { message, ok, onOk, danger }; };
 const askAlert = (message, title) => { ui.dialog = { message, title, cancel: false, ok: 'ok' }; };
 
@@ -1090,6 +1103,46 @@ const ghostRoot = document.createElement('div');
 ghostRoot.id = 'ghost-root';
 document.body.appendChild(ghostRoot);
 
+/* Isometric "file view": the screens lie in a tilted stack; swipe or tap to shuffle, tap the front one to open it. */
+const stackRoot = document.createElement('div');
+stackRoot.id = 'stack';
+document.body.appendChild(stackRoot);
+let stackShown = false;
+function stackHTML() {
+  const n = TABS.length, pend = pending().length;
+  const cards = TABS.map(([k, icon, label], i) => `<div class="scard" data-i="${i}" data-action="stackTap"><span class="si">${emo(icon, SAGE)}</span><b>${label}</b>${k === 'review' && pend ? `<span class="pip">${pend}</span>` : ''}</div>`).join('');
+  return `<div class="stack-bg" data-action="closeStack"></div>
+    <div class="stack-scene"><div class="stack-board" style="--n:${n}">${cards}</div></div>
+    <button class="stack-x" data-action="closeStack" aria-label="Close">✕</button>
+    <div class="stack-hint">swipe or tap · tap front to open</div>`;
+}
+function paintStack() {
+  const n = TABS.length;
+  stackRoot.querySelectorAll('.scard').forEach(el => {
+    const i = +el.dataset.i, p = (i - ui.stackIdx + n) % n;
+    el.style.setProperty('--p', p);
+    el.classList.toggle('front', p === 0);
+  });
+}
+function paintStackLayer() {
+  if (ui.stack !== stackShown) {
+    stackShown = ui.stack;
+    if (ui.stack) { stackRoot.innerHTML = stackHTML(); stackRoot.classList.add('open'); requestAnimationFrame(() => stackRoot.classList.add('in')); }
+    else { stackRoot.classList.remove('in'); setTimeout(() => { if (!ui.stack) { stackRoot.classList.remove('open'); stackRoot.innerHTML = ''; } }, 320); }
+  }
+  if (ui.stack) paintStack();
+}
+(function stackSwipe() {
+  let y0 = null;
+  stackRoot.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; }, { passive: true });
+  stackRoot.addEventListener('touchend', e => {
+    if (y0 === null) return;
+    const dy = e.changedTouches[0].clientY - y0; y0 = null;
+    if (Math.abs(dy) > 28) { ui.stackIdx = (ui.stackIdx + (dy < 0 ? 1 : TABS.length - 1)) % TABS.length; ui.stackSwiped = Date.now(); paintStack(); }
+  }, { passive: true });
+  stackRoot.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > 8 && Date.now() - (ui.stackWheel || 0) > 180) { ui.stackWheel = Date.now(); ui.stackIdx = (ui.stackIdx + (e.deltaY > 0 ? 1 : TABS.length - 1)) % TABS.length; paintStack(); } }, { passive: true });
+})();
+
 let lastTab = null;
 const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k === 'ihist' ? 'income' : k)), 0);
 
@@ -1110,8 +1163,9 @@ function render() {
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
   const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'income' : ui.tab;
-  tabbar.innerHTML = TABS.map(([k, icon, label]) =>
-    `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
+  const cur = TABS[tabIndex(active)];
+  tabbar.innerHTML = `<button class="${tabChanged ? 'pop' : ''}" data-action="openStack" aria-label="Switch screen"><span class="i">${emo(cur[1], SAGE)}</span><span class="lbl">${cur[2]}</span><span class="grid">▤</span>${n && active !== 'review' ? `<span class="pip">${n}</span>` : ''}</button>`;
+  paintStackLayer();
 
   // pop-ups: slide/pop in when they appear, slide/pop out when they go
   const now = [ui.modal && 'sheet', ui.picker && 'picker', ui.dialog && 'dialog'].filter(Boolean);
@@ -1366,12 +1420,26 @@ function openPotEdit(id) {
 }
 
 const ACTIONS = {
+  openStack: () => { ui.stack = true; ui.stackIdx = tabIndex(ui.tab); },
+  closeStack: () => { ui.stack = false; },
+  stackTap: d => {
+    if (Date.now() - (ui.stackSwiped || 0) < 250) return;
+    const n = TABS.length, i = +d.i;
+    if (i === ui.stackIdx) { ui.stack = false; ui.tab = TABS[i][0]; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; }
+    else { ui.stackIdx = i; }
+  },
+  demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { setDemo(true); location.reload(); }),
+  demoOff: () => { setDemo(false); location.reload(); },
+  demoReset: () => askConfirm('Reset the demo to its starting made-up data?', 'reset', () => { try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ } location.reload(); }, true),
   tab: d => { ui.tab = d.tab; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; },
   open: d => { ui.modal = { type: 'tx', id: d.id, back: ui.modal && ui.modal.type === 'deductible' ? { type: 'deductible', year: ui.modal.year } : null }; },
   close: () => closeModal(),
   closeSources: () => closeModal(),
   assign: d => assign(d.id, d.pot === 'none' ? null : d.pot),
   ignore: d => ignoreTx(d.id),
+  editTx: d => { const t = txById(d.id); if (!t) return; const e = S.potLog.find(x => x.kind === 'tx' && x.txId === t.id);
+    ui.modal = { type: 'addTx', editId: t.id, kind: t.amount > 0 ? 'deposit' : 'purchase', amount: Math.abs(t.amount), name: t.rawName, pot: (e && e.potId) || 'none', date: localDay(t.date), back: { type: 'tx', id: t.id } }; },
+  deleteTx: d => askConfirm('Delete this entry?', 'delete', () => { removeTx(d.id); save(); ui.modal = null; render(); }, true),
   filter: d => { ui.filter = (ui.filter === d.cat || !d.cat) ? null : d.cat; },
   refresh: () => { doSync(); return false; },
 
@@ -1431,6 +1499,7 @@ const ACTIONS = {
   toggleAcct: d => { ui.openAcct[d.id] = !ui.openAcct[d.id]; },
   acctActivity: d => { ui.afilter = d.id; ui.tab = 'activity'; ui.resetScroll = true; ui.filter = null; ui.search = ''; },
   clearAfilter: () => { ui.afilter = null; },
+  toggleFind: () => { if (ui.findOpen || ui.search || ui.filter) { ui.findOpen = false; ui.search = ''; ui.filter = null; ui.rsearch = ''; } else ui.findOpen = true; },
   syncNow: () => { ui.linkMsg = 'Syncing…'; doSync().then(() => { ui.linkMsg = syncError ? syncError : 'Synced. ' + syncInfo; render(); }); },
   unlinkItem: d => askConfirm('Unlink this bank? Your history in the app stays; no new purchases will arrive.', 'unlink', async () => {
     try {
@@ -1496,6 +1565,10 @@ const ACTIONS = {
   txPot: d => { ui.modal.pot = d.pot; },
   saveTx: () => {
     const m = ui.modal;
+    if (m.editId) {
+      if (!updateManualTx(m.editId, { kind: m.kind, amount: m.amount, name: m.name, potId: m.kind === 'purchase' && m.pot !== 'none' ? m.pot : null, date: m.date })) { askAlert('Enter an amount above $0 and a name.'); return; }
+      ui.modal = { type: 'tx', id: m.editId }; return;
+    }
     if (!addManualTx(m.kind, m.amount, m.name, m.kind === 'purchase' && m.pot !== 'none' ? m.pot : null)) { askAlert('Enter an amount above $0 and a name.'); return; }
     ui.modal = null;
   },
@@ -1592,6 +1665,7 @@ function handleField(el, final) {
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
     case 'bulkTarget': ui.bulkTarget = v; return;
+    case 'startTab': S.settings.startTab = v; save(); return;
     case 'defaultPot': S.settings.defaultPot = v; save(); return;
     case 'backupDays': S.settings.backupDays = +v; save(); return;
     case 'profileName': S.settings.name = v.trim().slice(0, 30); save(); if (final) render(); return;
@@ -1608,6 +1682,7 @@ function handleField(el, final) {
     case 'extraLabel': m.label = v; return;
     case 'txAmount': m.amount = num(v); return;
     case 'txName': m.name = v; return;
+    case 'txDate': m.date = v; return;
     // pots
     case 'potName': m.fields.name = v; return;
     case 'potIcon': m.fields.icon = v; return;
@@ -1659,9 +1734,9 @@ function syncHistory() {
 try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''); } catch (e) { /* ignore */ }
 window.addEventListener('popstate', e => {
   const st = e.state;
-  if (!st || st.pl !== 'app' || ui.modal || ui.picker || ui.dialog) {   // the very first entry, or a pop-up is open: stay in the app
-    const hadPopup = !!(ui.modal || ui.picker || ui.dialog);
-    if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal();
+  if (!st || st.pl !== 'app' || ui.modal || ui.picker || ui.dialog || ui.stack) {   // the very first entry, or a pop-up is open: stay in the app
+    const hadPopup = !!(ui.modal || ui.picker || ui.dialog || ui.stack);
+    if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal(); else if (ui.stack) ui.stack = false;
     if (hadPopup) render();
     try { history.pushState(navState(), ''); } catch (err) { /* ignore */ }
     return;
@@ -1675,6 +1750,7 @@ window.addEventListener('popstate', e => {
 function applySettings() {
   const st = S.settings, root = document.documentElement;
   const theme = st.theme === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'paper' : 'charcoal') : st.theme;
+  if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
   root.dataset.theme = theme; root.dataset.accent = st.accent; root.dataset.motion = st.motion;
   root.style.setProperty('--ts', st.textSize);
   const cs = getComputedStyle(root);
