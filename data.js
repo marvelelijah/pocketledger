@@ -784,7 +784,7 @@ async function syncLinked() {
       older += (res.added || []).filter(t => new Date(t.date) < cutoff).length;
     } while (res.more && guard < 6);
     S.lastSync = new Date().toISOString();
-    syncError = null;
+    syncError = (res.problems && res.problems.length) ? res.problems.join(' ') : null;
     syncInfo = accts + ' account' + (accts === 1 ? '' : 's') + ', ' + got + ' new purchase' + (got === 1 ? '' : 's') + ' from the bank'
       + (older ? ' (' + older + ' older than ' + S.settings.countFrom + ', kept in Activity as history only)' : '')
       + (got === 0 ? '. Banks often take a few minutes to send history after linking, so tap sync now again shortly.' : '.');
