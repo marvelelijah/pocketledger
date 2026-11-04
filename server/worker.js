@@ -12,6 +12,9 @@
 
 const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 
+/* Shown in the app (Settings > check connection) so you can tell which version of this file is running. */
+const WORKER_VERSION = '2026-11-04 a';
+
 export default {
   async fetch(req, env) {
     // Tolerate a trailing slash or a path in the setting (https://site.github.io/ or .../pocketledger/)
@@ -34,7 +37,7 @@ export default {
 
       if (route === 'GET /status') {
         const items = await getItems(env);
-        return json({ items: items.map(i => ({ item_id: i.item_id, institution: i.institution })) }, 200, cors);
+        return json({ version: WORKER_VERSION, items: items.map(i => ({ item_id: i.item_id, institution: i.institution })) }, 200, cors);
       }
       if (route === 'POST /link-token') return json(await linkToken(env, body), 200, cors);
       if (route === 'POST /exchange') return json(await exchange(env, body), 200, cors);

@@ -1282,11 +1282,12 @@ async function checkLink() {
   try {
     const st = await linkApi('/status');
     ui.linkItems = st.items || [];
+    ui.serverVersion = st.version || '';
     if (!ui.linkItems.length) {
       S.settings.linked = false; save();
       ui.linkMsg = 'Connected to your server. No bank is linked yet, so tap link a bank.';
     } else {
-      ui.linkMsg = 'Connected. ' + ui.linkItems.length + (ui.linkItems.length === 1 ? ' bank' : ' banks') + ' linked.';
+      ui.linkMsg = 'Connected. ' + ui.linkItems.length + (ui.linkItems.length === 1 ? ' bank' : ' banks') + ' linked.' + (ui.serverVersion ? ' Server version ' + ui.serverVersion + '.' : ' Server version unknown (older file).');
       if (S.useSampleData) {
         askConfirm('Your server has a linked bank. Clear the sample data and bring in your real accounts?', 'clear & sync', async () => {
           startFresh(); S.settings.linked = true; save();
