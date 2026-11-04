@@ -125,6 +125,8 @@ const mapTx = t => ({
   amount: -t.amount,
   pending: !!t.pending,
   pendingId: t.pending_transaction_id ? 'plaid-' + t.pending_transaction_id : null,
+  merchant: t.merchant_name || '',
+  pfc: t.personal_finance_category ? { p: t.personal_finance_category.primary, d: t.personal_finance_category.detailed, c: t.personal_finance_category.confidence_level } : null,
 });
 
 const kindOf = a => a.type === 'credit' ? 'credit' : a.type === 'loan' ? 'loan' : a.type === 'investment' ? 'investment'
@@ -160,7 +162,7 @@ async function sync(env) {
       try {
         do {
           const r = await plaid(env, '/transactions/sync', {
-            access_token: item.access_token, cursor, count: 500, options: { include_original_description: true },
+            access_token: item.access_token, cursor, count: 500, options: { include_original_description: true, include_personal_finance_category: true },
           });
           added.push(...r.added.map(mapTx)); modified.push(...r.modified.map(mapTx)); removed.push(...r.removed.map(x => 'plaid-' + x.transaction_id));
           if (r.accounts && r.accounts.length) accounts = r.accounts;

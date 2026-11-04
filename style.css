@@ -272,3 +272,5 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 .pill { display: inline-block; border: 1px solid var(--line); padding: 1px 7px; font-size: calc(11px * var(--ts, 1)); color: var(--fg-dim); text-transform: lowercase; margin-right: 4px; }
 .pill.on { border-color: var(--sage); color: var(--sage); }
 .link.danger { color: var(--red); }
+.tappable { cursor: pointer; }
+.small-in { font-size: calc(13px * var(--ts, 1)); padding: 6px 10px; margin: -2px 0 8px; }

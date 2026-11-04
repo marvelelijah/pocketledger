@@ -58,7 +58,7 @@ function incomeTag(t) {
 function txRow(t, tag, opts) {
   opts = opts || {};
   const c = CATS[t.category];
-  const label = tag || (t.pot ? potName(t.pot) : (t.isIgnored ? 'Ignored' : ''));
+  const label = tag || (t.pot ? potName(t.pot) : (t.isIgnored ? (t.ignoredWhy || 'Ignored') : ''));
   const check = opts.check === undefined || opts.check === null ? '' : `<div class="check">${opts.check ? '✓' : ''}</div>`;
   return `<div class="tx" data-action="${opts.action || 'open'}" data-id="${esc(t.id)}">
     ${check}
@@ -107,7 +107,7 @@ function homeView() {
   <div class="grid3" style="margin-top:12px">
     <div class="card"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
     <div class="card"><div class="muted small">Spent</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
-    <div class="card"><div class="muted small">Deductible YTD</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
+    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible YTD ›</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
 
   ${FEATURES.creditScore ? creditCard() : ''}
@@ -297,7 +297,7 @@ const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savi
 const accountTitle = id => {
   if (id === 'manual') return 'Added by hand';
   const a = accountById(id);
-  return a ? (a.institution ? a.institution + ' · ' : '') + a.name : 'Unknown account';
+  return a ? (a.institution ? a.institution + ' · ' : '') + a.name : 'Earlier link (account removed)';
 };
 
 function assignButtons(t) {
@@ -353,6 +353,7 @@ function reviewView() {
   ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
     <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
     <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
+  ${pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} as already sorted ›</button>` : ''}
   ${reviewChips()}
   ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search purchases')}
   <div id="rvList">${reviewListHTML()}</div>`;
@@ -604,8 +605,10 @@ function budgetView() {
     ${S.fixedExpenses.map(e => `<div class="field">
       <input class="wide" placeholder="Name" value="${esc(e.name)}" data-change="fixedName" data-id="${e.id}" data-live="1">
       ${numInput(e.amount, `data-change="fixedAmt" data-id="${e.id}" data-live="1"`, 'width:100px')}
-      <button class="link" data-action="fixedDel" data-id="${e.id}" aria-label="Remove">✕</button></div>`).join('')}
-    <button class="link" data-action="fixedAdd">＋ Add expense</button>
+      <button class="link" data-action="fixedDel" data-id="${e.id}" aria-label="Remove">✕</button></div>
+      <input class="small-in" placeholder="bank text that identifies it (optional)" value="${esc(e.matchKeyword || '')}" autocapitalize="characters" autocorrect="off" data-change="fixedKey" data-id="${e.id}" data-live="1">`).join('')}
+    <div class="btn-row" style="margin-top:6px"><button class="btn" data-action="fixedAdd">＋ Add expense</button><button class="btn" data-action="pasteExpenses">Paste a list</button></div>
+    <div class="muted small" style="margin:6px 0">When a bank charge contains an expense's bank text, it's marked "Fixed expense" automatically and skips Review, because the budget already covers it.</div>
     <div class="field"><span>${emo('💰')} Savings %</span>
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
@@ -874,6 +877,7 @@ function txModal(id) {
       <div class="field"><span class="muted">Simplified as</span><div style="text-align:right">${esc(t.simpleName)}</div></div>
       <div class="row"><span class="muted">Confidence</span>${badge(t)}</div>
       <div class="bar">${fill('conf-' + t.id, t.userConfirmed ? 100 : bar)}</div>
+      ${t.why ? `<div class="muted small" style="margin-bottom:6px">${esc(t.why)}.</div>` : ''}
       <div class="muted small">Low confidence usually means an unfamiliar merchant. Changing the category teaches the app for every transaction from this merchant.</div>
     </div>
     <div class="card"><h2>Category</h2>
@@ -1022,6 +1026,46 @@ function dialogHTML() {
 const askConfirm = (message, ok, onOk, danger) => { ui.dialog = { message, ok, onOk, danger }; };
 const askAlert = (message, title) => { ui.dialog = { message, title, cancel: false, ok: 'ok' }; };
 
+function pasteOutHTML() {
+  const r = parseExpenseList((ui.modal && ui.modal.text) || '');
+  return `<div class="card"><h2>What I read</h2>
+      ${r.items.length ? r.items.map(i => `<div class="row small" style="padding:3px 0"><span>${esc(i.name)}</span><b>${usd(i.amount)}</b></div>`).join('') + `<div class="row" style="padding-top:6px;border-top:1px solid var(--line);margin-top:6px"><b>Total</b><b>${usd(r.items.reduce((a, i) => a + i.amount, 0))}</b></div>` : '<div class="muted small">Nothing yet.</div>'}
+      ${r.pct != null ? `<div class="muted small">Savings percentage: ${r.pct}%</div>` : ''}
+    </div>
+    ${r.items.length ? `<div class="btn-row"><button class="btn primary" data-action="pasteReplace">Replace my list</button><button class="btn" data-action="pasteAdd">Add to my list</button></div>` : ''}`;
+}
+
+function pasteExpModal() {
+  return sheet('Paste your monthly expenses', `
+    <div class="card"><div class="muted small" style="margin-bottom:8px">One expense per line, name then amount. A line like <b>Savings 20%</b> sets your savings percentage. Lines called Total, Spending or Current are skipped.</div>
+      <textarea rows="9" placeholder="Rent 450&#10;Car payment 333.72&#10;Savings 20%" data-change="pasteText" data-live="1">${esc(ui.modal.text || '')}</textarea></div>
+    <div id="pasteOut">${pasteOutHTML()}</div>`);
+}
+
+function deductibleModal() {
+  const now = new Date(), year = ui.modal.year || now.getFullYear();
+  const cats = Object.entries(CATS).filter(([, c]) => c.taxDeductible).map(([k]) => k);
+  const all = S.transactions.filter(t => isExpense(t) && cats.includes(t.category));
+  const years = [...new Set(all.map(t => new Date(t.date).getFullYear()).concat(now.getFullYear()))].sort((a, b) => b - a);
+  const list = all.filter(t => new Date(t.date).getFullYear() === year);
+  const total = list.reduce((a, t) => a + Math.abs(t.amount), 0);
+  const byMonth = {};
+  for (const t of list) { const k = new Date(t.date).getMonth(); byMonth[k] = (byMonth[k] || 0) + Math.abs(t.amount); }
+  const mx = Math.max(1, ...Object.values(byMonth));
+  const byName = {};
+  for (const t of list) byName[t.simpleName] = (byName[t.simpleName] || 0) + Math.abs(t.amount);
+  return sheet('Deductible ' + year, `
+    <div class="card"><div class="muted small">Counted in ${year}</div><div class="big" style="color:${CATS.videoCamera.color}">${usd(total)}</div>
+      <div class="muted small">${list.length} purchase${list.length === 1 ? '' : 's'} in ${cats.map(k => CATS[k].title).join(', ')}. Anything you change to another category stops counting, and anything you move into one starts counting. Purchases you marked "not a spend" still count here.</div>
+      ${years.length > 1 ? `<div class="chips" style="margin:8px 0 0">${years.map(y => `<button class="chip ${y === year ? 'on' : ''}" data-action="dedYear" data-id="${y}">${y}</button>`).join('')}</div>` : ''}
+    </div>
+    ${list.length ? `<div class="card"><h2>By month</h2>${Object.keys(byMonth).sort((a, b) => b - a).map(k => `<div style="padding:4px 0"><div class="row"><span class="muted small">${new Date(year, +k, 1).toLocaleString('en-US', { month: 'long' })}</span><b>${usd(byMonth[k])}</b></div><div class="bar">${fill('ded-' + year + '-' + k, byMonth[k] / mx * 100)}</div></div>`).join('')}</div>
+    <div class="card"><h2>By name</h2>${Object.entries(byName).sort((a, b) => b[1] - a[1]).map(([n, v]) => `<div class="row small" style="padding:3px 0"><span>${esc(n)}</span><b>${usd(v)}</b></div>`).join('')}</div>
+    <div class="card"><h2>Every purchase</h2>${list.map(t => txRow(t)).join('')}
+      <div class="muted small" style="margin-top:6px">Tap one to see it or change its category.</div></div>`
+    : `<div class="card"><div class="muted">Nothing counted yet in ${year}. Purchases categorized as ${cats.map(k => CATS[k].title).join(' or ')} show up here.</div></div>`}`);
+}
+
 function modalHTML() {
   const m = ui.modal;
   switch (m.type) {
@@ -1032,6 +1076,8 @@ function modalHTML() {
     case 'potEdit': return potEditModal();
     case 'move': return moveModal();
     case 'note': return noteModal();
+    case 'pasteExp': return pasteExpModal();
+    case 'deductible': return deductibleModal();
   }
   return '';
 }
@@ -1143,7 +1189,7 @@ async function doSync() {
 
 function closeModal() {
   if (ui.modal && ui.modal.type === 'sources') rematchIncomeSources();
-  ui.modal = null;
+  ui.modal = ui.modal && ui.modal.back ? ui.modal.back : null;   // a purchase opened from the Deductible list goes back to it
 }
 
 async function exportData() {
@@ -1320,7 +1366,7 @@ function openPotEdit(id) {
 
 const ACTIONS = {
   tab: d => { ui.tab = d.tab; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; },
-  open: d => { ui.modal = { type: 'tx', id: d.id }; },
+  open: d => { ui.modal = { type: 'tx', id: d.id, back: ui.modal && ui.modal.type === 'deductible' ? { type: 'deductible', year: ui.modal.year } : null }; },
   close: () => closeModal(),
   closeSources: () => closeModal(),
   assign: d => assign(d.id, d.pot === 'none' ? null : d.pot),
@@ -1349,6 +1395,16 @@ const ACTIONS = {
   linkBank: () => {
     if (S.useSampleData) askConfirm('Linking real accounts clears the sample data first. Continue?', 'continue', () => { startFresh(); openPlaid(); });
     else { openPlaid(); return false; }
+  },
+  openDeduct: () => { ui.modal = { type: 'deductible', year: new Date().getFullYear() }; },
+  dedYear: d => { ui.modal.year = +d.id; },
+  pasteExpenses: () => { ui.modal = { type: 'pasteExp', text: '' }; },
+  pasteReplace: () => askConfirm('Replace your list of monthly expenses with these?', 'replace', () => { applyExpenseList(parseExpenseList(ui.modal.text), 'replace'); ui.modal = null; ui.budgetInputs = ui.budgetInputs || {}; }, true),
+  pasteAdd: () => { applyExpenseList(parseExpenseList(ui.modal.text), 'add'); ui.modal = null; },
+  clearReview: () => {
+    const n = pending().length;
+    if (!n) return;
+    askConfirm('Mark all ' + n + ' waiting purchases as already sorted? They stay in Activity but never come out of a pot.', 'mark all', () => { ignoreAllPending(); ui.xref = ui.xref; });
   },
   openHist: () => { ui.tab = 'ihist'; ui.resetScroll = true; ui.xref = null; },
   pickHist: () => { const f = $('histFile'); if (f) f.click(); return false; },
@@ -1526,6 +1582,8 @@ function handleField(el, final) {
     // budget
     case 'earnInput': ui.budgetInputs[d.id] = num(v); patchBudget(); return;
     case 'savePct': S.savingsPercent = Math.min(Math.max(num(v), 0), 100); save(); patchBudget(); return;
+    case 'fixedKey': { const e = find(S.fixedExpenses); if (e) { e.matchKeyword = v.toUpperCase().trim(); save(); } return; }
+    case 'pasteText': ui.modal.text = v; setHTMLIfChanged($('pasteOut'), pasteOutHTML()); return;
     case 'fixedName': { const e = find(S.fixedExpenses); if (e) { e.name = v; save(); } return; }
     case 'fixedAmt': { const e = find(S.fixedExpenses); if (e) { e.amount = num(v); save(); patchBudget(); } return; }
     case 'roundMode': S.roundMode = v; save(); return;

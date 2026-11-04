@@ -42,34 +42,102 @@ function monthKey(d) {
 function sameMonth(a, b) { return monthKey(a) === monthKey(b); }
 
 /* ---------- transaction simplifier ---------- */
-/* Turns "SQ *CORNER COFFEE CO 0231 ANYTOWN" into "Coffee" + a 0..1 confidence.
-   Known merchant = rule's own score (0.6-0.97); unknown = 0.35; recategorized by you = 0.99.
-   When you add Plaid later you can use its merchant name and category confidence instead. */
+/* Turns "SQ *CORNER COFFEE CO 0231 ANYTOWN" into a short noun-style name ("Corner Coffee") and a category, with a 0..1 confidence.
+   Three sources are cross-checked: a list of common merchants, common words in the name, and (when linked) the bank's own
+   merchant name and category. When they agree, confidence goes up; when they disagree, it goes down. Your own corrections win (0.99). */
 
-const RULES = [
-  [['RACETRAC', 'QUIKTRIP', 'CIRCLE K'], 'Fuel or snacks at a gas station', 'gas', 0.72],
-  [['SHELL', 'CHEVRON', 'EXXON', 'SUNOCO'], 'Gas station fill-up', 'gas', 0.93],
-  [['PUBLIX'], 'Groceries at Publix', 'groceries', 0.97],
-  [['WALMART', 'WAL-MART'], 'Shopping at Walmart', 'shopping', 0.7],
-  [['TARGET'], 'Shopping at Target', 'shopping', 0.7],
-  [['ALDI', 'KROGER', 'TRADER JOE', 'WHOLE FOODS'], 'Grocery run', 'groceries', 0.94],
-  [['CHICK-FIL-A', 'MCDONALD', 'WENDY', 'BURGER KING', 'TACO BELL', 'CHIPOTLE'], 'Fast food', 'food', 0.95],
-  [['COFFEE', 'STARBUCKS', 'DUNKIN'], 'Coffee', 'food', 0.94],
-  [['TACO'], 'Meal at a taco spot', 'food', 0.8],
-  [['DOORDASH', 'UBER EATS', 'GRUBHUB'], 'Food delivery', 'food', 0.95],
-  [['ADORAMA', 'B&H', 'BHPHOTO', 'BEST BUY', 'CAMERA'], 'Camera / video gear', 'videoCamera', 0.9],
-  [['ADOBE'], 'Adobe subscription (editing software)', 'videoCamera', 0.92],
-  [['SPOTIFY'], 'Spotify subscription', 'entertainment', 0.97],
-  [['NETFLIX', 'HULU', 'DISNEY PLUS', 'DISNEYPLUS', 'HBO'], 'Streaming subscription', 'entertainment', 0.96],
-  [['AMZN', 'AMAZON'], 'Amazon order', 'shopping', 0.75],
-  [['POWER CO', 'ELECTRIC', 'FPL', 'DUKE ENERGY'], 'Electric bill', 'bills', 0.97],
-  [['VERIZON', 'AT&T', 'T-MOBILE', 'TMOBILE'], 'Phone bill', 'bills', 0.95],
-  [['CVS', 'WALGREENS'], 'Pharmacy', 'health', 0.88],
-  [['PAYROLL', 'DIRECT DEP'], 'Paycheck', 'income', 0.9],
-  [['FREELANCE'], 'Freelance payment', 'income', 0.85],
-  [['VENMO', 'ZELLE', 'CASH APP'], 'Person-to-person payment', 'transfer', 0.6],
+/* [keywords found in the bank text, display name, category, confidence] */
+const MERCHANTS = [
+  // gas
+  [['RACETRAC'], 'RaceTrac', 'gas', 0.93], [['QUIKTRIP'], 'QuikTrip', 'gas', 0.9], [['CIRCLE K'], 'Circle K', 'gas', 0.9],
+  [['SHELL OIL', 'SHELL SERVICE', 'SHELL '], 'Shell', 'gas', 0.93], [['CHEVRON'], 'Chevron', 'gas', 0.95], [['EXXON'], 'Exxon', 'gas', 0.95],
+  [['MOBIL '], 'Mobil', 'gas', 0.9], [['SUNOCO'], 'Sunoco', 'gas', 0.95], [['WAWA'], 'Wawa', 'gas', 0.85], [['MURPHY USA', 'MURPHY EXPRESS'], 'Murphy USA', 'gas', 0.93],
+  [['SPEEDWAY'], 'Speedway', 'gas', 0.9], [['7-ELEVEN', '7 ELEVEN', '7-11'], '7-Eleven', 'gas', 0.7], [['BP#', 'BP PRODUCTS', 'BP OIL'], 'BP', 'gas', 0.92],
+  [['SAMS FUEL', 'COSTCO GAS', 'COSTCO FUEL'], 'Fuel', 'gas', 0.9],
+  // groceries
+  [['PUBLIX'], 'Publix', 'groceries', 0.97], [['KROGER'], 'Kroger', 'groceries', 0.95], [['ALDI'], 'Aldi', 'groceries', 0.95], [['TRADER JOE'], "Trader Joe's", 'groceries', 0.95],
+  [['WHOLE FOODS', 'WHOLEFDS'], 'Whole Foods', 'groceries', 0.95], [['WINN-DIXIE', 'WINN DIXIE'], 'Winn-Dixie', 'groceries', 0.95], [['SPROUTS'], 'Sprouts', 'groceries', 0.93],
+  [['FOOD LION'], 'Food Lion', 'groceries', 0.95], [['SAFEWAY'], 'Safeway', 'groceries', 0.95], [['LIDL'], 'Lidl', 'groceries', 0.95], [['HARRIS TEETER'], 'Harris Teeter', 'groceries', 0.95],
+  [['INSTACART'], 'Instacart', 'groceries', 0.85], [['COSTCO WHSE', 'COSTCO WHOLESALE'], 'Costco', 'groceries', 0.75], [["SAM'S CLUB", 'SAMS CLUB', 'SAMSCLUB'], "Sam's Club", 'groceries', 0.75],
+  // restaurants and coffee
+  [['CHICK-FIL-A', 'CHICK FIL A', 'CHICKFILA'], 'Chick-fil-A', 'food', 0.97], [['MCDONALD'], "McDonald's", 'food', 0.97], [['WENDY'], "Wendy's", 'food', 0.96], [['BURGER KING'], 'Burger King', 'food', 0.97],
+  [['TACO BELL'], 'Taco Bell', 'food', 0.97], [['CHIPOTLE'], 'Chipotle', 'food', 0.97], [['SUBWAY'], 'Subway', 'food', 0.9], [['PANERA'], 'Panera', 'food', 0.95], [['STARBUCKS'], 'Starbucks', 'food', 0.97],
+  [['DUNKIN'], 'Dunkin', 'food', 0.96], [['DOMINO'], "Domino's", 'food', 0.97], [['PIZZA HUT'], 'Pizza Hut', 'food', 0.97], [['PAPA JOHN'], "Papa John's", 'food', 0.97], [['KFC'], 'KFC', 'food', 0.95],
+  [['POPEYES'], 'Popeyes', 'food', 0.97], [['ARBY'], "Arby's", 'food', 0.96], [['SONIC DRIVE'], 'Sonic', 'food', 0.95], [['WAFFLE HOUSE'], 'Waffle House', 'food', 0.97], [['CRACKER BARREL'], 'Cracker Barrel', 'food', 0.97],
+  [['IHOP'], 'IHOP', 'food', 0.95], [['DENNY'], "Denny's", 'food', 0.95], [['OUTBACK'], 'Outback', 'food', 0.95], [['OLIVE GARDEN'], 'Olive Garden', 'food', 0.97], [['APPLEBEE'], "Applebee's", 'food', 0.97],
+  [['FIVE GUYS'], 'Five Guys', 'food', 0.97], [['JERSEY MIKE'], "Jersey Mike's", 'food', 0.97], [['FIREHOUSE SUBS'], 'Firehouse Subs', 'food', 0.97], [['PANDA EXPRESS'], 'Panda Express', 'food', 0.97],
+  [['WINGSTOP'], 'Wingstop', 'food', 0.97], [['ZAXBY'], "Zaxby's", 'food', 0.97], [['DAIRY QUEEN'], 'Dairy Queen', 'food', 0.97], [['KRISPY KREME'], 'Krispy Kreme', 'food', 0.97], [['7 BREW'], '7 Brew', 'food', 0.95],
+  [['DOORDASH'], 'DoorDash', 'food', 0.95], [['UBER EATS', 'UBEREATS'], 'Uber Eats', 'food', 0.96], [['GRUBHUB'], 'Grubhub', 'food', 0.96],
+  // video and camera work (counted as tax-deductible)
+  [['ADORAMA'], 'Adorama', 'videoCamera', 0.93], [['B&H', 'BHPHOTO', 'B AND H PHOTO'], 'B&H Photo', 'videoCamera', 0.93], [['ADOBE'], 'Adobe', 'videoCamera', 0.93],
+  [['BLACKMAGIC', 'DAVINCI'], 'Blackmagic', 'videoCamera', 0.9], [['FRAME.IO', 'FRAMEIO'], 'Frame.io', 'videoCamera', 0.9], [['ENVATO', 'MOTION ARRAY', 'ARTLIST', 'EPIDEMIC SOUND'], 'Stock media', 'videoCamera', 0.88],
+  [['LENSRENTALS', 'BORROWLENSES'], 'Lens rental', 'videoCamera', 0.9], [['KEH CAMERA', 'MPB.COM'], 'Used camera gear', 'videoCamera', 0.9], [['PEAK DESIGN', 'GOPRO', 'DJI ', 'NIKON', 'CANON USA'], 'Camera gear', 'videoCamera', 0.85],
+  [['BEST BUY'], 'Best Buy', 'videoCamera', 0.6],
+  // shopping
+  [['WALMART', 'WAL-MART', 'WM SUPERCENTER'], 'Walmart', 'shopping', 0.75], [['TARGET '], 'Target', 'shopping', 0.78], [['AMAZON', 'AMZN'], 'Amazon', 'shopping', 0.8], [['DOLLAR GENERAL'], 'Dollar General', 'shopping', 0.9],
+  [['DOLLAR TREE'], 'Dollar Tree', 'shopping', 0.92], [['HOME DEPOT'], 'Home Depot', 'shopping', 0.93], [["LOWE'S", 'LOWES '], "Lowe's", 'shopping', 0.93], [['TJ MAXX', 'TJMAXX'], 'TJ Maxx', 'shopping', 0.93],
+  [['ROSS STORES', 'ROSS DRESS'], 'Ross', 'shopping', 0.93], [['KOHL'], "Kohl's", 'shopping', 0.93], [['OLD NAVY'], 'Old Navy', 'shopping', 0.95], [['IKEA'], 'IKEA', 'shopping', 0.95], [['ETSY'], 'Etsy', 'shopping', 0.9],
+  [['EBAY'], 'eBay', 'shopping', 0.9], [['TEMU'], 'Temu', 'shopping', 0.9], [['SHEIN'], 'Shein', 'shopping', 0.9], [['HARBOR FREIGHT'], 'Harbor Freight', 'shopping', 0.93], [['MICHAELS'], 'Michaels', 'shopping', 0.9],
+  // subscriptions and entertainment
+  [['SPOTIFY'], 'Spotify', 'entertainment', 0.97], [['NETFLIX'], 'Netflix', 'entertainment', 0.97], [['HULU'], 'Hulu', 'entertainment', 0.97], [['DISNEY PLUS', 'DISNEYPLUS'], 'Disney+', 'entertainment', 0.97],
+  [['HBO', 'MAX.COM'], 'Max', 'entertainment', 0.9], [['YOUTUBE'], 'YouTube', 'entertainment', 0.9], [['PEACOCK'], 'Peacock', 'entertainment', 0.95], [['PARAMOUNT'], 'Paramount+', 'entertainment', 0.95],
+  [['AMC '], 'AMC', 'entertainment', 0.9], [['REGAL CINEMA', 'REGAL '], 'Regal', 'entertainment', 0.92], [['TICKETMASTER'], 'Ticketmaster', 'entertainment', 0.95], [['STEAMGAMES', 'STEAMPOWERED', 'STEAM PURCHASE', 'PLAYSTATION', 'XBOX', 'NINTENDO'], 'Games', 'entertainment', 0.92],
+  [['TWITCH'], 'Twitch', 'entertainment', 0.9], [['PATREON'], 'Patreon', 'entertainment', 0.9], [['DUOLINGO'], 'Duolingo', 'bills', 0.92],
+  // bills
+  [['NORDVPN', 'NORD VPN', 'NORDSEC'], 'NordVPN', 'bills', 0.95], [['ANTHROPIC', 'CLAUDE.AI'], 'Claude', 'bills', 0.93], [['MINT MOBILE'], 'Mint Mobile', 'bills', 0.97], [['VERIZON'], 'Verizon', 'bills', 0.96],
+  [['AT&T', 'ATT*'], 'AT&T', 'bills', 0.95], [['T-MOBILE', 'TMOBILE'], 'T-Mobile', 'bills', 0.96], [['SPECTRUM'], 'Spectrum', 'bills', 0.95], [['XFINITY', 'COMCAST'], 'Xfinity', 'bills', 0.95],
+  [['FPL ', 'FLA POWER', 'FLORIDA POWER'], 'FPL', 'bills', 0.97], [['DUKE ENERGY'], 'Duke Energy', 'bills', 0.97], [['TECO'], 'TECO', 'bills', 0.95], [['POWER CO', 'ELECTRIC'], 'Electric', 'bills', 0.93],
+  [['GEICO'], 'GEICO', 'bills', 0.97], [['PROGRESSIVE'], 'Progressive', 'bills', 0.95], [['STATE FARM'], 'State Farm', 'bills', 0.97], [['ALLSTATE'], 'Allstate', 'bills', 0.97], [['FARM BUREAU'], 'Farm Bureau', 'bills', 0.95],
+  [['APPLE.COM/BILL', 'APPLE.COM BILL', 'ITUNES', 'ICLOUD'], 'Apple', 'bills', 0.85], [['GOOGLE *', 'GOOGLE STORAGE', 'GOOGLE ONE'], 'Google', 'bills', 0.8],
+  [['MAINTENANCE FEE', 'SERVICE FEE', 'MONTHLY FEE', 'OVERDRAFT', 'ATM FEE', 'FOREIGN TRANSACTION FEE', 'NSF FEE'], 'Bank fee', 'bills', 0.95],
+  // health
+  [['CVS'], 'CVS', 'health', 0.9], [['WALGREENS'], 'Walgreens', 'health', 0.9], [['RITE AID'], 'Rite Aid', 'health', 0.92], [['LABCORP', 'QUEST DIAG'], 'Lab', 'health', 0.9],
+  // money in
+  [['PAYROLL', 'DIRECT DEP'], 'Paycheck', 'income', 0.9], [['INTEREST PAID', 'INTEREST PAYMENT', 'INTEREST EARNED', 'DIVIDEND'], 'Interest', 'income', 0.92], [['FREELANCE'], 'Freelance', 'income', 0.85],
+  // moving money between your own accounts: not a spend
+  [['PAYMENT THANK YOU', 'AUTOPAY', 'AUTO PAY', 'E-PAYMENT', 'EPAYMENT', 'ONLINE PAYMENT', 'CARD PAYMENT', 'CRCARDPMT', 'CREDIT CARD PMT', 'CC PAYMENT', 'DISCOVER E-PAY'], 'Card payment', 'transfer', 0.9, true],
+  [['ONLINE TRANSFER', 'ONLINE XFER', 'TRANSFER TO', 'TRANSFER FROM', 'XFER TO', 'XFER FROM', 'ACCT TRANSFER', 'ACCOUNT TRANSFER', 'MOBILE TRANSFER'], 'Transfer', 'transfer', 0.88, true],
+  [['VENMO', 'ZELLE', 'CASH APP', 'PAYPAL INST'], 'Person-to-person', 'transfer', 0.6],
 ];
 
+/* Common words when the exact name isn't known. */
+const WORD_RULES = [
+  [['COFFEE', 'CAFE', 'ESPRESSO', 'BAKERY', 'DONUT'], 'food', 0.82], [['TACO', 'PIZZA', 'GRILL', 'BURGER', 'BBQ', 'SUSHI', 'DINER', 'KITCHEN', 'WINGS', 'DELI', 'RESTAURANT', 'BISTRO', 'TAVERN', 'PUB ', 'BREWING', 'STEAKHOUSE'], 'food', 0.8],
+  [['FUEL', 'PETRO', 'GAS STATION', 'GASOLINE'], 'gas', 0.8], [['MARKET', 'GROCER', 'SUPERMARKET'], 'groceries', 0.7],
+  [['CAMERA', 'PHOTO', 'VIDEO', 'LENS', 'FILM'], 'videoCamera', 0.7], [['PHARMACY', 'DENTAL', 'DENTIST', 'MEDICAL', 'CLINIC', 'URGENT CARE', 'HOSPITAL', 'OPTICAL', 'VISION'], 'health', 0.82],
+  [['INSURANCE'], 'bills', 0.8], [['WATER UTIL', 'WATER DEPT', 'UTILITIES', 'UTILITY'], 'bills', 0.85], [['CINEMA', 'THEATER', 'THEATRE', 'CONCERT', 'ARCADE'], 'entertainment', 0.8],
+];
+
+/* The bank's own categories (Plaid) mapped to ours. */
+const PFC_MAP = { INCOME: 'income', TRANSFER_IN: 'transfer', TRANSFER_OUT: 'transfer', LOAN_PAYMENTS: 'bills', BANK_FEES: 'bills', ENTERTAINMENT: 'entertainment',
+  FOOD_AND_DRINK: 'food', GENERAL_MERCHANDISE: 'shopping', HOME_IMPROVEMENT: 'shopping', MEDICAL: 'health', PERSONAL_CARE: 'health', GENERAL_SERVICES: 'bills',
+  GOVERNMENT_AND_NON_PROFIT: 'other', TRANSPORTATION: 'other', TRAVEL: 'other', RENT_AND_UTILITIES: 'bills' };
+const PFC_CONF = { VERY_HIGH: 0.95, HIGH: 0.88, MEDIUM: 0.7, LOW: 0.5, UNKNOWN: 0.35 };
+const REFINES = { videoCamera: 'shopping', groceries: 'food' };   // our narrower category sits inside the bank's broader one
+
+function bankCategory(pfc) {
+  if (!pfc || !pfc.p) return null;
+  let cat = PFC_MAP[pfc.p] || 'other';
+  const d = String(pfc.d || '');
+  if (d === 'FOOD_AND_DRINK_GROCERIES') cat = 'groceries';
+  if (d === 'TRANSPORTATION_GAS') cat = 'gas';
+  const own = d === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' || /ACCOUNT_TRANSFER$/.test(d);
+  if (own) cat = 'transfer';
+  return { cat, conf: PFC_CONF[pfc.c] || 0.5, own, label: (CATS[cat] || CATS.other).title.toLowerCase() };
+}
+
+const NOISE_WORDS = new Set(['PURCHASE', 'POS', 'DEBIT', 'CARD', 'CHECKCARD', 'CKCD', 'RECURRING', 'PAYMENT', 'THE', 'INC', 'LLC', 'LTD', 'CORP', 'AUTHORIZED', 'ON', 'WWW', 'COM', 'HTTPS', 'VISA', 'ACH', 'WEB', 'ID', 'PPD', 'CCD', 'NO', 'REF', 'FL', 'GA', 'AL', 'TX', 'NC', 'SC', 'CA', 'NY']);
+
+/* A tidy name from messy bank text: "SQ *CORNER COFFEE CO 0231 ORLANDO FL" -> "Corner Coffee". */
+function prettyName(raw) {
+  let up = String(raw || '').toUpperCase();
+  for (const n of ['SQ *', 'SQ*', 'TST*', 'TST *', 'PAYPAL *', 'PP*', 'CHECKCARD', 'CHECK CARD', 'POS DEBIT', 'DEBIT CARD PURCHASE', 'PURCHASE AUTHORIZED ON', 'ACH DEPOSIT', 'ACH DEBIT', 'ACH CREDIT', 'RECURRING PAYMENT', 'AMZN MKTP US', 'VISA DIRECT']) up = up.split(n).join(' ');
+  up = up.replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ').replace(/[#*]\s*\d+/g, ' ').replace(/\b[A-Z]*\d[A-Z0-9]*\b/g, ' ').replace(/\bX{2,}\d*\b/g, ' ');
+  const toks = up.split(/[^A-Z&'.-]+/).map(t => t.replace(/^[.'-]+|[.'-]+$/g, '')).filter(t => t.length >= 2 && !NOISE_WORDS.has(t));
+  return toks.slice(0, 3).map(t => t[0] + t.slice(1).toLowerCase()).join(' ');
+}
+
+/* Older, simpler cleanup. Kept only so categories you already taught the app keep matching. */
 function cleaned(raw) {
   let s = String(raw).toUpperCase();
   for (const n of ['SQ *', 'TST*', 'TST *', 'PAYPAL *', 'CHECKCARD', 'POS DEBIT', 'PURCHASE', 'DEBIT CARD', 'ACH DEPOSIT']) {
@@ -84,20 +152,43 @@ function merchantKey(raw) {
   return c || String(raw).toUpperCase();
 }
 
-function simplify(rawName, amount, learned) {
-  const upper = String(rawName).toUpperCase();
-  let result;
-  const rule = RULES.find(r => r[0].some(k => upper.includes(k)));
-  if (rule) {
-    result = { phrase: rule[1], category: rule[2], confidence: rule[3] };
+/* hint (optional, from the bank): { merchant, pfc: { p, d, c } }.  Returns { phrase, category, confidence, why, auto }. */
+function simplify(rawName, amount, learned, hint) {
+  hint = hint || {};
+  const upper = String(rawName).toUpperCase() + ' ';
+  const known = MERCHANTS.find(m => m[0].some(k => upper.includes(k)));
+  const word = !known && WORD_RULES.find(w => w[0].some(k => upper.includes(k)));
+  const bank = bankCategory(hint.pfc);
+  const own = hint.merchant ? String(hint.merchant).trim() : '';
+  const name = own || prettyName(rawName);
+  let phrase, category, confidence, why, auto = false;
+
+  if (known || word) {
+    category = known ? known[2] : word[1];
+    confidence = known ? known[3] : word[2];
+    phrase = known ? known[1] : (name || (CATS[category] || CATS.other).title);
+    auto = !!(known && known[4]);
+    why = known ? 'A merchant the app knows' : 'The name has a common word in it';
+    if (bank) {
+      const agree = bank.cat === category || REFINES[category] === bank.cat;
+      if (agree) { confidence = Math.min(0.99, Math.max(confidence, bank.conf) + 0.04); why += '; your bank agrees'; }
+      else { confidence = Math.max(0.5, confidence - 0.1); why += '; your bank files it under ' + bank.label; }
+    }
+  } else if (bank && bank.cat !== 'other') {
+    category = bank.cat; confidence = Math.min(0.9, bank.conf); phrase = name || (CATS[category] || CATS.other).title;
+    auto = bank.own && amount < 0 && bank.conf >= 0.7;
+    why = 'From your bank\'s category';
   } else {
-    const name = cleaned(rawName);
-    const phrase = !name ? 'Unrecognized transaction' : (amount > 0 ? 'Deposit from ' + name : 'Purchase at ' + name);
-    result = { phrase, category: amount > 0 ? 'income' : 'other', confidence: 0.35 };
+    category = amount > 0 ? 'income' : 'other';
+    confidence = name ? (bank ? 0.45 : 0.4) : 0.3;
+    phrase = name || (amount > 0 ? 'Deposit' : 'Unrecognized');
+    why = name ? 'An unfamiliar name' : 'No readable name';
   }
+  if (known && known[4] && bank && bank.own) auto = true;
+
   const key = merchantKey(rawName);
-  if (learned && learned[key]) result = { phrase: result.phrase, category: learned[key], confidence: 0.99 };
-  return result;
+  if (learned && learned[key]) { category = learned[key]; confidence = 0.99; why = 'You set this category'; auto = false; }
+  return { phrase, category, confidence, why, auto };
 }
 
 /* ---------- providers (swap these for Plaid / CSV later) ---------- */
@@ -160,6 +251,7 @@ const round2 = n => Math.round((n || 0) * 100) / 100;
 function defaultState() {
   return {
     version: STATE_VERSION,
+    namesV: 2,
     created: new Date().toISOString(),
     accounts: [],
     transactions: [],
@@ -218,6 +310,15 @@ function migrate(old) {
   const s = Object.assign(defaultState(), old);
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
+  if (old.namesV !== 2) {                                   // older transactions get the newer, verb-free names and cross-checked confidence
+    for (const t of s.transactions || []) {
+      if (t.userConfirmed) continue;
+      const r = simplify(t.rawName, t.amount, s.learned || {}, { merchant: t.merchant, pfc: t.pfc });
+      t.simpleName = r.phrase; t.confidence = r.confidence; t.why = r.why;
+      if (!t.incomeSourceID && !t.extraIncomeLabel) t.category = r.category;
+    }
+    s.namesV = 2;
+  }
   if (old.version >= STATE_VERSION) return s;
 
   s.created = old.created || new Date().toISOString();
@@ -303,17 +404,30 @@ function matchingSource(rawName) {
   return S.incomeSources.find(s => s.matchKeyword && upper.includes(s.matchKeyword.toUpperCase()));
 }
 
+/* A bank line that matches one of your fixed monthly expenses (by the bank text you gave it). */
+function fixedMatch(rawName) {
+  const up = String(rawName).toUpperCase();
+  return S.fixedExpenses.find(e => e.matchKeyword && up.includes(String(e.matchKeyword).toUpperCase()));
+}
+
 function ingest(raws, opts) {
   opts = opts || {};
   const known = new Set(S.transactions.map(t => t.id));
   for (const r of raws) {
     if (known.has(r.id)) continue;
-    const s = simplify(r.rawName, r.amount, S.learned);
+    const s = simplify(r.rawName, r.amount, S.learned, { merchant: r.merchant, pfc: r.pfc });
     const tx = {
       id: r.id, accountID: r.accountID, rawName: r.rawName, date: r.date, amount: r.amount,
-      simpleName: s.phrase, confidence: s.confidence, category: s.category, userConfirmed: false,
-      pot: null, isIgnored: !!(opts.countFrom && r.amount < 0 && new Date(r.date) < opts.countFrom), incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
+      simpleName: s.phrase, confidence: s.confidence, category: s.category, why: s.why, userConfirmed: false,
+      merchant: r.merchant || '', pfc: r.pfc || null,
+      pot: null, isIgnored: false, ignoredWhy: null, incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
     };
+    if (r.amount < 0) {
+      const fx = fixedMatch(r.rawName);
+      if (opts.countFrom && new Date(r.date) < opts.countFrom) { tx.isIgnored = true; tx.ignoredWhy = 'Before start date'; }
+      else if (fx) { tx.isIgnored = true; tx.ignoredWhy = 'Fixed expense'; tx.simpleName = fx.name || tx.simpleName; tx.category = 'bills'; tx.confidence = 0.98; tx.why = 'Matches your fixed expense'; }
+      else if (s.auto) { tx.isIgnored = true; tx.ignoredWhy = 'Between your accounts'; }
+    }
     if (r.amount > 0) {
       const src = matchingSource(r.rawName);
       if (src) { tx.incomeSourceID = src.id; tx.category = 'income'; }
@@ -341,7 +455,7 @@ const needsReview = t => isExpense(t) && !t.pot && !t.isIgnored;
 const isIncomeCounted = t => !!(t.incomeSourceID || t.extraIncomeLabel);
 const pending = () => S.transactions.filter(needsReview);
 const recentlyReviewed = () => S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored)).slice(0, 6);
-const accountName = id => id === 'manual' ? 'Added by hand' : ((S.accounts.find(a => a.id === id) || {}).name || 'Unknown account');
+const accountName = id => id === 'manual' ? 'Added by hand' : ((S.accounts.find(a => a.id === id) || {}).name || 'Earlier link (account removed)');
 const accountById = id => S.accounts.find(a => a.id === id);
 /* Savings accounts send their purchases/fees to the Savings pot by default; everything else to your default pot. */
 function accountDefaultPot(accountID) {
@@ -405,13 +519,44 @@ function assign(id, potId) {
   save();
 }
 
-function ignoreTx(id) {
+function ignoreTx(id, why) {
   const t = txById(id);
   if (!t) return;
   removeLogs(e => e.kind === 'tx' && e.txId === id);
   t.pot = null;
   t.isIgnored = true;
+  t.ignoredWhy = why || 'Not a spend';
   save();
+}
+
+/* Everything waiting in Review becomes "already sorted": it stays in Activity but never comes out of a pot. */
+function ignoreAllPending() {
+  const list = pending();
+  for (const t of list) { t.pot = null; t.isIgnored = true; t.ignoredWhy = 'Already sorted'; }
+  save();
+  return list.length;
+}
+
+/* Transactions whose account is gone (a bank was unlinked and linked again, so the account got a new id) are matched to the same
+   purchase under the new account. Their sorting carries over and the stale copy is removed. */
+function healOrphans() {
+  const have = new Set(S.accounts.map(a => a.id));
+  const orphans = S.transactions.filter(t => t.accountID !== 'manual' && !have.has(t.accountID));
+  if (!orphans.length) return 0;
+  const norm = n => String(n).toUpperCase().replace(/[^A-Z]/g, '');
+  let fixed = 0;
+  for (const o of orphans) {
+    const near = S.transactions.find(t => t !== o && have.has(t.accountID) && Math.abs(t.amount - o.amount) < 0.005 && norm(t.rawName) === norm(o.rawName)
+      && Math.abs(new Date(t.date) - new Date(o.date)) < 3 * 864e5);
+    if (!near) continue;
+    const pot = o.pot, ign = o.isIgnored, why = o.ignoredWhy;
+    removeTx(o.id);
+    if (pot && !near.pot && !near.isIgnored) assign(near.id, pot);
+    else if (ign && !near.pot && !near.isIgnored) ignoreTx(near.id, why);
+    fixed++;
+  }
+  if (fixed) save();
+  return fixed;
 }
 
 function addPot(name, icon, balance, target) {
@@ -810,6 +955,40 @@ function applyIncomeSuggestions() {
   return made;
 }
 
+/* ---------- paste in your monthly expenses ---------- */
+
+/* Reads lines like "Rent 450", "Car payment  333.72" or "Savings 20%" (copied from a spreadsheet works too). */
+function parseExpenseList(text) {
+  const items = []; let pct = null;
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = /^(.*?)[\s:=,$]*\$?\s*([\d,]+(?:\.\d+)?)\s*(%?)\s*$/.exec(line);
+    if (!m) continue;
+    const name = m[1].replace(/[\s:=,$\-–]+$/, '').trim(), val = parseFloat(m[2].replace(/,/g, ''));
+    if (!name || isNaN(val) || /^(total|spending|current|what|cost)\b/i.test(name)) continue;
+    if (/^savings\b/i.test(name)) { if (m[3] === '%') pct = val; continue; }
+    items.push({ name, amount: round2(val) });
+  }
+  return { items, pct };
+}
+
+const GENERIC_EXPENSE_WORDS = new Set(['RENT', 'CAR', 'PHONE', 'INSURANCE', 'SAVINGS', 'UTILITIES', 'INTERNET', 'WATER', 'ELECTRIC', 'GAS', 'LOAN', 'BILL', 'BILLS']);
+/* The bank text that identifies an expense: its first word when that's distinctive ("Mint Mobile" -> MINT). You can edit it. */
+function guessExpenseKeyword(name) {
+  const w = String(name).toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean)[0] || '';
+  return w.length >= 4 && !GENERIC_EXPENSE_WORDS.has(w) ? w : '';
+}
+
+/* mode: 'replace' swaps your list; 'add' keeps what you have and adds the new names. */
+function applyExpenseList(parsed, mode) {
+  const make = i => ({ id: uid(), name: i.name, amount: i.amount, matchKeyword: guessExpenseKeyword(i.name) });
+  if (mode === 'replace') S.fixedExpenses = parsed.items.map(make);
+  else for (const i of parsed.items) if (!S.fixedExpenses.some(e => e.name.toLowerCase() === i.name.toLowerCase())) S.fixedExpenses.push(make(i));
+  if (parsed.pct != null) S.savingsPercent = Math.min(Math.max(parsed.pct, 0), 100);
+  save();
+}
+
 /* ---------- to-do list & notes ---------- */
 
 function addTodo(text) {
@@ -940,7 +1119,7 @@ function ingestLinked(res) {
   mergeAccounts(res);
   if (!S.settings.countFrom) S.settings.countFrom = firstOfMonthISO();
   const from = new Date(S.settings.countFrom + 'T00:00:00');
-  const norm = t => ({ id: t.id, accountID: t.accountID, rawName: t.rawName, amount: round2(t.amount), date: new Date(t.date).toISOString() });
+  const norm = t => ({ id: t.id, accountID: t.accountID, rawName: t.rawName, amount: round2(t.amount), date: new Date(t.date).toISOString(), merchant: t.merchant || '', pfc: t.pfc || null });
   for (const t of res.added || []) {
     const old = t.pendingId && txById(t.pendingId);
     if (old) {                                   // the bank replaced a pending purchase with the posted one: keep your sorting
@@ -959,6 +1138,7 @@ function ingestLinked(res) {
   }
   for (const id of res.removed || []) removeTx(id);
   S.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+  healOrphans();
   save();
 }
 
