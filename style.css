@@ -252,3 +252,23 @@ html { overflow-x: hidden; }
 input[type="date"] { text-align: right; }
 
 .seg.many button { flex: 1 1 20%; padding: 8px 2px; font-size: calc(13px * var(--ts, 1)); }
+
+/* search box: text must fit */
+input[type="search"] { font-size: calc(15px * var(--ts, 1)); padding: 9px 12px; text-overflow: ellipsis; min-width: 0; }
+input[type="search"]::placeholder { font-size: calc(14px * var(--ts, 1)); text-overflow: ellipsis; }
+input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* suggested pot button: tinted, not a light slab with a black emoji */
+.btn.pick { border-color: var(--sage); color: var(--fg); background: color-mix(in srgb, var(--sage) 16%, transparent); }
+.chip.on { border-color: var(--sage); color: var(--fg); background: color-mix(in srgb, var(--sage) 16%, transparent); }
+.acct-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.acct-head > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip:not([style]) { color: var(--fg-dim); border-color: var(--line); }
+.syncstat { background: none; border: 0; padding: 0 0 0 10px; color: var(--fg-dim); font-size: calc(12px * var(--ts, 1)); text-transform: lowercase; }
+.acct { border-top: 1px solid var(--line); }
+.acct:first-of-type { border-top: 0; }
+.acct-top { cursor: pointer; align-items: center; gap: 8px; }
+.chev { color: var(--fg-dim); margin-left: 8px; display: inline-block; width: 10px; }
+.acct-body { padding: 0 0 8px; }
+.pill { display: inline-block; border: 1px solid var(--line); padding: 1px 7px; font-size: calc(11px * var(--ts, 1)); color: var(--fg-dim); text-transform: lowercase; margin-right: 4px; }
+.pill.on { border-color: var(--sage); color: var(--sage); }
+.link.danger { color: var(--red); }

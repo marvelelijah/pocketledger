@@ -36,7 +36,7 @@ export default {
         const items = await getItems(env);
         return json({ items: items.map(i => ({ item_id: i.item_id, institution: i.institution })) }, 200, cors);
       }
-      if (route === 'POST /link-token') return json(await linkToken(env), 200, cors);
+      if (route === 'POST /link-token') return json(await linkToken(env, body), 200, cors);
       if (route === 'POST /exchange') return json(await exchange(env, body), 200, cors);
       if (route === 'GET /sync') return json(await sync(env), 200, cors);
       if (route === 'POST /unlink') return json(await unlink(env, body), 200, cors);
@@ -83,15 +83,23 @@ async function plaid(env, path, body) {
 const getItems = async env => (await env.LEDGER.get('items', { type: 'json' })) || [];
 const putItems = (env, items) => env.LEDGER.put('items', JSON.stringify(items));
 
-async function linkToken(env) {
+async function linkToken(env, body) {
   const req = {
     client_name: 'PocketLedger',
     language: 'en',
     country_codes: ['US'],
     user: { client_user_id: 'me' },
-    products: ['transactions'],
-    transactions: { days_requested: 60 },
   };
+  if (body && body.item_id) {
+    // "choose accounts": reopen an existing bank so you can tick more accounts (savings, car payment, cards…)
+    const item = (await getItems(env)).find(i => i.item_id === body.item_id);
+    if (!item) throw Object.assign(new Error('That bank is not linked here.'), { status: 404 });
+    req.access_token = item.access_token;
+    req.update = { account_selection_enabled: true };
+  } else {
+    req.products = ['transactions'];
+    req.transactions = { days_requested: 60 };
+  }
   if (env.REDIRECT_URI) req.redirect_uri = env.REDIRECT_URI;
   const r = await plaid(env, '/link/token/create', req);
   return { link_token: r.link_token };
@@ -119,13 +127,25 @@ const mapTx = t => ({
   pendingId: t.pending_transaction_id ? 'plaid-' + t.pending_transaction_id : null,
 });
 
-const mapAccount = (a, institution) => ({
-  id: 'plaid-' + a.account_id,
-  name: a.name + (a.mask ? ' ··' + a.mask : ''),
-  institution,
-  kind: a.type === 'credit' ? 'credit' : 'checking',
-  balance: a.type === 'credit' ? -(a.balances.current || 0) : (a.balances.available != null ? a.balances.available : (a.balances.current || 0)),
-});
+const kindOf = a => a.type === 'credit' ? 'credit' : a.type === 'loan' ? 'loan' : a.type === 'investment' ? 'investment'
+  : /savings|money market|cd|cash management|hsa|paypal|prepaid/i.test(a.subtype || '') ? 'savings' : 'checking';
+
+const mapAccount = (a, institution) => {
+  const kind = kindOf(a), b = a.balances || {};
+  const owed = kind === 'credit' || kind === 'loan';
+  return {
+    id: 'plaid-' + a.account_id,
+    name: a.name + (a.mask ? ' ··' + a.mask : ''),
+    official: a.official_name || '',
+    institution,
+    kind,
+    subtype: a.subtype || '',
+    mask: a.mask || '',
+    balance: owed ? -(b.current || 0) : (b.available != null ? b.available : (b.current || 0)),
+    current: b.current != null ? b.current : null,
+    limit: b.limit != null ? b.limit : null,
+  };
+};
 
 /* Pulls what's new since last time. If a bank has a lot of history, `more` is true and the app asks again. */
 async function sync(env) {

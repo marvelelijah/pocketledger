@@ -5,7 +5,7 @@ const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
 const ui = {
-  tab: 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', syncing: false, resetScroll: false,
+  tab: 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -112,17 +112,56 @@ function homeView() {
 
   ${FEATURES.creditScore ? creditCard() : ''}
 
-  <div class="card"><h2>Accounts</h2>
-    ${S.accounts.length ? S.accounts.map(a => `
-      <div class="row" style="padding:6px 0">
-        <div><div style="font-weight:600">${esc(a.name)}</div><div class="muted small">${esc(a.institution)}</div></div>
-        <b class="${a.balance < 0 ? 'neg' : ''}">${usd(a.balance)}</b>
-      </div>`).join('') : '<div class="muted small">No accounts linked. Purchases you add with ＋ on Review show up in Activity.</div>'}
+  ${accountsHTML()}`;
+}
+
+/* Every account your banks send, grouped by bank. Tap one to see its details and recent transactions. */
+function acctCard(a) {
+  const open = !!ui.openAcct[a.id];
+  const owed = a.kind === 'credit' || a.kind === 'loan';
+  const all = S.transactions.filter(t => t.accountID === a.id);
+  const month = inMonth(new Date()).filter(t => t.accountID === a.id);
+  const inAmt = month.filter(t => t.amount > 0).reduce((x, t) => x + t.amount, 0);
+  const outAmt = month.filter(t => t.amount < 0).reduce((x, t) => x + t.amount, 0);
+  const line = (k, v) => `<div class="field"><span class="muted">${k}</span><div style="text-align:right">${v}</div></div>`;
+  const base = KIND_LABEL[a.kind] || a.kind, sub = String(a.subtype || '').toLowerCase();
+  const kindText = base + (sub && sub !== base && sub !== a.kind && !(a.kind === 'credit' && /credit/.test(sub)) ? ' · ' + sub : '');
+  return `<div class="acct ${open ? 'open' : ''}">
+    <div class="row acct-top" data-action="toggleAcct" data-id="${esc(a.id)}" style="padding:8px 0">
+      <div style="min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${esc(a.name)}</div>
+        <div class="muted small">${esc(kindText)}</div></div>
+      <div style="text-align:right;white-space:nowrap"><b class="${a.balance < 0 ? 'neg' : ''}">${usd(a.balance)}</b>
+        <span class="chev">${open ? '⌄' : '›'}</span></div>
+    </div>
+    ${open ? `<div class="acct-body">
+      ${line(owed ? 'You owe' : 'Available', usd(owed ? Math.abs(a.balance) : a.balance))}
+      ${a.current != null && !owed && Math.abs(a.current - a.balance) > 0.004 ? line('Posted balance', usd(a.current)) : ''}
+      ${a.limit ? line('Credit limit', usd(a.limit)) + line('Credit left', usd(Math.max(a.limit + a.balance, 0))) : ''}
+      ${a.official && a.official !== a.name ? line('Account', esc(a.official)) : ''}
+      ${line('This month', '<span class="pos">in ' + usd(inAmt) + '</span> · out ' + usd(Math.abs(outAmt)))}
+      <div class="day" style="margin-top:8px">Recent</div>
+      ${all.length ? all.slice(0, 8).map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted small">No transactions yet.</div>'}
+      ${all.length > 8 ? `<button class="link small" data-action="acctActivity" data-id="${esc(a.id)}">see all ${all.length} in Activity ›</button>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+function accountsHTML() {
+  const accts = S.accounts.slice().sort((x, y) => (x.institution || '').localeCompare(y.institution || '') || (KIND_RANK[x.kind] || 6) - (KIND_RANK[y.kind] || 6) || x.name.localeCompare(y.name));
+  const cash = accts.filter(a => a.kind === 'checking' || a.kind === 'savings').reduce((t, a) => t + a.balance, 0);
+  const owe = accts.filter(a => a.kind === 'credit' || a.kind === 'loan').reduce((t, a) => t + a.balance, 0);
+  const banks = [...new Set(accts.map(a => a.institution || 'Other'))];
+  return `<div class="card"><h2>Accounts</h2>
+    ${accts.length ? `<div class="grid2" style="margin-bottom:6px">
+        <div><div class="muted small">cash</div><b>${usd(cash)}</b></div>
+        <div><div class="muted small">owed on cards</div><b class="${owe < 0 ? 'neg' : ''}">${usd(Math.abs(owe))}</b></div></div>
+      ${banks.map(bk => `<div class="day">${esc(bk)}</div>${accts.filter(a => (a.institution || 'Other') === bk).map(acctCard).join('')}`).join('')}`
+      : '<div class="muted small">No accounts linked. Purchases you add with ＋ on Review show up in Activity.</div>'}
     ${S.lastSync ? `<div class="muted small" style="margin-top:6px">Updated ${fmtShort(S.lastSync)}</div>` : ''}
     ${syncError ? `<div class="err">${esc(syncError)}</div>` : ''}
     ${lastSaveError ? `<div class="err">Couldn't save: ${esc(lastSaveError)}</div>` : ''}
+    ${S.settings.linked ? '<div class="muted small" style="margin-top:6px">Missing an account? Settings → Bank accounts → choose accounts.</div>' : ''}
   </div>`;
-
 }
 
 function creditCard() {
@@ -208,7 +247,7 @@ const searchBox = (id, value, change, ph) =>
   `<input id="${id}" type="search" placeholder="${ph}" value="${esc(value)}" data-change="${change}" data-live="1" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px">`;
 
 function activityListHTML() {
-  const list = S.transactions.filter(t => (!ui.filter || t.category === ui.filter) && txMatches(t, ui.search));
+  const list = S.transactions.filter(t => (!ui.afilter || t.accountID === ui.afilter) && (!ui.filter || t.category === ui.filter) && txMatches(t, ui.search));
   if (!list.length) return emptyBox('No transactions', 'Try a different search or category.');
   let html = '', lastDay = '', open = false;
   for (const t of list) {
@@ -230,11 +269,12 @@ function activityView() {
       style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
   return `<h1>Activity</h1>
-  ${searchBox('search', ui.search, 'search', 'Search name, amount, date, category or pot')}
+  ${searchBox('search', ui.search, 'search', 'Search activity')}
   <div class="chips">
     ${chip(null, 'All', '#A3B89C', '')}
     ${Object.entries(CATS).map(([k, c]) => chip(k, c.title, c.color, c.icon)).join('')}
   </div>
+  ${ui.afilter ? `<div class="row" style="margin-bottom:8px"><span class="muted small">Showing only ${esc(accountTitle(ui.afilter))}</span><button class="link small" data-action="clearAfilter">show all ✕</button></div>` : ''}
   <div id="actList">${activityListHTML()}</div>`;
 }
 
@@ -253,23 +293,57 @@ function spendingBar() {
   </div></div>`;
 }
 
+const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savings', loan: 'loan', investment: 'investment' };
+const accountTitle = id => {
+  if (id === 'manual') return 'Added by hand';
+  const a = accountById(id);
+  return a ? (a.institution ? a.institution + ' · ' : '') + a.name : 'Unknown account';
+};
+
+function assignButtons(t) {
+  const first = accountDefaultPot(t.accountID);
+  const ordered = [...S.pots.filter(p => p.id === first), ...S.pots.filter(p => p.id !== first)];
+  return ordered.map(pot => `<button class="btn ${pot.id === first ? 'pick' : ''}" data-action="assign" data-id="${esc(t.id)}" data-pot="${esc(pot.id)}">${emo(pot.icon)} ${esc(pot.name)}</button>`).join('');
+}
+
+function reviewItem(t) {
+  return `<div class="rv">
+    ${txRow(t)}
+    <div class="muted small" style="margin:2px 0 6px">Deduct this from…</div>
+    <div class="btn-row">${assignButtons(t)}</div>
+    <button class="link small" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>
+  </div>`;
+}
+
+/* One list per account, so a fee on your savings account never sits in the same list as your checking or cards. */
+function reviewAccounts() {
+  const ids = [...new Set(pending().map(t => t.accountID))];
+  return ids.sort((a, b) => accountRank(a) - accountRank(b));
+}
+
 function reviewListHTML() {
   const q = ui.rsearch.trim();
-  const p = pending().filter(t => txMatches(t, q));
-  const rec = q ? S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored) && txMatches(t, q)).slice(0, 30) : recentlyReviewed();
-  if (q && !p.length && !rec.length) return `<div class="card">${emptyBox('No matches', 'Nothing in Review matches that. Activity searches everything.')}</div>`;
-  return `${p.length ? `<div class="day" style="margin-top:0">Needs a pot (${p.length})</div>
-    <div class="card">${p.map(t => `
-      <div class="rv">
-        ${txRow(t)}
-        <div class="muted small" style="margin:2px 0 6px">Deduct this from…</div>
-        <div class="btn-row">
-          ${S.pots.map((pot, i) => `<button class="btn ${i === 0 ? 'primary' : ''}" data-action="assign" data-id="${esc(t.id)}" data-pot="${esc(pot.id)}">${i === 0 ? emoDark(pot.icon) : emo(pot.icon)} ${esc(pot.name)}</button>`).join('')}
-        </div>
-        <button class="link small" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>
-      </div>`).join('')}</div>`
-    : `<div class="card">${emptyBox('all caught up ' + emo('✅'), 'Tap ＋ Purchase when you buy something.')}</div>`}
+  const only = ui.racct && ui.racct !== 'all' ? ui.racct : null;
+  const p = pending().filter(t => (!only || t.accountID === only) && txMatches(t, q));
+  const rec = (q || only) ? S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored) && (!only || t.accountID === only) && txMatches(t, q)).slice(0, 30) : recentlyReviewed();
+  if ((q || only) && !p.length && !rec.length) return `<div class="card">${emptyBox('No matches', 'Nothing in Review matches that. Activity searches everything.')}</div>`;
+  const ids = [...new Set(p.map(t => t.accountID))].sort((a, b) => accountRank(a) - accountRank(b));
+  const groups = ids.map(id => {
+    const list = p.filter(t => t.accountID === id);
+    const a = accountById(id);
+    return `<div class="day acct-head" style="margin-top:0"><span>${esc(accountTitle(id))}</span>
+        <span class="muted small" style="white-space:nowrap">${list.length} to sort</span></div>
+      <div class="card">${list.map(reviewItem).join('')}</div>`;
+  }).join('');
+  return `${groups || `<div class="card">${emptyBox('all caught up ' + emo('✅'), 'Tap ＋ Purchase when you buy something.')}</div>`}
   ${rec.length ? `<div class="day">Recently sorted</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
+}
+
+function reviewChips() {
+  const ids = reviewAccounts();
+  if (ids.length < 2) return '';
+  const chip = (id, label) => `<button class="chip ${((ui.racct || 'all') === id) ? 'on' : ''}" data-action="racct" data-id="${esc(id)}">${esc(label)}</button>`;
+  return `<div class="chips" style="margin-bottom:8px">${chip('all', 'All accounts')}${ids.map(id => chip(id, accountTitle(id).replace(/^.*· /, ''))).join('')}</div>`;
 }
 
 function reviewView() {
@@ -279,7 +353,8 @@ function reviewView() {
   ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
     <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
     <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
-  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search purchases: name, amount, date, pot')}
+  ${reviewChips()}
+  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search purchases')}
   <div id="rvList">${reviewListHTML()}</div>`;
 }
 
@@ -310,7 +385,81 @@ function incomeView() {
   <div class="card"><h2>Counted this month</h2>
     ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">No income counted yet this month.</div>'}
     <div class="muted small" style="margin-top:6px">Tap a deposit to remove extra income. Use ＋ to count another deposit as tips, a gift, etc. Variable income like freelance is added to your budget by hand on the Budget tab.</div>
+  </div>
+
+  <button class="btn full" data-action="openHist">Income history &amp; cross-check ›</button>`;
+}
+
+/* ---------- income history ---------- */
+
+const histMonth = i => { const n = MONTH_NAMES[i % 12]; return n[0].toUpperCase() + n.slice(1, 3) + ' ' + Math.floor(i / 12); };
+
+function histImportCard(first) {
+  return `<div class="card"><h2>${first ? 'Bring in your money-made lists' : 'Add or update records'}</h2>
+    <div class="muted small" style="margin-bottom:8px">Paste the text of your lists (one or several years at once), or choose the files. Lines look like <b>$1,809.24 Employer</b> under a month name, with <b>MONEY MADE 2026</b> above them. Pasting a year again replaces that year, so nothing doubles. This stays on this phone and is never part of the app's code.</div>
+    <textarea id="histText" rows="6" placeholder="MONEY MADE 2026&#10;OCTOBER&#10;$1,809.24 Employer"></textarea>
+    <div class="btn-row"><button class="btn primary" data-action="importHist">Read pasted text</button><button class="btn" data-action="pickHist">Choose files</button></div>
+    <input type="file" id="histFile" accept=".txt,text/plain" multiple hidden data-change="histFiles">
   </div>`;
+}
+
+function incomeHistoryView() {
+  const back = `<div class="row"><button class="link" data-action="tab" data-tab="income">‹ income</button></div>`;
+  if (!S.incomeHistory.length) return `${back}<h1>Income history</h1>
+    <div class="card"><div class="muted small">Your past income lets the app see where money comes from: which jobs are still paying, which have ended, which months are bigger, and which bank deposits should count as income.</div></div>
+    ${histImportCard(true)}`;
+
+  const sums = incomeSummary(), years = incomeYearTotals(), months = incomeMonthTotals(12);
+  const ymax = Math.max(...Object.values(years)), mmax = Math.max(...months.map(m => m.total));
+  const last12 = months.reduce((a, m) => a + m.total, 0);
+  const kindText = { regular: 'steady pay', varies: 'varies', 'one-off': 'one-off' };
+  const ready = sums.filter(o => o.recent && o.kind !== 'one-off' && !S.incomeSources.some(x => x.name.toLowerCase() === o.name.toLowerCase()));
+  const x = ui.xref;
+
+  return `${back}<h1>Income history</h1>
+  <div class="card"><h2>By year</h2>
+    ${Object.keys(years).sort((a, b) => b - a).map(y => `<div style="padding:5px 0"><div class="row"><span>${y}</span><b>${usd(years[y])}</b></div>
+      <div class="bar">${fill('yr-' + y, years[y] / ymax * 100)}</div></div>`).join('')}
+  </div>
+
+  <div class="card"><h2>Recent months</h2>
+    ${months.map(m => `<div style="padding:4px 0"><div class="row"><span class="muted small">${histMonth(m.idx)}</span><b>${usd(m.total)}</b></div>
+      <div class="bar">${fill('mo-' + m.idx, m.total / mmax * 100)}</div></div>`).join('')}
+    <div class="muted small" style="margin-top:6px">Averages ${usd(last12 / months.length)} a month over these ${months.length} months.</div>
+  </div>
+
+  <div class="card"><h2>Where it comes from</h2>
+    ${sums.map(o => `<div style="padding:8px 0;border-top:1px solid var(--line)">
+      <div class="row"><b>${esc(o.name)}</b><b>${usd(o.total)}</b></div>
+      <div class="small"><span class="pill ${o.recent ? 'on' : ''}">${o.recent ? 'still paying' : 'ended ' + histMonth(o.last)}</span> <span class="pill">${kindText[o.kind]}</span></div>
+      <div class="muted small" style="margin-top:4px">${o.n} payment${o.n === 1 ? '' : 's'} · ${usd(o.avg)} each · ${histMonth(o.first)}${o.first === o.last ? '' : ' to ' + histMonth(o.last)}</div>
+      ${o.recent && o.kind === 'regular' ? `<div class="muted small">about ${usd(o.monthlyAvg)} in a typical month lately</div>` : ''}
+      <div class="muted small">${Object.keys(o.years).sort().map(y => y + ': ' + usd(o.years[y])).join(' · ')}</div>
+    </div>`).join('')}
+    ${ready.length ? `<div class="muted small" style="margin-top:8px">Not set up yet as income sources: ${ready.map(o => esc(o.name)).join(', ')}.</div>
+      <button class="btn primary full" style="margin-top:8px" data-action="setupSources">Set up my current income sources</button>`
+      : '<div class="muted small" style="margin-top:8px">Your current income sources are all set up. Edit them any time on the Income tab.</div>'}
+  </div>
+
+  <div class="card"><h2>Check against your bank</h2>
+    <div class="muted small" style="margin-bottom:8px">Compares deposits from your linked accounts with these records (same amount, same month). Matches teach the app which bank text belongs to which employer, so future deposits count as income by themselves.</div>
+    <button class="btn full" data-action="crossRef">Check deposits now</button>
+    ${x ? `<div style="margin-top:10px">
+      <div class="row"><span>Deposits matched to your records</span><b>${x.matched.length}</b></div>
+      ${x.matched.slice(0, 12).map(m => `<div class="row small" style="padding:3px 0"><span class="muted">${fmtShort(m.tx.date)} · ${esc(m.tx.rawName.slice(0, 26))}</span><span>${usd(m.tx.amount)} → ${esc(m.h.source)}</span></div>`).join('')}
+      ${Object.entries(x.keywords).filter(([, k]) => k).map(([n, k]) => `<div class="muted small">Bank text for ${esc(n)}: <b>${esc(k)}</b></div>`).join('')}
+      ${x.newlyMatched ? `<button class="btn primary full" style="margin-top:8px" data-action="applyXref">Count these as income and learn the bank text</button>` : (x.matched.length ? '<div class="muted small" style="margin-top:6px">These are already counted.</div>' : '')}
+      ${x.unmatched.length ? `<div class="day">In your bank, not in your records (${x.unmatched.length})</div>
+        ${x.unmatched.slice(0, 12).map(t => `<div class="row small" style="padding:3px 0"><span class="muted">${fmtShort(t.date)} · ${esc(t.rawName.slice(0, 30))}</span><b>${usd(t.amount)}</b></div>`).join('')}
+        <div class="muted small">Transfers, refunds and Zelle usually belong here. If one is real income, tap it on the Activity tab.</div>` : ''}
+      ${x.missing.length ? `<div class="day">In your records, not found in the bank (${x.missing.length})</div>
+        ${x.missing.slice(0, 12).map(h => `<div class="row small" style="padding:3px 0"><span class="muted">${histMonth(monthIdx(h.year, h.month))} · ${esc(h.source)}</span><b>${usd(h.amount)}</b></div>`).join('')}
+        <div class="muted small">Could be cash, a different account, or an amount that differs slightly from the deposit.</div>` : ''}
+    </div>` : ''}
+  </div>
+
+  ${histImportCard(false)}
+  <button class="link small danger" data-action="clearHist">Remove my income history from this phone</button>`;
 }
 
 /* ---------- budget ---------- */
@@ -550,10 +699,45 @@ function planView() {
   </div>`;
 }
 
+function syncLabel() {
+  if (!S.settings.linked || !linkConfigured()) return '';
+  if (ui.syncing) return '↻ syncing…';
+  if (syncError) return '! sync problem · tap to retry';
+  if (!S.lastSync) return '';
+  const d = new Date(S.lastSync), same = d.toDateString() === new Date().toDateString();
+  return '↻ ' + (same ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : fmtShort(S.lastSync));
+}
+const paintSync = () => { const el = $('syncStat'); if (el) el.textContent = syncLabel(); else if (ui.tab !== 'settings' && syncLabel()) renderWhenIdle(); };
+
+/* Syncs by itself: when the app opens, when you come back to it, when the phone gets internet again, and every few minutes while it's open. */
+let lastAuto = 0, autoBusy = false;
+async function autoSync(force) {
+  if (autoBusy || !linkConfigured()) return;
+  if (!force && Date.now() - lastAuto < 30000) return;
+  autoBusy = true; lastAuto = Date.now();
+  try {
+    if (!S.settings.linked) {                        // a bank may already be linked on your server
+      const st = await linkApi('/status'); ui.linkItems = st.items || [];
+      if (!ui.linkItems.length) return;
+      S.settings.linked = true; save();
+    }
+    ui.syncing = true; paintSync();
+    await syncLinked();
+  } catch (e) { syncError = e.message || String(e); }
+  finally { ui.syncing = false; autoBusy = false; renderWhenIdle(); }
+}
+
+/* Don't rebuild the screen while you're typing in a box. */
+function renderWhenIdle(tries) {
+  const el = document.activeElement, typing = el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+  if (typing && (tries || 0) < 20) { setTimeout(() => renderWhenIdle((tries || 0) + 1), 1500); return; }
+  render();
+}
+
 function topbar() {
   const nm = (S.settings.name || '').trim();
   const handle = (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@pocketledger';
-  return `<div class="topbar"><span class="prompt">${esc(handle)}</span>
+  return `<div class="topbar"><span class="prompt">${esc(handle)}${syncLabel() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
     <button class="profile" data-action="openSettings" aria-label="Profile and settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}<span>settings</span></button></div>`;
 }
 
@@ -608,7 +792,7 @@ function settingsView() {
       <button class="btn primary" data-action="linkBank">link a bank</button>
       ${S.settings.linked ? '<button class="btn" data-action="syncNow">sync now</button>' : ''}
     </div>
-    ${ui.linkItems && ui.linkItems.length ? `<div class="day">Linked</div>${ui.linkItems.map(i => `<div class="row" style="padding:4px 0"><span>${esc(i.institution)}</span><button class="link small" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></div>`).join('')}` : ''}
+    ${ui.linkItems && ui.linkItems.length ? `<div class="day">Linked</div>${ui.linkItems.map(i => `<div class="row" style="padding:4px 0"><span>${esc(i.institution)}</span><span><button class="link small" data-action="chooseAccts" data-id="${esc(i.item_id)}">choose accounts</button> <button class="link small" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></span></div>`).join('')}` : ''}
     <div class="field" style="margin-top:8px"><span>Count purchases from</span><input type="date" value="${esc(st.countFrom || '')}" data-change="countFrom" style="width:160px"></div>
     <div class="muted small">Older purchases are kept in Activity as history and never sent to Review, so your pots start clean.</div>
     <div class="day">Good to know</div>
@@ -631,7 +815,7 @@ function settingsView() {
   </div>`;
 }
 
-const VIEWS = { settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView, plan: planView };
+const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView, plan: planView };
 
 /* ---------- modals ---------- */
 
@@ -859,7 +1043,7 @@ ghostRoot.id = 'ghost-root';
 document.body.appendChild(ghostRoot);
 
 let lastTab = null;
-const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k)), 0);
+const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k === 'ihist' ? 'income' : k)), 0);
 
 function render() {
   const y = window.scrollY;
@@ -877,7 +1061,7 @@ function render() {
   if ($('disc-box')) $('disc-box').__html = discHTML(discrepancy(ui.checkMonth, ui.actual));
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
-  const active = ui.tab === 'pot' ? 'home' : ui.tab;
+  const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'income' : ui.tab;
   tabbar.innerHTML = TABS.map(([k, icon, label]) =>
     `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
 
@@ -1082,12 +1266,12 @@ function loadPlaid() {
 }
 
 const PLAID_TOKEN_KEY = 'pocketledger.linktoken';
-function plaidHandlers() {
+function plaidHandlers(update) {
   return {
     onSuccess: async (publicToken, meta) => {
       ui.linkMsg = 'Saving…'; render();
       try {
-        await linkApi('/exchange', { public_token: publicToken, institution: meta && meta.institution && meta.institution.name });
+        if (!update) await linkApi('/exchange', { public_token: publicToken, institution: meta && meta.institution && meta.institution.name });
         try { localStorage.removeItem(PLAID_TOKEN_KEY); } catch (e) { /* ignore */ }
         S.settings.linked = true;
         if (!S.settings.countFrom) S.settings.countFrom = firstOfMonthISO();
@@ -1104,13 +1288,13 @@ function plaidHandlers() {
   };
 }
 
-async function openPlaid() {
+async function openPlaid(itemId) {
   ui.linkMsg = 'Opening the bank window…'; render();
   try {
-    const r = await linkApi('/link-token', {});
+    const r = await linkApi('/link-token', itemId ? { item_id: itemId } : {});
     try { localStorage.setItem(PLAID_TOKEN_KEY, r.link_token); } catch (e) { /* ignore */ }
     await loadPlaid();
-    Plaid.create(Object.assign({ token: r.link_token }, plaidHandlers())).open();
+    Plaid.create(Object.assign({ token: r.link_token }, plaidHandlers(!!itemId))).open();
   } catch (e) { ui.linkMsg = e.message; render(); }
 }
 
@@ -1143,7 +1327,10 @@ const ACTIONS = {
   refresh: () => { doSync(); return false; },
 
   // settings
-  openSettings: () => { if (ui.tab !== 'settings') ui.prevTab = ui.tab; ui.tab = 'settings'; ui.resetScroll = true; },
+  openSettings: () => {
+    if (ui.tab !== 'settings') ui.prevTab = ui.tab; ui.tab = 'settings'; ui.resetScroll = true;
+    if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
+  },
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
   setTheme: d => { S.settings.theme = d.pot; save(); applySettings(); },
   setAccent: d => { S.settings.accent = d.pot; save(); applySettings(); },
@@ -1161,6 +1348,30 @@ const ACTIONS = {
     if (S.useSampleData) askConfirm('Linking real accounts clears the sample data first. Continue?', 'continue', () => { startFresh(); openPlaid(); });
     else { openPlaid(); return false; }
   },
+  openHist: () => { ui.tab = 'ihist'; ui.resetScroll = true; ui.xref = null; },
+  pickHist: () => { const f = $('histFile'); if (f) f.click(); return false; },
+  importHist: () => {
+    const box = $('histText');
+    try {
+      const r = importIncomeHistory(box ? box.value : '');
+      ui.xref = null;
+      askAlert('Read ' + r.added + ' payments from ' + r.years.join(', ') + '.' + (r.skipped ? ' ' + r.skipped + ' lines were skipped because they had no month or amount.' : ''));
+    } catch (e) { askAlert(e.message); }
+  },
+  crossRef: () => { ui.xref = crossReference(false); },
+  applyXref: () => { const r = crossReference(true); ui.xref = crossReference(false); askAlert('Counted ' + r.newlyMatched + ' deposit' + (r.newlyMatched === 1 ? '' : 's') + ' and learned the bank text. Check your sources on the Income tab.'); },
+  setupSources: () => {
+    const todo = incomeSummary().filter(o => o.recent && o.kind !== 'one-off' && !S.incomeSources.some(x => x.name.toLowerCase() === o.name.toLowerCase()));
+    askConfirm('Add these as income sources?\n' + todo.map(o => '• ' + o.name + (o.kind === 'regular' ? ' — about ' + usd(Math.round(o.monthlyAvg)) + ' a month' : ' — varies, added by hand')).join('\n'), 'add them', () => {
+      const made = applyIncomeSuggestions(); askAlert('Added: ' + made.join(', ') + '. Fine-tune amounts under Income → Edit income sources.');
+    });
+  },
+  clearHist: () => askConfirm('Remove your income history from this phone? Your income sources and deposits stay.', 'remove', () => { S.incomeHistory = []; ui.xref = null; save(); }, true),
+  chooseAccts: d => { openPlaid(d.id); return false; },
+  syncTop: () => { autoSync(true); return false; },
+  toggleAcct: d => { ui.openAcct[d.id] = !ui.openAcct[d.id]; },
+  acctActivity: d => { ui.afilter = d.id; ui.tab = 'activity'; ui.resetScroll = true; ui.filter = null; ui.search = ''; },
+  clearAfilter: () => { ui.afilter = null; },
   syncNow: () => { ui.linkMsg = 'Syncing…'; doSync().then(() => { ui.linkMsg = syncError ? syncError : 'Synced. ' + syncInfo; render(); }); },
   unlinkItem: d => askConfirm('Unlink this bank? Your history in the app stays; no new purchases will arrive.', 'unlink', async () => {
     try {
@@ -1180,6 +1391,7 @@ const ACTIONS = {
   dlgOk: () => { const f = ui.dialog && ui.dialog.onOk; ui.dialog = null; if (f) f(); },
 
   // pots
+  racct: d => { ui.racct = d.id; },
   openPot: d => { ui.tab = 'pot'; ui.potId = d.id; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; },
   addPot: () => openPotEdit(null),
   editPot: d => openPotEdit(d.id),
@@ -1345,6 +1557,15 @@ function handleField(el, final) {
     case 'todoDone': toggleTodo(d.id); render(); return;
     case 'noteTitle': updateNote(d.id, { title: v }); return;
     case 'noteBody': updateNote(d.id, { body: v }); return;
+    case 'histFiles':
+      if (final && el.files && el.files.length) {
+        Promise.all([...el.files].map(f => f.text())).then(texts => {
+          try { const r = importIncomeHistory(texts.join('\n')); ui.xref = null; askAlert('Read ' + r.added + ' payments from ' + r.years.join(', ') + '.'); }
+          catch (err) { askAlert(err.message); }
+          render();
+        });
+      }
+      return;
     case 'import':
       if (final && el.files && el.files[0]) {
         el.files[0].text().then(text => {
@@ -1452,7 +1673,11 @@ document.addEventListener('gesturechange', e => e.preventDefault());
 
 applySettings();
 render();
-if (/oauth_state_id=/.test(location.search)) resumePlaid(); else doSync();
+if (/oauth_state_id=/.test(location.search)) resumePlaid(); else if (linkConfigured()) autoSync(true); else doSync();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) autoSync(); });
+window.addEventListener('pageshow', e => { if (e.persisted) autoSync(); });
+window.addEventListener('online', () => autoSync(true));
+setInterval(() => { if (!document.hidden) autoSync(); }, 5 * 60 * 1000);
 
 // Ask the browser to keep this app's data even when storage is tight.
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});

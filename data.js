@@ -163,6 +163,7 @@ function defaultState() {
     created: new Date().toISOString(),
     accounts: [],
     transactions: [],
+    incomeHistory: [],   // what you were paid in past months, pasted in by you (never stored in the code)
     incomeSources: [
       // variable = no expected amount (e.g. freelance: some months nothing)
       { id: uid(), name: 'Full-time job', expectedAmount: 2500, variable: false, matchKeyword: 'PAYROLL' },
@@ -341,6 +342,15 @@ const isIncomeCounted = t => !!(t.incomeSourceID || t.extraIncomeLabel);
 const pending = () => S.transactions.filter(needsReview);
 const recentlyReviewed = () => S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored)).slice(0, 6);
 const accountName = id => id === 'manual' ? 'Added by hand' : ((S.accounts.find(a => a.id === id) || {}).name || 'Unknown account');
+const accountById = id => S.accounts.find(a => a.id === id);
+/* Savings accounts send their purchases/fees to the Savings pot by default; everything else to your default pot. */
+function accountDefaultPot(accountID) {
+  const a = accountById(accountID);
+  if (a && a.kind === 'savings' && potById('savings')) return 'savings';
+  return potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending';
+}
+const KIND_RANK = { manual: 0, checking: 1, credit: 2, savings: 3, loan: 4, investment: 5 };
+const accountRank = id => id === 'manual' ? 0 : (KIND_RANK[(accountById(id) || {}).kind] || 6);
 const sourceName = id => id ? (S.incomeSources.find(s => s.id === id) || {}).name : null;
 
 /* ---------- pots (every change goes through the log, so each pot can show what came in and out) ---------- */
@@ -633,6 +643,169 @@ function redistribute(key, amount, target) {
   S.adjustments.push({ id: uid(), monthKey: key, date: new Date().toISOString(), amount: round2(cents / 100), target });
   save();
   return true;
+}
+
+/* ---------- income history: your own "money made" records ---------- */
+
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+/* Reads text like:  MONEY MADE 2026 / OCTOBER / $1,809.24 Employer / $461.75 (Side gig) …
+   Returns { entries: [{year, month, amount, source, note}], skipped } and changes nothing. */
+function parseMoneyMade(text) {
+  const entries = [], names = {}; let year = null, month = null, skipped = 0;
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    let m = /^MONEY\s+MADE\b\s*[:\-–]?\s*\(?(\d{4})?\)?/i.exec(line);
+    if (m) { year = m[1] ? +m[1] : null; month = null; continue; }
+    if (/^(19|20)\d\d$/.test(line)) { year = +line; month = null; continue; }
+    m = /^([A-Za-z]{3,9})\.?:?$/.exec(line);
+    if (m) {
+      const i = MONTH_NAMES.findIndex(n => n === m[1].toLowerCase() || (m[1].length === 3 && n.startsWith(m[1].toLowerCase())));
+      if (i >= 0) { month = i + 1; continue; }
+    }
+    m = /^\$\s*([\d,]+(?:\.\d+)?)\s*(.*)$/.exec(line);
+    if (m) {
+      if (!year || !month) { skipped++; continue; }
+      const parts = m[2].replace(/^\(|\)$/g, '').trim().split(/\s+[-–—]\s+/);
+      const label = (parts[0] || '').replace(/\s+/g, ' ').trim() || 'Unknown';
+      const key = label.toLowerCase();
+      if (!names[key]) names[key] = label;
+      entries.push({ year, month, amount: round2(parseFloat(m[1].replace(/,/g, ''))), source: names[key], note: parts.slice(1).join(' - ').trim() });
+      continue;
+    }
+    skipped++;
+  }
+  return { entries, skipped };
+}
+
+/* Replaces whatever you had for the same years, so pasting a file again never doubles it up. */
+function importIncomeHistory(text) {
+  const r = parseMoneyMade(text);
+  if (!r.entries.length) throw new Error('I could not find any amounts. Each line should look like "$1,809.24 Employer" under a month name.');
+  const years = [...new Set(r.entries.map(e => e.year))].sort();
+  S.incomeHistory = S.incomeHistory.filter(h => !years.includes(h.year))
+    .concat(r.entries.map(e => Object.assign({ id: 'ih-' + uid(), txId: null }, e)));
+  S.incomeHistory.sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month));
+  save();
+  return { added: r.entries.length, years, skipped: r.skipped };
+}
+
+const monthIdx = (y, m) => y * 12 + (m - 1);
+
+/* One row per source: how often, how much, is it still paying, and what kind of income it looks like. */
+function incomeSummary(now) {
+  now = now || new Date();
+  const cur = monthIdx(now.getFullYear(), now.getMonth() + 1);
+  const by = {};
+  for (const h of S.incomeHistory) {
+    const k = h.source.toLowerCase(), i = monthIdx(h.year, h.month);
+    const o = by[k] || (by[k] = { name: h.source, n: 0, total: 0, first: i, last: i, amounts: [], months: {}, years: {} });
+    o.n++; o.total += h.amount; o.first = Math.min(o.first, i); o.last = Math.max(o.last, i); o.amounts.push(h.amount);
+    o.months[i] = (o.months[i] || 0) + h.amount; o.years[h.year] = (o.years[h.year] || 0) + h.amount;
+  }
+  return Object.values(by).map(o => {
+    const avg = o.total / o.n;
+    const sd = Math.sqrt(o.amounts.reduce((a, x) => a + (x - avg) * (x - avg), 0) / o.n);
+    const cv = avg ? sd / avg : 0;
+    const done = Object.keys(o.months).map(Number).filter(i => i < cur).sort((a, b) => b - a).slice(0, 6);   // finished months only
+    const monthlyAvg = done.length ? done.reduce((a, i) => a + o.months[i], 0) / done.length : o.total;
+    return Object.assign(o, {
+      avg: round2(avg), cv, recent: o.last >= cur - 2, monthlyAvg: round2(monthlyAvg),
+      kind: o.n <= 2 ? 'one-off' : (cv < 0.25 && o.n >= 4 ? 'regular' : 'varies'),
+    });
+  }).sort((a, b) => (b.recent - a.recent) || (b.last - a.last) || (b.total - a.total));
+}
+
+function incomeYearTotals() {
+  const t = {};
+  for (const h of S.incomeHistory) t[h.year] = round2((t[h.year] || 0) + h.amount);
+  return t;
+}
+
+/* Total per calendar month, newest first. */
+function incomeMonthTotals(count) {
+  const t = {};
+  for (const h of S.incomeHistory) t[monthIdx(h.year, h.month)] = round2((t[monthIdx(h.year, h.month)] || 0) + h.amount);
+  return Object.keys(t).map(Number).sort((a, b) => b - a).slice(0, count || 12).map(i => ({ idx: i, year: Math.floor(i / 12), month: i % 12 + 1, total: t[i] }));
+}
+
+const GENERIC_WORDS = new Set(['ACH', 'DEPOSIT', 'CREDIT', 'DIRECT', 'TRANSFER', 'PPD', 'WEB', 'ONLINE', 'PAYMENT', 'FROM', 'THE', 'INC', 'LLC', 'CORP', 'MOBILE', 'CHECK', 'DEP', 'PMT', 'PAYMENTS', 'ID']);
+
+/* Looks for the bank deposit that matches each record (same amount, same or neighbouring month).
+   apply = false just reports. apply = true remembers the match, sets up sources and their bank-text keywords, and counts the deposits. */
+function crossReference(apply) {
+  const used = new Set(S.incomeHistory.filter(h => h.txId && txById(h.txId)).map(h => h.txId));
+  const taken = new Set(), matched = [];
+  const deposits = S.transactions.filter(t => t.amount > 0).sort((a, b) => new Date(a.date) - new Date(b.date));
+  for (const t of deposits) {
+    if (used.has(t.id)) continue;
+    const d = new Date(t.date), i = monthIdx(d.getFullYear(), d.getMonth() + 1);
+    const h = S.incomeHistory.find(x => !x.txId && !taken.has(x.id) && Math.abs(x.amount - t.amount) < 0.005 && Math.abs(monthIdx(x.year, x.month) - i) <= 1);
+    if (h) { taken.add(h.id); matched.push({ tx: t, h }); }
+  }
+  const alreadyHere = S.incomeHistory.filter(h => h.txId && txById(h.txId)).map(h => ({ tx: txById(h.txId), h }));
+  const all = alreadyHere.concat(matched);
+  const matchedTx = new Set(all.map(m => m.tx.id));
+
+  // which months does the bank data cover? records inside that window with no deposit are worth a look
+  const idxs = S.transactions.map(t => { const d = new Date(t.date); return monthIdx(d.getFullYear(), d.getMonth() + 1); });
+  const lo = idxs.length ? Math.min(...idxs) : null, hi = idxs.length ? Math.max(...idxs) : null;
+  const matchedIds = new Set(all.map(m => m.h.id));
+  const missing = lo == null ? [] : S.incomeHistory.filter(h => !matchedIds.has(h.id) && monthIdx(h.year, h.month) > lo && monthIdx(h.year, h.month) <= hi);
+  const unmatched = deposits.filter(t => !matchedTx.has(t.id) && !t.incomeSourceID && !t.extraIncomeLabel);
+
+  // a bank-text keyword per source: the source's own name if it appears in the deposits, else a word they all share
+  const keywords = {};
+  const groups = {};
+  for (const m of all) (groups[m.h.source.toLowerCase()] = groups[m.h.source.toLowerCase()] || { name: m.h.source, list: [] }).list.push(m);
+  for (const g of Object.values(groups)) {
+    const up = g.list.map(m => String(m.tx.rawName).toUpperCase());
+    const own = g.name.toUpperCase();
+    if (up.every(r => r.includes(own))) { keywords[g.name] = own; continue; }
+    const counts = {};
+    for (const r of up) for (const w of new Set(r.split(/[^A-Z0-9]+/).filter(w => w.length >= 4 && !GENERIC_WORDS.has(w) && !/^\d+$/.test(w)))) counts[w] = (counts[w] || 0) + 1;
+    const best = Object.entries(counts).filter(([, c]) => c >= Math.max(2, Math.ceil(up.length * 0.6))).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)[0];
+    keywords[g.name] = best ? best[0] : '';
+  }
+
+  if (apply) {
+    for (const m of matched) m.h.txId = m.tx.id;
+    const sums = incomeSummary();
+    for (const g of Object.values(groups)) {
+      const info = sums.find(x => x.name === g.name);
+      let src = S.incomeSources.find(x => x.name.toLowerCase() === g.name.toLowerCase());
+      if (!src) {
+        src = { id: uid(), name: g.name, expectedAmount: info && info.kind === 'regular' ? Math.round(info.monthlyAvg) : 0, variable: !(info && info.kind === 'regular'), matchKeyword: '' };
+        S.incomeSources.push(src);
+        dropStarterSources();
+      }
+      if (!src.matchKeyword || ['PAYROLL', 'FREELANCE'].includes(src.matchKeyword)) src.matchKeyword = keywords[g.name] || src.matchKeyword;
+    }
+    rematchIncomeSources();
+  }
+  return { matched: all, newlyMatched: matched.length, unmatched, missing, keywords };
+}
+
+/* The two example sources every new install starts with, if you never changed them. */
+const isStarterSource = x =>
+  (x.name === 'Full-time job' && x.matchKeyword === 'PAYROLL' && x.expectedAmount === 2500 && !x.variable) ||
+  (x.name === 'Freelance' && x.matchKeyword === 'FREELANCE' && x.variable);
+const dropStarterSources = () => { S.incomeSources = S.incomeSources.filter(x => !isStarterSource(x)); };
+
+/* Creates income sources for everyone who is still paying you. Regular pay gets an expected monthly amount; the rest are "varies". */
+function applyIncomeSuggestions() {
+  const made = [];
+  for (const o of incomeSummary()) {
+    if (!o.recent || o.kind === 'one-off') continue;
+    if (S.incomeSources.find(x => x.name.toLowerCase() === o.name.toLowerCase())) continue;
+    S.incomeSources.push({ id: uid(), name: o.name, expectedAmount: o.kind === 'regular' ? Math.round(o.monthlyAvg) : 0, variable: o.kind !== 'regular', matchKeyword: '' });
+    made.push(o.name);
+  }
+  if (made.length) dropStarterSources();
+  rematchIncomeSources();
+  save();
+  return made;
 }
 
 /* ---------- to-do list & notes ---------- */

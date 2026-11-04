@@ -41,3 +41,12 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 
 ## Later
 - **Credit score:** make `creditProvider.fetchLatest()` return `{ score, bureau, date }` and set `FEATURES.creditScore = true`.
+
+
+## Newer features
+
+- **Review by account:** each bank account gets its own list (a savings-account fee never mixes with checking or cards), with chips to look at one account. A savings account suggests the Savings pot first.
+- **Search:** Review, Activity and To-do & Notes all have a search box (name, amount, date, category, pot).
+- **Auto-sync:** syncs when the app opens, when you come back to it, when the phone reconnects, and every few minutes while open. The top bar shows the last sync; tap it to retry.
+- **Home accounts:** every account your banks send, grouped by bank. Tap one for balances, this month's totals and recent transactions. *Settings → Bank accounts → choose accounts* adds accounts a bank didn't send the first time.
+- **Income history:** *Income → Income history* reads your own "money made" lists (paste or choose files), shows year and month totals, which sources are still paying, sets up income sources, and cross-checks deposits in your bank to learn which bank text belongs to which employer. These records live only on your phone; they are never part of this repository.
