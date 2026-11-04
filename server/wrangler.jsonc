@@ -10,8 +10,8 @@
   "workers_dev": true,
   "vars": {
     "PLAID_ENV": "sandbox",                              // change to "production" when you go live
-    "ALLOWED_ORIGIN": "https://marvelelijah.github.io"
-    // "REDIRECT_URI": "https://marvelelijah.github.io/pocketledger/"   // uncomment for OAuth banks (Chase etc.)
+    "ALLOWED_ORIGIN": "https://elijahhalford.com"
+    // "REDIRECT_URI": "https://elijahhalford.com/pocketledger/"   // uncomment for OAuth banks (Chase etc.)
   },
   "kv_namespaces": [
     // The ID is on dash.cloudflare.com > Workers KV > your "pocketledger" namespace. It is not a secret.

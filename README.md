@@ -2,7 +2,7 @@
 
 A personal budgeting app that runs in your iPhone's browser and installs to the home screen. No build step. Starts with sample data so you can try everything.
 
-**Live app: https://marvelelijah.github.io/pocketledger/**
+**Live app: https://elijahhalford.com/pocketledger/**
 
 ## Install on your iPhone
 This repo is published with GitHub Pages. Open the live app link above in **Safari**, then **Share → Add to Home Screen**. Every change pushed to `main` goes live automatically; close and reopen the app to pick it up.

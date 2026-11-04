@@ -5,8 +5,8 @@
    Needed settings (Worker > Settings):
      Secrets:  PLAID_CLIENT_ID, PLAID_SECRET, APP_PASSPHRASE
      Variable: PLAID_ENV   = sandbox  (later: production)
-     Variable: ALLOWED_ORIGIN = https://marvelelijah.github.io   (comma-separate more than one)
-     Optional variable: REDIRECT_URI = https://marvelelijah.github.io/pocketledger/   (needed for Chase and other OAuth banks)
+     Variable: ALLOWED_ORIGIN = https://elijahhalford.com   (comma-separate more than one)
+     Optional variable: REDIRECT_URI = https://elijahhalford.com/pocketledger/   (needed for Chase and other OAuth banks)
      KV namespace binding named: LEDGER
 */
 
@@ -16,7 +16,7 @@ export default {
   async fetch(req, env) {
     // Tolerate a trailing slash or a path in the setting (https://site.github.io/ or .../pocketledger/)
     const norm = s => { try { return new URL(s.trim()).origin; } catch (e) { return s.trim().replace(/\/+$/, ''); } };
-    const allowed = String(env.ALLOWED_ORIGIN || 'https://marvelelijah.github.io').split(',').map(norm);
+    const allowed = String(env.ALLOWED_ORIGIN || 'https://elijahhalford.com').split(',').map(norm);
     const origin = req.headers.get('Origin') || '';
     const cors = {
       'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0],

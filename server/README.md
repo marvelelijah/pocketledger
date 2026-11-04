@@ -90,7 +90,7 @@ This is where it remembers which banks are linked.
 | `PLAID_SECRET` | Secret | your Plaid **Sandbox** secret |
 | `APP_PASSPHRASE` | Secret | a long passphrase you invent, like four unrelated words plus a number: `lantern-orbit-pickle-meadow-4827`. Put it in your note. |
 | `PLAID_ENV` | Text | `sandbox` |
-| `ALLOWED_ORIGIN` | Text | `https://marvelelijah.github.io` |
+| `ALLOWED_ORIGIN` | Text | `https://elijahhalford.com` (your site uses a custom domain, so the app lives here, not at github.io) |
 
 3. Click **Deploy** (or **Save and deploy**) after adding them. Variables only take effect once deployed.
 
@@ -141,10 +141,10 @@ Before using a real bank, remove the pretend one so fake purchases don't mix wit
    - Edit `PLAID_ENV`: change `sandbox` to `production`.
    - **Deploy**.
 3. **If your bank uses OAuth** (Chase, Bank of America, Wells Fargo and many others send you to their own site or app to approve), set this up first:
-   - Plaid dashboard → **Developers → API** → **Allowed redirect URIs** → add `https://marvelelijah.github.io/pocketledger/` (including the final slash) and save.
-   - Cloudflare Worker → Variables and Secrets → add Text variable `REDIRECT_URI` = `https://marvelelijah.github.io/pocketledger/` → **Deploy**.
+   - Plaid dashboard → **Developers → API** → **Allowed redirect URIs** → add `https://elijahhalford.com/pocketledger/` (including the final slash) and save.
+   - Cloudflare Worker → Variables and Secrets → add Text variable `REDIRECT_URI` = `https://elijahhalford.com/pocketledger/` → **Deploy**.
 4. **Link from Safari, not the home-screen app.** On iPhone, the home-screen app and Safari keep separate storage, and OAuth banks bounce you between apps. So for the first link:
-   - Open **marvelelijah.github.io/pocketledger** in **Safari**.
+   - Open **elijahhalford.com/pocketledger** in **Safari**.
    - Profile → Settings → Bank accounts. Enter the Worker address and passphrase, then **check connection**, then **link a bank**, and pick your real bank.
    - Sign in on the bank's page. Plaid brings you back to the app and finishes.
 5. **Open your home-screen app.** Enter the Worker address and passphrase again (it stores them separately from Safari), tap **check connection**. It finds the linked bank and syncs.
@@ -159,7 +159,7 @@ Before using a real bank, remove the pretend one so fake purchases don't mix wit
 | What you see | What it means / what to do |
 |---|---|
 | "Wrong passphrase." | The passphrase in the app doesn't exactly match the `APP_PASSPHRASE` secret. Retype both. Check for stray spaces. |
-| "Your server is there, but it is refusing this app." | `ALLOWED_ORIGIN` doesn't match the app's address. It must be exactly `https://marvelelijah.github.io` (no slash at the end, no `/pocketledger`). Fix it in Cloudflare and Deploy. |
+| "Your server is there, but it is refusing this app." | `ALLOWED_ORIGIN` doesn't match the app's address. It must be exactly `https://elijahhalford.com` (no slash at the end, no `/pocketledger`). Fix it in Cloudflare and Deploy. |
 | "Could not reach your server." | The Worker address is wrong or has a typo, or your phone is offline. Paste the address into a browser: you should get `{"error":"Wrong passphrase."}`. |
 | The address opens a Cloudflare error page | The code wasn't pasted fully or wasn't deployed. Redo Part 2b. |
 | "The server answered 500" or a message about `LEDGER` or `get` | The KV binding is missing or misnamed. Redo Part 2d, exactly `LEDGER`. |
