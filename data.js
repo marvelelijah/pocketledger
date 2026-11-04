@@ -962,7 +962,7 @@ function ingestLinked(res) {
   save();
 }
 
-let syncInfo = '';
+let syncInfo = '', bankProblems = [];
 async function syncLinked() {
   try {
     let res, guard = 0, got = 0, accts = 0, older = 0;
@@ -973,6 +973,7 @@ async function syncLinked() {
       older += (res.added || []).filter(t => new Date(t.date) < cutoff).length;
     } while (res.more && guard < 6);
     S.lastSync = new Date().toISOString();
+    bankProblems = (res.problems || []).slice();
     syncError = (res.problems && res.problems.length) ? res.problems.join(' ') : null;
     syncInfo = accts + ' account' + (accts === 1 ? '' : 's') + ', ' + got + ' new purchase' + (got === 1 ? '' : 's') + ' from the bank'
       + (older ? ' (' + older + ' older than ' + S.settings.countFrom + ', kept in Activity as history only)' : '')
