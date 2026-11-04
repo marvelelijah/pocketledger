@@ -5,7 +5,7 @@ const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
 const ui = {
-  tab: 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', syncing: false, resetScroll: false,
+  tab: 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -191,11 +191,24 @@ function potView() {
 
 /* ---------- activity ---------- */
 
+/* Every word typed must appear somewhere: name, merchant, category, pot, amount, or date (e.g. "kroger 42", "gas october", "camera"). */
+function txMatches(t, query) {
+  const words = String(query || '').toLowerCase().replace(/\$/g, '').split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const d = new Date(t.date);
+  const hay = [
+    t.rawName, t.simpleName, (CATS[t.category] || {}).title || '', t.pot ? potName(t.pot) : '',
+    t.isIgnored ? 'ignored not a spend' : '', t.amount > 0 ? 'income deposit' : 'purchase',
+    Math.abs(t.amount).toFixed(2), String(Math.round(Math.abs(t.amount))),
+    d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), d.toISOString().slice(0, 10),
+  ].join(' ').toLowerCase();
+  return words.every(w => hay.includes(w));
+}
+const searchBox = (id, value, change, ph) =>
+  `<input id="${id}" type="search" placeholder="${ph}" value="${esc(value)}" data-change="${change}" data-live="1" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px">`;
+
 function activityListHTML() {
-  const q = ui.search.toLowerCase();
-  const list = S.transactions.filter(t =>
-    (!ui.filter || t.category === ui.filter) &&
-    (!q || (t.rawName + ' ' + t.simpleName).toLowerCase().includes(q)));
+  const list = S.transactions.filter(t => (!ui.filter || t.category === ui.filter) && txMatches(t, ui.search));
   if (!list.length) return emptyBox('No transactions', 'Try a different search or category.');
   let html = '', lastDay = '', open = false;
   for (const t of list) {
@@ -217,7 +230,7 @@ function activityView() {
       style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
   return `<h1>Activity</h1>
-  <input id="search" type="search" placeholder="Search name or merchant" value="${esc(ui.search)}" data-change="search" data-live="1" style="margin-bottom:10px">
+  ${searchBox('search', ui.search, 'search', 'Search name, amount, date, category or pot')}
   <div class="chips">
     ${chip(null, 'All', '#A3B89C', '')}
     ${Object.entries(CATS).map(([k, c]) => chip(k, c.title, c.color, c.icon)).join('')}
@@ -240,16 +253,12 @@ function spendingBar() {
   </div></div>`;
 }
 
-function reviewView() {
-  const p = pending();
-  const rec = recentlyReviewed();
-  return `${spendingBar()}
-  <div class="row"><h1>Review</h1><button class="btn" data-action="addTx">＋ Purchase</button></div>
-  ${backupBanner()}
-  ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
-    <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
-    <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
-  ${p.length ? `<div class="day" style="margin-top:0">Needs a pot (${p.length})</div>
+function reviewListHTML() {
+  const q = ui.rsearch.trim();
+  const p = pending().filter(t => txMatches(t, q));
+  const rec = q ? S.transactions.filter(t => isExpense(t) && (t.pot || t.isIgnored) && txMatches(t, q)).slice(0, 30) : recentlyReviewed();
+  if (q && !p.length && !rec.length) return `<div class="card">${emptyBox('No matches', 'Nothing in Review matches that. Activity searches everything.')}</div>`;
+  return `${p.length ? `<div class="day" style="margin-top:0">Needs a pot (${p.length})</div>
     <div class="card">${p.map(t => `
       <div class="rv">
         ${txRow(t)}
@@ -261,6 +270,17 @@ function reviewView() {
       </div>`).join('')}</div>`
     : `<div class="card">${emptyBox('all caught up ' + emo('✅'), 'Tap ＋ Purchase when you buy something.')}</div>`}
   ${rec.length ? `<div class="day">Recently sorted</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
+}
+
+function reviewView() {
+  return `${spendingBar()}
+  <div class="row"><h1>Review</h1><button class="btn" data-action="addTx">＋ Purchase</button></div>
+  ${backupBanner()}
+  ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
+    <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
+    <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
+  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search purchases: name, amount, date, pot')}
+  <div id="rvList">${reviewListHTML()}</div>`;
 }
 
 /* ---------- income ---------- */
@@ -462,6 +482,7 @@ function backupCard() {
     <div class="day">Restore</div>
     <textarea id="restoreText" rows="3" placeholder="Paste your backup code (or the whole email) here"></textarea>
     <div class="btn-row"><button class="btn" data-action="restoreCode">Restore from code</button><button class="btn" data-action="import">Import file</button></div>
+    <button class="btn full" style="margin-top:8px" data-action="restoreNotes">Bring back only my notes &amp; to-dos from this code</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden data-change="import">
     <div class="muted small" style="margin-top:8px">Restoring replaces everything on this phone. The code contains your financial data, so keep that email private and never post it online.</div>
   </div>`;
@@ -492,28 +513,40 @@ function patchCheck() {
 
 /* ---------- to-do & notes ---------- */
 
-function planView() {
-  const open = S.todos.filter(t => !t.done), done = S.todos.filter(t => t.done);
+const planHit = (q, ...parts) => { const w = q.toLowerCase().split(/\s+/).filter(Boolean); const h = parts.join(' ').toLowerCase(); return w.every(x => h.includes(x)); };
+
+function todoListHTML() {
+  const q = ui.psearch;
+  const todos = S.todos.filter(t => planHit(q, t.text));
+  const open = todos.filter(t => !t.done), done = todos.filter(t => t.done);
   const row = t => `<div class="todo ${t.done ? 'done' : ''}">
     <input type="checkbox" ${t.done ? 'checked' : ''} data-change="todoDone" data-id="${t.id}">
     <span class="todo-text">${esc(t.text)}</span>
     <button class="link" data-action="delTodo" data-id="${t.id}" aria-label="Delete">✕</button></div>`;
-  return `<h1>To-do &amp; Notes</h1>
-  <div class="card"><h2>Money to-do list</h2>
-    <div class="row" style="gap:8px"><input id="todoText" placeholder="Add a task or goal…" style="flex:1">
-      <button class="btn primary" data-action="addTodo">Add</button></div>
-    <div style="margin-top:8px">
-      ${open.map(row).join('') || '<div class="muted" style="padding:8px 0">Nothing to do. Add something above.</div>'}
+  return `${open.map(row).join('') || `<div class="muted" style="padding:8px 0">${q ? 'No tasks match.' : 'Nothing to do. Add something above.'}</div>`}
       ${done.length ? `<div class="day">Done</div>${done.map(row).join('')}
-        <button class="link small" data-action="clearDone">Clear completed</button>` : ''}
-    </div>
-  </div>
-  <div class="card"><div class="row"><h2 style="margin:0">Notes</h2><button class="link" data-action="addNote">＋ New note</button></div>
-    ${S.notes.length ? S.notes.map(n => `<div class="note" data-action="openNote" data-id="${n.id}">
+        ${q ? '' : '<button class="link small" data-action="clearDone">Clear completed</button>'}` : ''}`;
+}
+
+function noteListHTML() {
+  const notes = S.notes.filter(n => planHit(ui.psearch, n.title, n.body));
+  return `${notes.length ? notes.map(n => `<div class="note" data-action="openNote" data-id="${n.id}">
       <div class="t1">${esc(n.title || 'Untitled note')}</div>
       <div class="muted small note-prev">${esc((n.body || '').slice(0, 120)) || 'Empty'}</div>
       <div class="muted small">${fmtShort(n.updated)}</div></div>`).join('')
-      : '<div class="muted" style="padding:8px 0">No notes yet.</div>'}
+      : `<div class="muted" style="padding:8px 0">${ui.psearch ? 'No notes match.' : 'No notes yet.'}</div>`}`;
+}
+
+function planView() {
+  return `<h1>To-do &amp; Notes</h1>
+  ${searchBox('psearch', ui.psearch, 'psearch', 'Search tasks and notes')}
+  <div class="card"><h2>Money to-do list</h2>
+    <div class="row" style="gap:8px"><input id="todoText" placeholder="Add a task or goal…" style="flex:1">
+      <button class="btn primary" data-action="addTodo">Add</button></div>
+    <div id="todoList" style="margin-top:8px">${todoListHTML()}</div>
+  </div>
+  <div class="card"><div class="row"><h2 style="margin:0">Notes</h2><button class="link" data-action="addNote">＋ New note</button></div>
+    <div id="noteList">${noteListHTML()}</div>
   </div>`;
 }
 
@@ -991,6 +1024,25 @@ async function restoreCode() {
   render();
 }
 
+/* Reads a backup but takes only the to-do list and notes; nothing else on this phone changes. Anything already here is kept. */
+async function restoreNotesOnly() {
+  const box = $('restoreText');
+  try {
+    const obj = await decodeBackup(box ? box.value : '');
+    let nt = 0, nn = 0;
+    const haveT = new Set(S.todos.map(t => t.id + '|' + t.text)), haveN = new Set(S.notes.map(n => n.id + '|' + n.title + '|' + n.body));
+    for (const t of obj.todos || []) if (!haveT.has(t.id + '|' + t.text)) { S.todos.push(t); nt++; }
+    for (const n of obj.notes || []) if (!haveN.has(n.id + '|' + n.title + '|' + n.body)) { S.notes.push(n); nn++; }
+    S.notes.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
+    save();
+    if (box) box.value = '';
+    askAlert(nt + nn ? 'Brought back ' + nt + ' to-do' + (nt === 1 ? '' : 's') + ' and ' + nn + ' note' + (nn === 1 ? '' : 's') + '. Nothing else was changed.' : 'That backup had no notes or to-dos that are missing here.');
+  } catch (e) {
+    askAlert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.');
+  }
+  render();
+}
+
 /* ---------- linking ---------- */
 
 async function checkLink() {
@@ -1215,6 +1267,7 @@ const ACTIONS = {
   shareCode: () => { shareCode(); return false; },
   copyCode: () => { copyCode(); return false; },
   restoreCode: () => { restoreCode(); return false; },
+  restoreNotes: () => { restoreNotesOnly(); return false; },
   import: () => { const f = $('importFile'); if (f) f.click(); return false; },
 };
 
@@ -1244,6 +1297,15 @@ function handleField(el, final) {
     case 'search':
       ui.search = v;
       setHTMLIfChanged($('actList'), activityListHTML());
+      return;
+    case 'rsearch':
+      ui.rsearch = v;
+      setHTMLIfChanged($('rvList'), reviewListHTML());
+      return;
+    case 'psearch':
+      ui.psearch = v;
+      setHTMLIfChanged($('todoList'), todoListHTML());
+      setHTMLIfChanged($('noteList'), noteListHTML());
       return;
     // budget
     case 'earnInput': ui.budgetInputs[d.id] = num(v); patchBudget(); return;
