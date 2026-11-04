@@ -159,6 +159,7 @@ Before using a real bank, remove the pretend one so fake purchases don't mix wit
 | What you see | What it means / what to do |
 |---|---|
 | "Wrong passphrase." | The passphrase in the app doesn't exactly match the `APP_PASSPHRASE` secret. Retype both. Check for stray spaces. |
+| "Your server is there, but it is refusing this app." | `ALLOWED_ORIGIN` doesn't match the app's address. It must be exactly `https://marvelelijah.github.io` (no slash at the end, no `/pocketledger`). Fix it in Cloudflare and Deploy. |
 | "Could not reach your server." | The Worker address is wrong or has a typo, or your phone is offline. Paste the address into a browser: you should get `{"error":"Wrong passphrase."}`. |
 | The address opens a Cloudflare error page | The code wasn't pasted fully or wasn't deployed. Redo Part 2b. |
 | "The server answered 500" or a message about `LEDGER` or `get` | The KV binding is missing or misnamed. Redo Part 2d, exactly `LEDGER`. |

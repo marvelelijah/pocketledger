@@ -725,7 +725,14 @@ async function linkApi(path, body) {
       headers: Object.assign({ Authorization: 'Bearer ' + l.passphrase }, body ? { 'Content-Type': 'application/json' } : {}),
       body: body ? JSON.stringify(body) : undefined,
     });
-  } catch (e) { throw new Error('Could not reach your server. Check the address and your connection.'); }
+  } catch (e) {
+    // A failed fetch can mean "no such server" or "the server refused this app's address (CORS)". Tell them apart.
+    let reachable = false;
+    try { await fetch(l.url.replace(/\/+$/, '') + '/status', { mode: 'no-cors' }); reachable = true; } catch (e2) { /* really unreachable */ }
+    throw new Error(reachable
+      ? 'Your server is there, but it is refusing this app. In Cloudflare open your Worker, then Settings, then Variables and Secrets, and set ALLOWED_ORIGIN to exactly ' + location.origin + ' (no slash at the end). Deploy, then try again.'
+      : 'Could not reach your server. Check the address. Opening it in a browser should show {"error":"Wrong passphrase."}.');
+  }
   let data = null;
   try { data = await res.json(); } catch (e) { /* not json */ }
   if (!res.ok) throw new Error((data && data.error) || 'The server answered ' + res.status);

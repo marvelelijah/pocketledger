@@ -14,7 +14,9 @@ const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://produ
 
 export default {
   async fetch(req, env) {
-    const allowed = String(env.ALLOWED_ORIGIN || 'https://marvelelijah.github.io').split(',').map(s => s.trim());
+    // Tolerate a trailing slash or a path in the setting (https://site.github.io/ or .../pocketledger/)
+    const norm = s => { try { return new URL(s.trim()).origin; } catch (e) { return s.trim().replace(/\/+$/, ''); } };
+    const allowed = String(env.ALLOWED_ORIGIN || 'https://marvelelijah.github.io').split(',').map(norm);
     const origin = req.headers.get('Origin') || '';
     const cors = {
       'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : allowed[0],
