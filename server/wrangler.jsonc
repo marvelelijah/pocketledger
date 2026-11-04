@@ -9,7 +9,7 @@
   "compatibility_date": "2025-09-01",
   "workers_dev": true,
   "vars": {
-    "PLAID_ENV": "sandbox",                              // change to "production" when you go live
+    "PLAID_ENV": "production",                              // change to "production" when you go live
     "ALLOWED_ORIGIN": "https://elijahhalford.com"
     // "REDIRECT_URI": "https://elijahhalford.com/pocketledger/"   // uncomment for OAuth banks (Chase etc.)
   },
