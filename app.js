@@ -1007,11 +1007,11 @@ async function checkLink() {
         askConfirm('Your server has a linked bank. Clear the sample data and bring in your real accounts?', 'clear & sync', async () => {
           startFresh(); S.settings.linked = true; save();
           ui.linkMsg = 'Syncing…'; render();
-          await doSync(); ui.linkMsg = syncError || 'Synced.'; render();
+          await doSync(); ui.linkMsg = syncError || ('Synced. ' + syncInfo); render();
         });
       } else if (!S.settings.linked) {
         S.settings.linked = true; save();
-        doSync().then(() => { ui.linkMsg = syncError || 'Synced.'; render(); });
+        doSync().then(() => { ui.linkMsg = syncError || ('Synced. ' + syncInfo); render(); });
       }
     }
   } catch (e) { ui.linkMsg = e.message; }
@@ -1044,7 +1044,7 @@ function plaidHandlers() {
         await doSync();
         const st = await linkApi('/status').catch(() => null);
         if (st) ui.linkItems = st.items;
-        ui.linkMsg = syncError ? syncError : 'Linked and synced. If nothing shows yet, wait a minute and tap sync now.';
+        ui.linkMsg = syncError ? syncError : 'Linked. ' + syncInfo;
       } catch (e) { ui.linkMsg = e.message; }
       ui.tab = 'settings'; render();
     },
@@ -1109,7 +1109,7 @@ const ACTIONS = {
     if (S.useSampleData) askConfirm('Linking real accounts clears the sample data first. Continue?', 'continue', () => { startFresh(); openPlaid(); });
     else { openPlaid(); return false; }
   },
-  syncNow: () => { ui.linkMsg = 'Syncing…'; doSync().then(() => { ui.linkMsg = syncError ? syncError : 'Synced just now.'; render(); }); },
+  syncNow: () => { ui.linkMsg = 'Syncing…'; doSync().then(() => { ui.linkMsg = syncError ? syncError : 'Synced. ' + syncInfo; render(); }); },
   unlinkItem: d => askConfirm('Unlink this bank? Your history in the app stays; no new purchases will arrive.', 'unlink', async () => {
     try {
       await linkApi('/unlink', { item_id: d.id });

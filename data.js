@@ -773,12 +773,21 @@ function ingestLinked(res) {
   save();
 }
 
+let syncInfo = '';
 async function syncLinked() {
   try {
-    let res, guard = 0;
-    do { res = await linkApi('/sync'); ingestLinked(res); guard++; } while (res.more && guard < 6);
+    let res, guard = 0, got = 0, accts = 0, older = 0;
+    const cutoff = new Date((S.settings.countFrom || firstOfMonthISO()) + 'T00:00:00');
+    do {
+      res = await linkApi('/sync'); ingestLinked(res); guard++;
+      got += (res.added || []).length; if (res.accounts && res.accounts.length) accts = res.accounts.length;
+      older += (res.added || []).filter(t => new Date(t.date) < cutoff).length;
+    } while (res.more && guard < 6);
     S.lastSync = new Date().toISOString();
     syncError = null;
+    syncInfo = accts + ' account' + (accts === 1 ? '' : 's') + ', ' + got + ' new purchase' + (got === 1 ? '' : 's') + ' from the bank'
+      + (older ? ' (' + older + ' older than ' + S.settings.countFrom + ', kept in Activity as history only)' : '')
+      + (got === 0 ? '. Banks often take a few minutes to send history after linking, so tap sync now again shortly.' : '.');
   } catch (e) { syncError = e.message || String(e); }
   save();
 }
