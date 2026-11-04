@@ -9,7 +9,7 @@ This repo is published with GitHub Pages. Open the live app link above in **Safa
 
 ## How it works
 - **Review (opens first):** a bar at the top shows how much of this month's spending money is left. Tap **＋ Purchase** when you buy something, then tap a pot to deduct from it. Purchases are rounded when deducted (nearest dollar by default; change it in the Budget tab's Month-end check).
-- **Look:** a terminal style borrowed from elijahhalford.com (IBM Plex Mono, outlined sections, lowercase labels) on warm charcoal and cream. Emoji are tinted to their category color. Pop-ups, menus and confirmations are all inside the app, and any sheet can be dragged down to close.
+- **Theme:** a terminal style borrowed from elijahhalford.com (IBM Plex Mono throughout, outlined sections, lowercase labels), six palettes, dark/light/auto, and sharp or rounded corners. Theme changes cross-fade; the highlight in button rows slides. Emoji are tinted to their category color. Pop-ups, menus and confirmations are all inside the app, and any sheet can be dragged down to close.
 - **Home:** your pots (Spending, Savings, plus any you add with "＋ Add pot or goal"). Tap a pot to open its page: balance, goal progress, money in, money out. Tap a transaction to edit it, or use **Select** to move several at once.
 - **Income:** regular sources are matched automatically by bank text. A source marked "varies month to month" (like freelance) has no expected amount. Use ＋ to count any other deposit as extra income.
 - **Budget (always manual):** this month's income deposits are listed under each source and totaled for you (tap Edit only to fix a difference). Then set constant expenses and the savings percentage and tap Apply. Updating a month replaces its numbers so nothing double counts. 
@@ -67,7 +67,12 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 - Settings shows the app version at the bottom so you can confirm you are on the latest copy.
 
 ## Latest changes
-- Five tabs (Review, Home, Activity, Income, Budget). Windows in Budget, Settings and Income can be collapsed and stay that way.
+- Four tabs (Review, Home, Activity, Budget). Income sources and this month's deposits live in Budget. Windows in Budget and Settings can be collapsed and stay that way.
+- **Monthly statements:** when a month ends, Home shows a notification; Budget > Statements lists every month. Each has income, spending habits (per-day average, no-spend days, priciest day, weekday), categories vs last month, top places, budget vs actual, goal progress, pot balances, accounts and every transaction. Save as PDF, share, or CSV. Built on the device, sent nowhere. The demo has one ready.
+- **Security:** optional app lock (passcode, plus Face ID / Touch ID through the device's passkey check), auto-lock delay, passcode before backup/restore/erase/statement export, and hide-amounts. The passcode is stored only as a salted hash and is not in backups. The lock keeps people out of the app; it does not encrypt the stored data.
+- **Currency:** follows the phone's region unless you pick one in Settings. Rounding is "Nearest $" (or your currency's symbol) or exact cents.
+- **Home-screen app:** solid status-bar strip, safe-area padding, edge swipe-back disabled. Icon: centered green dollar sign.
+- A **Finance** category covers Roth IRA, 401(k) and brokerage transfers.
 - Review shows Spending and every other pot or goal in a swipeable row. Rounding differences go straight to Spending, so there is no month-end check.
 - Applying or updating the monthly budget asks first and can be undone. Erase, clear and restore need a typed word.
 - Themes: Dusk (default), Harvest, Lagoon, Midnight, Sandstone, Garnet, each with dark and light. Every text colour is checked to at least 4.5:1 contrast (WCAG 2.x).

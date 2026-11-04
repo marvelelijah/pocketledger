@@ -4,7 +4,7 @@ const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
-const TAB_KEYS = ['review', 'home', 'activity', 'income', 'budget'];
+const TAB_KEYS = ['review', 'home', 'activity', 'budget'];
 const ui = {
   tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
@@ -100,7 +100,7 @@ function potCard(p) {
 
 function backupBanner() {
   return backupDue() ? `<div class="card banner"><b>Time for a backup</b>
-    <div class="small">${S.lastExport ? daysSinceBackup() + ' days since your last backup.' : 'You haven\'t backed up yet.'} Your data lives only on this phone.</div>
+    <div class="small">${S.lastExport ? daysSinceBackup() + ' days since your last backup.' : 'You haven\'t backed up yet.'} Your data lives only on this device.</div>
     <button class="btn full" style="margin-top:8px" data-action="shareCode">Email myself a backup code</button></div>` : '';
 }
 
@@ -110,11 +110,12 @@ function homeView() {
   <div class="row"><h1>Home</h1>
     ${S.useSampleData ? `<button class="link" data-action="refresh">${ui.syncing ? 'Syncing…' : 'Refresh'}</button>` : ''}</div>
 
+  ${(() => { const nk = newStatementKey(); return nk ? `<div class="card tappable notice" data-action="openStatement" data-id="${nk}"><div class="row"><b>${emo('📄')} ${esc(monthLabel(nk))} statement is ready</b><button class="link" data-action="dismissStatement" data-id="${nk}" aria-label="Dismiss">✕</button></div><div class="muted small">Spending habits, goal progress and every transaction. Tap to open, then save as PDF or share.</div></div>` : ''; })()}
   <div class="grid2">${S.pots.map(potCard).join('')}</div>
   <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
 
   <div class="grid3" style="margin-top:12px">
-    <div class="card tappable" data-action="tab" data-tab="income"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
+    <div class="card tappable" data-action="tab" data-tab="budget"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
     <div class="card tappable" data-action="openPot" data-id="spending"><div class="muted small">Spent</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
     <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
@@ -413,41 +414,13 @@ function reviewView() {
 
 /* ---------- income ---------- */
 
-function incomeView() {
-  const now = new Date();
-  const items = countedIncome(now);
-  const total = totalEarnings(now);
-  return `<div class="row"><h1>Income</h1><button class="link plusbtn" data-action="addExtra" aria-label="Add extra income">＋</button></div>
-
-  ${CD('i-src', 'Income sources', true, '<b class="pos">' + usd(total) + '</b>')}
-    ${S.incomeSources.map(s => {
-      const got = receivedFrom(s, now), avg = sourceMonthlyAverage(s);
-      const avgTxt = avg ? `<span class="muted small">avg ${usd(avg)}/mo</span>` : '';
-      if (s.variable) {
-        return `<div style="padding:6px 0"><div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
-          <div class="row"><span class="muted small">varies</span>${avgTxt}</div></div>`;
-      }
-      const pct = s.expectedAmount > 0 ? Math.min(got / s.expectedAmount, 1) : 0;
-      return `<div style="padding:6px 0">
-        <div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
-        <div class="bar">${fill('src-' + s.id, pct * 100)}</div>
-        <div class="row"><span class="muted small">of ${usd(s.expectedAmount)}</span>${avgTxt}</div></div>`;
-    }).join('') || '<div class="muted">No income sources yet.</div>'}
-    <button class="link" data-action="editSources">Edit sources</button>
-  ${CE}
-
-  ${CD('i-count', 'Counted this month', true)}
-    ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">Nothing counted yet.</div>'}
-  ${CE}`;
-}
-
 /* ---------- income history ---------- */
 
 const histMonth = i => { const n = MONTH_NAMES[i % 12]; return n[0].toUpperCase() + n.slice(1, 3) + ' ' + Math.floor(i / 12); };
 
 function histImportCard(first) {
   return `<div class="card"><h2>${first ? 'Bring in your money-made lists' : 'Add or update records'}</h2>
-    <div class="muted small" style="margin-bottom:8px">Paste the text of your lists (one or several years at once), or choose the files. Lines look like <b>$1,809.24 Employer</b> under a month name, with <b>MONEY MADE 2026</b> above them. Pasting a year again replaces that year, so nothing doubles. This stays on this phone and is never part of the app's code.</div>
+    <div class="muted small" style="margin-bottom:8px">Paste the text of your lists (one or several years at once), or choose the files. Lines look like <b>$1,809.24 Employer</b> under a month name, with <b>MONEY MADE 2026</b> above them. Pasting a year again replaces that year, so nothing doubles. This stays on this device and is never part of the app's code.</div>
     <textarea id="histText" rows="6" placeholder="MONEY MADE 2026&#10;OCTOBER&#10;$1,809.24 Employer"></textarea>
     <div class="btn-row"><button class="btn primary" data-action="importHist">Read pasted text</button><button class="btn" data-action="pickHist">Choose files</button></div>
     <input type="file" id="histFile" accept=".txt,text/plain" multiple hidden data-change="histFiles">
@@ -457,7 +430,7 @@ function histImportCard(first) {
 const medianOf = a => { const v = a.slice().sort((x, y) => x - y), n = v.length; return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : 0; };
 
 function incomeHistoryView() {
-  const back = `<div class="row"><button class="link" data-action="tab" data-tab="income">‹ income</button></div>`;
+  const back = `<div class="row"><button class="link" data-action="tab" data-tab="budget">‹ budget</button></div>`;
   if (!S.incomeHistory.length) return `${back}<h1>Income history</h1>
     <div class="card"><div class="muted small">Your past income lets the app see where money comes from: which jobs are still paying, which have ended, which months are bigger, and which bank deposits should count as income.</div></div>
     ${histImportCard(true)}`;
@@ -491,7 +464,7 @@ function incomeHistoryView() {
     </div>`).join('')}
     ${ready.length ? `<div class="muted small" style="margin-top:8px">Not set up yet as income sources: ${ready.map(o => esc(o.name)).join(', ')}.</div>
       <button class="btn primary full" style="margin-top:8px" data-action="setupSources">Set up my current income sources</button>`
-      : '<div class="muted small" style="margin-top:8px">Your current income sources are all set up. Edit them any time on the Income tab.</div>'}
+      : '<div class="muted small" style="margin-top:8px">Your current income sources are all set up. Edit them any time on the Budget tab.</div>'}
   </div>
 
   <div class="card"><h2>Check against your bank</h2>
@@ -512,7 +485,7 @@ function incomeHistoryView() {
   </div>
 
   ${histImportCard(false)}
-  <button class="link small danger" data-action="clearHist">Remove my income history from this phone</button>`;
+  <button class="link small danger" data-action="clearHist">Remove my income history from this device</button>`;
 }
 
 /* ---------- budget ---------- */
@@ -605,9 +578,28 @@ function budgetView() {
   const run = runFor(now);
   const c = budgetCalc();
   const extra = countedIncome(now).filter(t => t.extraIncomeLabel);
-  return `<h1>Budget</h1>
+  const items = countedIncome(now);
+  const total = totalEarnings(now);
+  return `<div class="row"><h1>Budget</h1><button class="link plusbtn" data-action="addExtra" aria-label="Add extra income">＋</button></div>
   <div class="card row"><b style="font-size:17px">${monthName(now)}</b>
     <span class="badge ${run ? 'b-hi' : 'b-mid'}">${run ? 'Applied' : 'Not applied yet'}</span></div>
+
+  ${CD('i-src', 'Income sources', true, '<b class="pos">' + usd(total) + '</b>')}
+    ${S.incomeSources.map(s => {
+      const got = receivedFrom(s, now), avg = sourceMonthlyAverage(s);
+      const avgTxt = avg ? `<span class="muted small">avg ${usd(avg)}/mo</span>` : '';
+      if (s.variable) {
+        return `<div style="padding:6px 0"><div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
+          <div class="row"><span class="muted small">varies</span>${avgTxt}</div></div>`;
+      }
+      const pct = s.expectedAmount > 0 ? Math.min(got / s.expectedAmount, 1) : 0;
+      return `<div style="padding:6px 0">
+        <div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
+        <div class="bar">${fill('src-' + s.id, pct * 100)}</div>
+        <div class="row"><span class="muted small">of ${usd(s.expectedAmount)}</span>${avgTxt}</div></div>`;
+    }).join('') || '<div class="muted">No income sources yet.</div>'}
+    <div class="btn-row"><button class="link" data-action="editSources">Edit sources</button><button class="link" data-action="openHist">Income history</button></div>
+  ${CE}
 
   ${CD('b-earn', 'Earnings this month', true)}
     ${c.rows.map(r => {
@@ -623,9 +615,17 @@ function budgetView() {
           ${r.edited ? `<button class="link small" data-action="resetEarn" data-id="${r.sourceId}">Reset</button>`
             : `<button class="link small" data-action="editEarn" data-id="${r.sourceId}">Edit</button>`}</div>
       </div>`;
-    }).join('') || '<div class="muted">Add an income source on the Income tab.</div>'}
+    }).join('') || '<div class="muted">Add an income source above.</div>'}
     ${extra.length ? `<div class="day">Extra income · already in your pots</div>${extra.map(t => txRow(t, incomeTag(t))).join('')}` : ''}
     <div class="field" style="border-top:1px solid var(--line);margin-top:6px"><span><b>Earnings to budget</b></span><b id="earn-total">${usd(c.earn)}</b></div>
+  ${CE}
+
+  ${CD('b-count', 'Counted this month', true)}
+    ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">Nothing counted yet.</div>'}
+  ${CE}
+
+  ${CD('b-stmt', 'Statements', false, esc(String(statementKeys().length)))}
+    ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small">${usd(st.income)} in · ${usd(st.spent)} out</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
   ${CE}
 
   ${CD('b-fixed', 'Constant monthly expenses', true)}
@@ -653,7 +653,7 @@ function budgetView() {
 
 function backupCard() {
   return `${CD('s-backup', 'Backup &amp; restore', false)}
-    <div class="muted small" style="margin-bottom:8px">${S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'No backup yet.'} Your data lives only on this phone, so keep a copy somewhere private.</div>
+    <div class="muted small" style="margin-bottom:8px">${S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'No backup yet.'} Your data lives only on this device, so keep a copy somewhere private.</div>
     <button class="btn primary full" data-action="shareCode">Email myself a backup code</button>
     <div class="muted small" style="margin:6px 0 10px">Opens the share sheet. Choose Mail and send it to yourself. It can't send by itself; a web page has no way to email on its own.</div>
     <div class="btn-row"><button class="btn" data-action="copyCode">Copy code</button><button class="btn" data-action="export">Save file</button></div>
@@ -662,7 +662,7 @@ function backupCard() {
     <div class="btn-row"><button class="btn" data-action="restoreCode">Restore from code</button><button class="btn" data-action="import">Import file</button></div>
     <button class="btn full" style="margin-top:8px" data-action="restoreNotes">Bring back only my notes &amp; to-dos from this code</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden data-change="import">
-    <div class="muted small" style="margin-top:8px">Restoring replaces everything on this phone. The code contains your financial data, so keep that email private and never post it online.</div>
+    <div class="muted small" style="margin-top:8px">Restoring replaces everything on this device. The code contains your financial data, so keep that email private and never post it online.</div>
   ${CE}`;
 }
 
@@ -790,7 +790,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-04 g';
+const APP_VERSION = '2026-11-04 h';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -808,6 +808,7 @@ function settingsView() {
   const standalone = window.navigator.standalone === true;
   const demoCard = DEMO
     ? `${CD('s-demo','Demo mode is on',true,'','demo-card')}<div class="muted small">Everything here is made up. Your real data is safe and hidden.</div>
+        <div class="btn-row"><button class="btn primary" data-action="openStatement" data-id="${shiftKey(monthKey(new Date()), -1)}">view last month's statement</button></div>
         <div class="btn-row"><button class="btn primary" data-action="demoOff">exit demo</button><button class="btn" data-action="demoReset">reset demo</button></div>${CE}`
     : `${CD('s-demo','Demo mode',false)}<div class="muted small">Show the app with made-up numbers.</div>
         <div class="btn-row"><button class="btn" data-action="demoOn">start demo</button></div>${CE}`;
@@ -834,8 +835,7 @@ function settingsView() {
       • Some banks (Chase) need the first link done in Safari${standalone ? ' (you are in the home-screen app now)' : ''}.<br>
       • Setup steps: <b>server/README.md</b>.
       </div></details>
-  ${CE}
-  ${backupCard()}`;
+  ${CE}`;
   return `<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>
   <h1>Settings</h1>
   ${DEMO ? '' : ''}
@@ -844,11 +844,34 @@ function settingsView() {
     <div class="field"><span>Open on</span>${selBtn('startTab', '')}</div>
     <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
     <div class="field"><span>Round spending</span>${selBtn('roundMode', '')}</div>
+    <div class="field"><span>Currency</span>${selBtn('currency', '')}</div>
     <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
   ${CE}
 
-  ${CD('s-look','Look',false)}
+  ${CD('s-sec','Security',false)}
+    ${lockOn() ? `
+    <div class="field"><span>Passcode</span><button class="link" data-action="lockChange">change</button></div>
+    ${ui.bioAvail ? `<div class="muted small" style="margin:12px 0 6px">Face ID / Touch ID</div>
+    ${seg([['on', 'On'], ['off', 'Off']], lockCfg().cred ? 'on' : 'off', 'bioToggleSeg')}` : ''}
+    <div class="field"><span>Lock after leaving</span>${selBtn('lockDelay', '')}</div>
+    <div class="muted small" style="margin:12px 0 6px">Passcode for backup, restore, erase &amp; statements</div>
+    ${seg([['on', 'On'], ['off', 'Off']], st.lockSensitive ? 'on' : 'off', 'setSens')}
+    <div class="btn-row"><button class="btn" data-action="lockNow">lock now</button><button class="btn danger" data-action="lockOff">turn off lock</button></div>`
+    : `<div class="muted small" style="margin-bottom:8px">Ask for a passcode${ui.bioAvail ? ' or Face ID' : ''} each time the app opens.</div>
+    <div class="btn-row"><button class="btn primary" data-action="lockSetup">set up app lock</button></div>`}
+    <div class="muted small" style="margin:12px 0 6px">Hide amounts</div>
+    ${seg([['on', 'On'], ['off', 'Off']], st.hideAmounts ? 'on' : 'off', 'setHide')}
+    <details class="info"><summary>Good to know</summary><div class="muted small">
+      • The lock keeps people out of the app. Your data is not encrypted on the phone, so keep your phone's own passcode on too.<br>
+      • Face ID uses your phone's built-in check; the passcode always works as a backup.<br>
+      • Forgot the passcode? It can't be recovered: erase this device and restore a backup.<br>
+      • Backups never include the passcode.</div></details>
+  ${CE}
+
+  ${CD('s-look','Theme',false)}
     <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
+    <div class="muted small" style="margin:12px 0 6px">Corners</div>
+    ${seg([['sharp', 'Sharp'], ['rounded', 'Rounded']], st.corners || 'sharp', 'setCorners')}
     <div class="muted small" style="margin:12px 0 6px">Mode</div>
     ${seg(MODES, st.mode, 'setMode')}
     <div class="muted small" style="margin:12px 0 6px">Text size</div>
@@ -859,14 +882,16 @@ function settingsView() {
   ${bank}
   ${demoCard}
 
-  ${CD('s-phone','This phone',false)}
+  ${CD('s-phone','This device',false)}
     <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button>${DEMO ? '' : '<button class="btn" data-action="clearTx">clear transactions</button>'}</div>
     ${DEMO ? '' : '<div class="btn-row"><button class="btn danger" data-action="eraseAll">erase all data</button></div>'}
     <div class="muted small" style="margin-top:8px">Version ${APP_VERSION}</div>
-  ${CE}`;
+  ${CE}
+
+  ${backupCard()}`;
 }
 
-const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView };
+const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, budget: budgetView };
 
 /* ---------- modals ---------- */
 
@@ -878,7 +903,7 @@ function sheet(title, inner, doneAction) {
 }
 
 function seg(options, current, action, extra) {
-  return `<div class="seg ${options.length > 3 ? 'many' : ''}">${options.map(([val, label]) =>
+  return `<div class="seg ${options.length > 3 ? 'many' : ''}" data-sg="${esc(action + (extra || ''))}"><i class="ind"></i>${options.map(([val, label]) =>
     `<button class="${current === val ? 'on' : ''}" data-action="${action}" data-pot="${esc(val)}" ${extra || ''}>${label}</button>`).join('')}</div>`;
 }
 
@@ -1030,14 +1055,16 @@ function pickDef(field, id) {
   const pots = () => S.pots.map(p => [p.id, emo(p.icon) + ' ' + esc(p.name)]);
   switch (field) {
     case 'checkMonth': return { title: 'Month', options: checkKeys().map(k => [k, monthLabel(k)]), current: ui.checkMonth };
-    case 'roundMode': return { title: 'Round spending', options: [['nearest', 'Nearest dollar'], ['up', 'Round up'], ['off', 'Exact cents']], current: S.roundMode };
+    case 'roundMode': return { title: 'Round spending', options: [['nearest', 'Nearest ' + currencySymbol()], ['off', 'Exact cents']], current: S.roundMode === 'off' ? 'off' : 'nearest' }
+    case 'lockDelay': return { title: 'Lock after leaving', options: [['0', 'Right away'], ['60', '1 minute'], ['300', '5 minutes'], ['900', '15 minutes']], current: String((lockCfg() || {}).delay ?? 60) };
+    case 'currency': return { title: 'Currency', options: [['auto', 'Automatic (' + deviceCurrency() + ')'], ...CURRENCIES.map(c => [c[0], c[0] + ' · ' + c[1]])], current: S.settings.currency || 'auto' };
     case 'adjTarget': return { title: 'Put it in', options: [...pots(), ['all', 'Split across all pots']], current: ui.adjTarget };
     case 'setcat': { const t = txById(id); return { title: 'Category', options: Object.entries(CATS).map(([k, v]) => [k, emo(v.icon, v.color) + ' ' + v.title]), current: t && t.category }; }
     case 'extraLabel': return { title: 'What was it?', options: ['Tips', 'Gift', 'Refund', 'Side gig', 'Other'].map(l => [l, l]), current: m && m.label };
     case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
     case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
     case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
-    case 'startTab': return { title: 'Open on', options: TABS.map(t => [t[0], t[2]]), current: S.settings.startTab || 'review' };
+    case 'startTab': return { title: 'Open on', options: TABS.map(t => [t[0], t[2]]), current: TAB_KEYS.includes(S.settings.startTab) ? S.settings.startTab : 'review' };
     case 'defaultPot': return { title: 'New purchases come out of', options: pots(), current: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' };
     case 'backupDays': return { title: 'Backup reminder', options: [['7', 'Every 7 days'], ['14', 'Every 14 days'], ['30', 'Every 30 days'], ['0', 'Off']], current: String(S.settings.backupDays) };
     case 'bulkTarget': {
@@ -1118,6 +1145,119 @@ function deductibleModal() {
     : `<div class="card"><div class="muted">Nothing counted yet in ${year}. Purchases categorized as ${cats.map(k => CATS[k].title).join(' or ')} show up here.</div></div>`}`);
 }
 
+
+/* ---------- monthly statements ---------- */
+
+const pctTxt = x => Math.round(x * 100) + '%';
+const shortDay = iso => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+function deltaTxt(now, before, goodWhenDown) {
+  if (!before) return '';
+  const d = (now - before) / before, up = d > 0.005, down = d < -0.005;
+  if (!up && !down) return '<span class="muted small">same as last month</span>';
+  const good = goodWhenDown ? down : up;
+  return `<span class="small ${good ? 'pos' : 'neg'}">${up ? '▲' : '▼'} ${Math.abs(Math.round(d * 100))}% vs last month</span>`;
+}
+
+function statementModal(key) {
+  const st = monthStatement(key);
+  const f = (k, v) => `<div class="field"><span class="muted">${k}</span><b>${v}</b></div>`;
+  const prevName = monthLabel(st.prev.key).split(' ')[0];
+  const habits = [
+    f('Spent per day', usd(st.dailyAvg)),
+    f('Purchases', st.count + ' · avg ' + usd(st.avgPurchase)),
+    f('No-spend days', st.noSpendDays + ' of ' + st.elapsed),
+    st.priciestDay ? f('Priciest day', monthName(keyToDate(key)).split(' ')[0] + ' ' + st.priciestDay.day + ' · ' + usd(st.priciestDay.total)) : '',
+    st.busiestWeekday ? f('Biggest spending weekday', st.busiestWeekday.name + 's · ' + usd(st.busiestWeekday.total)) : '',
+    f('Bills', usd(st.recurring)),
+  ].join('');
+  const cats = st.byCat.map(c => `<div style="padding:5px 0"><div class="row"><span>${emo(c.icon, c.color)} ${esc(c.title)}</span><b>${usd(c.total)}</b></div>
+      <div class="bar">${fill('st-' + key + c.cat, c.pct * 100, 'background:' + c.color)}</div>
+      <div class="row"><span class="muted small">${pctTxt(c.pct)} of spending · ${c.count} purchase${c.count === 1 ? '' : 's'}</span>${st.prev.has && c.prev ? `<span class="muted small">${prevName}: ${usd(c.prev)}</span>` : ''}</div></div>`).join('') || '<div class="muted">No spending this month.</div>';
+  const budget = st.budget ? `<div class="card"><h2>Budget</h2>
+      ${f('Earnings budgeted', usd(st.budget.earnings))}${f('Constant expenses', usd(st.budget.fixed))}${f('Set aside for savings', usd(st.budget.savings))}${f('Left to spend', usd(st.budget.allowance))}
+      ${st.budget.allowance ? `<div class="bar thick">${fill('st-' + key + 'bud', Math.min(st.budget.spentVsAllowance * 100, 100), st.budget.spentVsAllowance > 1 ? 'background:var(--red)' : '')}</div>
+      <div class="muted small">Spent ${usd(st.spent)} of ${usd(st.budget.allowance)} (${pctTxt(st.budget.spentVsAllowance)}). ${st.budget.spentVsAllowance > 1 ? 'Over by ' + usd(st.spent - st.budget.allowance) + '.' : usd(st.budget.allowance - st.spent) + ' left.'}</div>` : ''}</div>` : '';
+  const goals = st.goals.length ? `<div class="card"><h2>Goals</h2>${st.goals.map(g => `<div style="padding:5px 0"><div class="row"><span>${emo(g.icon)} ${esc(g.name)}</span><b>${usd(g.closing)} <span class="muted small">of ${usd(g.target)}</span></b></div>
+      <div class="bar">${fill('st-' + key + 'g' + g.id, g.pct * 100)}</div>
+      <div class="row"><span class="muted small">${pctTxt(g.pct)} there</span><span class="muted small">${g.change ? (g.change > 0 ? '+' : '−') + usd(Math.abs(g.change)) + ' this month' : 'no change this month'}</span></div></div>`).join('')}</div>` : '';
+  const pots = `<div class="card"><h2>Pots at month end</h2>${st.pots.map(p => `<div class="field"><span>${emo(p.icon)} ${esc(p.name)}</span><span><b>${usd(p.closing)}</b> <span class="muted small">${p.change ? (p.change > 0 ? '+' : '−') + usd(Math.abs(p.change)) : ''}</span></span></div>`).join('')}</div>`;
+  const accts = st.accounts.length ? `<div class="card"><h2>Accounts <span class="muted small">(balances today)</span></h2>${st.accounts.map(a => `<div class="field"><span>${esc(a.name)}${a.mask ? ' <span class="muted small">··' + esc(a.mask) + '</span>' : ''}</span><b class="${a.owed ? 'neg' : ''}">${a.owed ? '−' : ''}${usd(Math.abs(a.balance))}</b></div>`).join('')}</div>` : '';
+  const txList = st.txs.map(t => `<div class="field"><span style="min-width:0"><span class="muted small">${shortDay(t.date)}</span> ${esc(t.name)}<br><span class="muted small">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}</span></span><b class="${t.amount > 0 ? 'pos' : ''}">${t.amount > 0 ? '+' : '−'}${usd(Math.abs(t.amount))}</b></div>`).join('');
+  return sheet(esc(st.label) + (st.partial ? ' · so far' : ''), `
+    <div class="btn-row" style="margin-bottom:12px"><button class="btn primary" data-action="stmtPrint">save as PDF</button><button class="btn" data-action="stmtShare">share</button><button class="btn" data-action="stmtCsv">CSV</button></div>
+    <div class="card"><h2>Summary</h2>
+      ${f('Income', '<span class="pos">' + usd(st.income) + '</span>')}
+      ${f('Spent', usd(st.spent))}
+      ${st.invested ? f('Saved &amp; invested', usd(st.invested)) : ''}
+      ${f('Kept', usd(st.kept))}
+      ${st.savingsRate != null ? f('Kept of income', pctTxt(Math.max(st.savingsRate, 0))) : ''}
+      ${st.prev.has ? `<div style="margin-top:4px">${deltaTxt(st.spent, st.prev.spent, true)}${st.prev.income ? ' · ' + deltaTxt(st.income, st.prev.income, false) : ''}</div>` : ''}
+      ${st.partial ? '<div class="muted small" style="margin-top:6px">This month isn\'t over yet; numbers are as of today.</div>' : ''}
+    </div>
+    <div class="card"><h2>Spending habits</h2>${habits}</div>
+    <div class="card"><h2>Where it went</h2>${cats}</div>
+    ${st.merchants.length ? `<div class="card"><h2>Top places</h2>${st.merchants.map(m => `<div class="field"><span>${esc(m.name)} <span class="muted small">×${m.count}</span></span><b>${usd(m.total)}</b></div>`).join('')}</div>` : ''}
+    ${st.largest.length ? `<div class="card"><h2>Largest purchases</h2>${st.largest.map(m => `<div class="field"><span><span class="muted small">${shortDay(m.date)}</span> ${esc(m.name)}</span><b>${usd(m.amount)}</b></div>`).join('')}</div>` : ''}
+    ${budget}${goals}${pots}
+    ${st.incomeBy.length ? `<div class="card"><h2>Income</h2>${st.incomeBy.map(i => `<div class="field"><span>${esc(i.name)}</span><b class="pos">${usd(i.total)}</b></div>`).join('')}</div>` : ''}
+    ${accts}
+    <div class="card"><h2>All transactions <span class="muted small">(${st.txs.length})</span></h2>${txList || '<div class="muted">Nothing this month.</div>'}</div>`);
+}
+
+/* A plain, printable version of the statement: black on white, one file, nothing loaded from the internet. */
+function statementDoc(st) {
+  const was = HIDE_AMOUNTS; HIDE_AMOUNTS = false;
+  try { return statementDocInner(st); } finally { HIDE_AMOUNTS = was; }
+}
+function statementDocInner(st) {
+  const m = x => usd(x);
+  const sec = (t, body) => `<h2>${esc(t)}</h2>${body}`;
+  const tbl = (rows, head) => `<table>${head ? '<tr>' + head.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>' : ''}${rows.map(r => '<tr>' + r.map((c, i) => `<td class="${i ? 'r' : ''}">${c}</td>`).join('') + '</tr>').join('')}</table>`;
+  const habits = [['Spent per day', m(st.dailyAvg)], ['Purchases', st.count + ' (average ' + m(st.avgPurchase) + ')'], ['No-spend days', st.noSpendDays + ' of ' + st.elapsed],
+    ...(st.priciestDay ? [['Priciest day', 'day ' + st.priciestDay.day + ': ' + m(st.priciestDay.total)]] : []), ...(st.busiestWeekday ? [['Biggest spending weekday', st.busiestWeekday.name + 's: ' + m(st.busiestWeekday.total)]] : []), ['Bills', m(st.recurring)]];
+  const pc = (a, b) => b ? ` (${a >= b ? '+' : '−'}${Math.abs(Math.round((a - b) / b * 100))}% vs last month)` : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PocketLedger statement ${esc(st.label)}</title>
+<style>@page{margin:16mm}body{font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#111;background:#fff;max-width:760px;margin:24px auto;padding:0 16px}h1{font-size:22px;margin:0}h2{font-size:14px;margin:22px 0 6px;border-bottom:1px solid #111;padding-bottom:3px;text-transform:lowercase}
+table{width:100%;border-collapse:collapse}td,th{padding:3px 6px 3px 0;text-align:left;vertical-align:top;border-bottom:1px solid #ddd}td.r,th:last-child{text-align:right}.bar{height:6px;background:#e5e5e5}.bar i{display:block;height:100%;background:#111}.muted{color:#666}.big td{font-size:15px}tr{break-inside:avoid}</style></head><body>
+<h1>PocketLedger statement</h1><div class="muted">${esc(st.label)}${st.partial ? ' (so far)' : ''} · made ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}</div>
+${sec('Summary', tbl([['Income', m(st.income)], ['Spent', m(st.spent)], ...(st.invested ? [['Saved & invested', m(st.invested)]] : []), ['Kept (income − spent)', m(st.kept)], ...(st.savingsRate != null ? [['Kept of income', pctTxt(Math.max(st.savingsRate, 0))]] : []), ...(st.prev.has ? [['Spending change', (st.prev.spent ? pc(st.spent, st.prev.spent).replace(/^ \(|\)$/g, '') : 'n/a')]] : [])]))}
+${sec('Spending habits', tbl(habits))}
+${sec('Where it went', tbl(st.byCat.map(c => [esc(c.title) + `<div class="bar"><i style="width:${Math.round(c.pct * 100)}%"></i></div>`, m(c.total) + ' · ' + pctTxt(c.pct)]), ['Category', 'Amount']))}
+${st.merchants.length ? sec('Top places', tbl(st.merchants.map(x => [esc(x.name) + ' ×' + x.count, m(x.total)]))) : ''}
+${st.largest.length ? sec('Largest purchases', tbl(st.largest.map(x => [shortDay(x.date) + ' ' + esc(x.name), m(x.amount)]))) : ''}
+${st.budget ? sec('Budget', tbl([['Earnings budgeted', m(st.budget.earnings)], ['Constant expenses', m(st.budget.fixed)], ['Set aside for savings', m(st.budget.savings)], ['Left to spend', m(st.budget.allowance)], ['Spent', m(st.spent) + (st.budget.allowance ? ' (' + pctTxt(st.budget.spentVsAllowance) + ' of it)' : '')]])) : ''}
+${st.goals.length ? sec('Goals', tbl(st.goals.map(g => [esc(g.name) + `<div class="bar"><i style="width:${Math.round(g.pct * 100)}%"></i></div>`, m(g.closing) + ' of ' + m(g.target) + ' · ' + pctTxt(g.pct) + (g.change ? ' · ' + (g.change > 0 ? '+' : '−') + m(Math.abs(g.change)) + ' this month' : '')]))) : ''}
+${sec('Pots at month end', tbl(st.pots.map(p => [esc(p.name), m(p.closing) + (p.change ? ' (' + (p.change > 0 ? '+' : '−') + m(Math.abs(p.change)) + ')' : '')])))}
+${st.incomeBy.length ? sec('Income', tbl(st.incomeBy.map(i => [esc(i.name), m(i.total)]))) : ''}
+${st.accounts.length ? sec('Accounts (balances today)', tbl(st.accounts.map(a => [esc(a.name) + (a.mask ? ' ··' + esc(a.mask) : ''), (a.owed ? '−' : '') + m(Math.abs(a.balance))]))) : ''}
+${sec('Transactions (' + st.txs.length + ')', tbl(st.txs.map(t => [shortDay(t.date) + ' ' + esc(t.name) + `<div class="muted">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}</div>`, (t.amount > 0 ? '+' : '−') + m(Math.abs(t.amount))])))}
+<p class="muted" style="margin-top:24px">Made on your device by PocketLedger. Nothing was sent anywhere.</p></body></html>`;
+}
+
+function statementCsv(st) {
+  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  return ['Date,Description,Category,Account,Amount,Pot,Note', ...st.txs.map(t => [t.date.slice(0, 10), q(t.name), q((CATS[t.category] || CATS.other).title), q(t.account), t.amount.toFixed(2), q(t.pot), q(t.note)].join(','))].join('\n');
+}
+
+async function shareFile(name, type, content, title) {
+  try {
+    const file = new File([content], name, { type });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function printStatement(key) {
+  const fr = document.createElement('iframe');
+  fr.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+  fr.srcdoc = statementDoc(monthStatement(key));
+  fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { shareFile('pocketledger-statement-' + key + '.html', 'text/html', statementDoc(monthStatement(key)), 'PocketLedger statement'); } setTimeout(() => fr.remove(), 60000); };
+  document.body.appendChild(fr);
+}
+
 function modalHTML() {
   const m = ui.modal;
   switch (m.type) {
@@ -1130,39 +1270,105 @@ function modalHTML() {
     case 'note': return noteModal();
     case 'pasteExp': return pasteExpModal();
     case 'deductible': return deductibleModal();
+    case 'statement': return statementModal(m.key);
   }
   return '';
 }
 
 /* ---------- render ---------- */
 
-const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget']];
+const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['budget', '📊', 'Budget']];
 
 const ghostRoot = document.createElement('div');
 ghostRoot.id = 'ghost-root';
 document.body.appendChild(ghostRoot);
 
 let lastTab = null;
-const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k === 'ihist' ? 'income' : k)), 0);
+const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k === 'ihist' ? 'budget' : k)), 0);
+
+/* ---------- motion helpers ---------- */
+const motionOff = () => S.settings.motion === 'off' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+
+/* A frozen copy of what is on screen, laid over the page so it can fade away while the new screen appears. */
+function makeGhost(withTabbar) {
+  const g = document.createElement('div');
+  g.className = 'ghost-view';
+  g.dataset.theme = document.documentElement.dataset.theme;
+  const inner = document.createElement('div');
+  inner.style.cssText = 'position:absolute;left:0;right:0;top:' + (-window.scrollY) + 'px;padding-top:env(safe-area-inset-top)';
+  const copy = app.cloneNode(true);
+  copy.classList.remove('enter');
+  copy.querySelectorAll('[data-bar],[data-count]').forEach(el => { el.removeAttribute('data-bar'); el.removeAttribute('data-count'); });
+  inner.appendChild(copy);
+  g.appendChild(inner);
+  if (withTabbar) { const tb = tabbar.cloneNode(true); tb.removeAttribute('id'); g.appendChild(tb); tb.style.cssText = 'position:fixed;left:0;right:0;bottom:0;display:flex'; }
+  document.body.appendChild(g);
+  return g;
+}
+function fadeGhost(g, ms, move) {
+  if (!g.animate) { g.remove(); return; }
+  const a = g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: move ? `translateX(${move}px)` : 'none' }], { duration: ms, easing: 'cubic-bezier(.3, 0, .2, 1)', fill: 'forwards' });
+  a.onfinish = a.oncancel = () => g.remove();
+  setTimeout(() => g.remove(), ms + 200);
+}
+/* Changes the theme with a cross-fade between the old and the new look. */
+function themeFade(change) {
+  const g = motionOff() ? null : makeGhost(true);
+  change();   // the click handler re-renders right after this returns
+  if (g) fadeGhost(g, 520);
+}
+
+/* The highlight in a row of buttons slides from the old choice to the new one. */
+const segPrev = {}, segAnim = {};
+const liveSegs = () => [...app.querySelectorAll('.seg[data-sg]'), ...modalRoot.querySelectorAll('.seg[data-sg]')];
+function captureSegs() {
+  liveSegs().forEach(sg => {
+    const on = sg.querySelector('button.on');
+    if (on && on.offsetWidth) segPrev[sg.dataset.sg] = { l: on.offsetLeft, t: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight };
+  });
+}
+function placeSegs(animate) {
+  liveSegs().forEach(sg => {
+    const ind = sg.querySelector(':scope > i.ind'), on = sg.querySelector('button.on');
+    if (!ind || !on || !on.offsetWidth) return;
+    const to = { l: on.offsetLeft, t: on.offsetTop, w: on.offsetWidth, h: on.offsetHeight };
+    const key = sg.dataset.sg, a = segAnim[key];
+    const sameBox = (p, q) => p.l === q.l && p.t === q.t && p.w === q.w;
+    let from = animate && !motionOff() ? segPrev[key] : null;
+    const midSlide = a && Date.now() - a.at < 450 && sameBox(a.to, to);
+    if (midSlide && !motionOff()) from = a.from;   // re-rendered while sliding: carry on from where the slide began
+    const set = p => { ind.style.width = p.w + 'px'; ind.style.height = p.h + 'px'; ind.style.transform = `translate(${p.l}px, ${p.t}px)`; };
+    ind.classList.remove('go');
+    set(from || to);
+    sg.classList.add('ready');
+    if (from && !sameBox(from, to)) { void ind.offsetWidth; ind.classList.add('go'); set(to); if (!midSlide) segAnim[key] = { from, to, at: Date.now() }; }
+    segPrev[sg.dataset.sg] = to;
+  });
+}
+window.addEventListener('resize', () => placeSegs(false));
 
 function render() {
   RB = runningBalances();
+  captureSegs();
   const y = window.scrollY;
   const oldSheet = modalRoot.querySelector('.sheet');
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
 
   app.classList.remove('enter');
+  const tabGhost = tabChanged && lastTab !== null && !motionOff() ? makeGhost(false) : null;
   app.innerHTML = (ui.tab === 'settings' ? '' : topbar()) + VIEWS[ui.tab]();
   if (tabChanged) {
-    app.style.setProperty('--dx', (lastTab === null || tabIndex(ui.tab) >= tabIndex(lastTab) ? 1 : -1) * 18 + 'px');
+    const dir = ui.tab === 'settings' ? 1 : lastTab === 'settings' ? -1 : (lastTab === null || tabIndex(ui.tab) >= tabIndex(lastTab) ? 1 : -1);
+    app.style.setProperty('--dx', dir * 22 + 'px');
     app.classList.add('enter');
+    if (tabGhost) fadeGhost(tabGhost, 220, -dir * 14);
   }
   // remember what the live-patched areas currently show (see setHTMLIfChanged)
   if ($('disc-box')) $('disc-box').__html = discHTML(discrepancy(ui.checkMonth, ui.actual));
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
-  const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'income' : ui.tab;
+  const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'budget' : ui.tab;
   tabbar.innerHTML = TABS.map(([k, icon, label]) =>
     `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
 
@@ -1189,6 +1395,7 @@ function render() {
   const newSheet = modalRoot.querySelector('.sheet');
   if (newSheet && oldSheet) newSheet.scrollTop = sheetY;
 
+  placeSegs(true);
   animateUI(tabChanged || (ui.modal && !beforeNames.includes('sheet')));
   lastTab = ui.tab;
 }
@@ -1299,7 +1506,7 @@ async function restoreCode() {
   const box = $('restoreText');
   try {
     const obj = await decodeBackup(box ? box.value : '');
-    askType('Replace everything on this phone with this backup?', 'RESTORE', 'restore backup', () => {
+    askType('Replace everything on this device with this backup?', 'RESTORE', 'restore backup', () => {
       replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null;
       askAlert('Backup restored.');
     });
@@ -1309,7 +1516,7 @@ async function restoreCode() {
   render();
 }
 
-/* Reads a backup but takes only the to-do list and notes; nothing else on this phone changes. Anything already here is kept. */
+/* Reads a backup but takes only the to-do list and notes; nothing else on this device changes. Anything already here is kept. */
 async function restoreNotesOnly() {
   const box = $('restoreText');
   try {
@@ -1440,15 +1647,16 @@ const ACTIONS = {
     if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
   },
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
-  setPalette: d => { S.settings.palette = d.pot; save(); applySettings(); },
-  setMode: d => { S.settings.mode = d.pot; save(); applySettings(); },
+  setPalette: d => { themeFade(() => { S.settings.palette = d.pot; save(); applySettings(); }); },
+  setCorners: d => { themeFade(() => { S.settings.corners = d.pot; save(); applySettings(); }); },
+  setMode: d => { themeFade(() => { S.settings.mode = d.pot; save(); applySettings(); }); },
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
   clearTx: () => askType('Remove all transactions and pot history, and set every pot to $0? Settings, income sources, expenses and notes stay. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'CLEAR', 'clear transactions', () => {
     startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.linkMsg = 'Transactions cleared.';
   }),
-  eraseAll: () => askType('Erase everything stored on this phone? This cannot be undone. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'ERASE', 'erase everything', () => {
+  eraseAll: () => askType('Erase everything stored on this device? This cannot be undone. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'ERASE', 'erase everything', () => {
     eraseEverything(); setLink({}); ui.linkItems = null; ui.linkMsg = ''; ui.tab = 'review'; applySettings(); doSync();
   }),
   checkLink: () => { checkLink(); return false; },
@@ -1456,6 +1664,11 @@ const ACTIONS = {
     if (S.useSampleData) askConfirm('Linking real accounts clears the sample data first. Continue?', 'continue', () => { startFresh(); openPlaid(); });
     else { openPlaid(); return false; }
   },
+  openStatement: d => { ui.modal = { type: 'statement', key: d.id }; markStatementSeen(d.id); },
+  dismissStatement: d => { markStatementSeen(d.id); },
+  stmtPrint: () => { if (ui.modal && ui.modal.key) printStatement(ui.modal.key); },
+  stmtShare: () => { const k = ui.modal && ui.modal.key; if (k) shareFile('pocketledger-statement-' + k + '.html', 'text/html', statementDoc(monthStatement(k)), 'PocketLedger statement ' + k); },
+  stmtCsv: () => { const k = ui.modal && ui.modal.key; if (k) shareFile('pocketledger-statement-' + k + '.csv', 'text/csv', statementCsv(monthStatement(k)), 'PocketLedger statement ' + k); },
   openDeduct: () => { ui.modal = { type: 'deductible', year: new Date().getFullYear() }; },
   dedYear: d => { ui.modal.year = +d.id; },
   pasteExpenses: () => { ui.modal = { type: 'pasteExp', text: '' }; },
@@ -1484,7 +1697,7 @@ const ACTIONS = {
       const made = applyIncomeSuggestions(); askAlert('Added: ' + made.join(', ') + '. Fine-tune amounts under Income → Edit income sources.');
     });
   },
-  clearHist: () => askConfirm('Remove your income history from this phone? Your income sources and deposits stay.', 'remove', () => { S.incomeHistory = []; ui.xref = null; save(); }, true),
+  clearHist: () => askConfirm('Remove your income history from this device? Your income sources and deposits stay.', 'remove', () => { S.incomeHistory = []; ui.xref = null; save(); }, true),
   chooseAccts: d => { openPlaid(d.id); return false; },
   syncTop: () => { autoSync(true); return false; },
   toggleAcct: d => { ui.openAcct[d.id] = !ui.openAcct[d.id]; },
@@ -1655,6 +1868,8 @@ function handleField(el, final) {
     case 'fixedName': { const e = find(S.fixedExpenses); if (e) { e.name = v; save(); } return; }
     case 'fixedAmt': { const e = find(S.fixedExpenses); if (e) { e.amount = num(v); save(); patchBudget(); } return; }
     case 'roundMode': S.roundMode = v; save(); return;
+    case 'currency': S.settings.currency = v; save(); return;
+    case 'lockDelay': setLockDelay(v); return;
     case 'checkMonth': if (final) { ui.checkMonth = v; ui.actual = null; render(); } return;
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
@@ -1705,7 +1920,7 @@ function handleField(el, final) {
         el.files[0].text().then(text => {
           try {
             const obj = JSON.parse(text);
-            askConfirm('Replace everything on this phone with this file?', 'restore', () => { replaceState(obj); ui.budgetInputs = {}; ui.actual = null; }, true);
+            askConfirm('Replace everything on this device with this file?', 'restore', () => { replaceState(obj); ui.budgetInputs = {}; ui.actual = null; }, true);
           } catch (err) { askAlert('That file could not be imported.'); }
           render();
         });
@@ -1723,6 +1938,17 @@ document.addEventListener('change', e => { if (e.target.dataset && e.target.data
 const navState = () => ({ pl: 'app' });
 function syncHistory() { /* intentionally empty: screens are reached only through the tab bar and the page itself */ }
 try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''); } catch (e) { /* ignore */ }
+/* Home-screen app: the edge swipe that would go "back" (or out of the app) is swallowed. Extra history entries
+   are kept so there is never anywhere to go back to, and touches that start at the very edge don't begin the gesture. */
+const STANDALONE = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+if (STANDALONE) {
+  document.documentElement.dataset.standalone = '1';
+  document.addEventListener('touchstart', e => {
+    const t = e.touches[0];
+    if (t && (t.clientX < 14 || t.clientX > window.innerWidth - 14) && e.cancelable) e.preventDefault();
+  }, { passive: false });
+  try { for (let i = 0; i < 3; i++) history.pushState(navState(), ''); } catch (e) { /* ignore */ }
+}
 window.addEventListener('popstate', () => {
   const hadPopup = !!(ui.modal || ui.picker || ui.dialog);
   if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal();
@@ -1734,7 +1960,8 @@ function applySettings() {
   const st = S.settings, root = document.documentElement;
   const theme = themeKey();
   if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
-  root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion;
+  HIDE_AMOUNTS = !!st.hideAmounts;
+  root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion; root.dataset.corners = st.corners || 'sharp';
   root.style.setProperty('--ts', st.textSize);
   const cs = getComputedStyle(root);
   const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
@@ -1742,6 +1969,7 @@ function applySettings() {
   const bgHex = read('--bg', '#1c1a2e'), raiseHex = read('--raise', bgHex), dark = lumOf(bgHex) < 0.4;
   for (const c of Object.values(CATS)) { c.base = c.base || c.color; c.color = readableOn(c.base, [bgHex, raiseHex], dark); }
   Object.keys(tintCache).forEach(k => delete tintCache[k]);
+  root.dataset.tone = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = read('--bg', '#1c1a2e');
 }
@@ -1754,16 +1982,20 @@ document.addEventListener('touchstart', e => {
   const sheet = e.target.closest && e.target.closest('.sheet');
   if (!sheet || e.touches.length !== 1 || e.target.closest('input, textarea')) { drag = null; return; }
   const fromHead = !!e.target.closest('.grab, .sheet-head');
-  if (!fromHead) { drag = null; return; }   // text inside a pop-up can be selected without moving it
-  drag = { sheet, scrim: sheet.parentElement, layer: sheet.parentElement.dataset.layer, y0: e.touches[0].clientY, t0: performance.now(), dy: 0, active: false, fromHead };
+  // From the body, a drag counts only when the pop-up is scrolled to the top and nothing is selected;
+  // the move handler then also requires a clear downward swipe and not a press-and-hold.
+  if (!fromHead && (sheet.scrollTop > 0 || String(getSelection ? getSelection() : '').length)) { drag = null; return; }
+  drag = { sheet, scrim: sheet.parentElement, layer: sheet.parentElement.dataset.layer, y0: e.touches[0].clientY, x0: e.touches[0].clientX, t0: performance.now(), dy: 0, active: false, fromHead };
 }, { passive: true });
 document.addEventListener('touchmove', e => {
   if (!drag) return;
   if (!drag.active && String(getSelection ? getSelection() : '').length) { drag = null; return; }
   const dy = e.touches[0].clientY - drag.y0;
   if (!drag.active) {
-    if (dy > 8 && (drag.fromHead || drag.sheet.scrollTop <= 0)) { drag.active = true; drag.sheet.style.transition = 'none'; drag.scrim.style.transition = 'none'; }
-    else { if (dy < -8) drag = null; return; }
+    const dx = Math.abs(e.touches[0].clientX - drag.x0);
+    if (!drag.fromHead && performance.now() - drag.t0 > 600 && dy < 6) { drag = null; return; }   // press-and-hold = text selection
+    if (dy > 10 && dx < dy * 0.7 && (drag.fromHead || drag.sheet.scrollTop <= 0)) { drag.active = true; drag.sheet.style.transition = 'none'; drag.scrim.style.transition = 'none'; }
+    else { if (dy < -8 || dx > 14 + Math.max(dy, 0)) drag = null; return; }
   }
   if (e.cancelable) e.preventDefault();
   drag.dy = Math.max(dy, 0);
@@ -1814,6 +2046,7 @@ document.addEventListener('click', e => {
 }, true);
 document.addEventListener('toggle', e => {
   const d = e.target;
+  if (d && d.open) setTimeout(() => placeSegs(false), 0);
   if (!d || !d.dataset || !d.dataset.k) return;
   S.settings.coll = S.settings.coll || {};
   const v = d.open ? 'open' : 'shut';

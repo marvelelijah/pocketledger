@@ -18,6 +18,7 @@ const CATS = {
   health:        { title: 'Health',         color: '#ef4444', icon: '💊' },
   income:        { title: 'Income',         color: '#10b981', icon: '💵' },
   transfer:      { title: 'Transfer',       color: '#6366f1', icon: '🔁' },
+  finance:       { title: 'Finance',        color: '#06b6d4', icon: '📈' },
   other:         { title: 'Other',          color: '#9ca3af', icon: '❔' },
 };
 
@@ -29,8 +30,39 @@ function uid() {
     : 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+/* ---------- currency ---------- */
+const CURRENCIES = [['USD', 'US dollar'], ['EUR', 'Euro'], ['GBP', 'British pound'], ['CAD', 'Canadian dollar'], ['AUD', 'Australian dollar'], ['NZD', 'New Zealand dollar'],
+  ['MXN', 'Mexican peso'], ['JPY', 'Japanese yen'], ['CNY', 'Chinese yuan'], ['INR', 'Indian rupee'], ['CHF', 'Swiss franc'], ['BRL', 'Brazilian real'],
+  ['KRW', 'South Korean won'], ['SEK', 'Swedish krona'], ['NOK', 'Norwegian krone'], ['DKK', 'Danish krone'], ['PLN', 'Polish zloty'], ['ZAR', 'South African rand']];
+const REGION_CURRENCY = { US: 'USD', PR: 'USD', GB: 'GBP', CA: 'CAD', AU: 'AUD', NZ: 'NZD', MX: 'MXN', JP: 'JPY', CN: 'CNY', IN: 'INR', CH: 'CHF', BR: 'BRL', KR: 'KRW',
+  SE: 'SEK', NO: 'NOK', DK: 'DKK', PL: 'PLN', ZA: 'ZAR' };
+'AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK'.split(' ').forEach(r => { REGION_CURRENCY[r] = 'EUR'; });
+
+/* The currency of the phone's region, unless one was chosen in Settings. */
+function deviceCurrency() {
+  try {
+    const loc = (typeof navigator !== 'undefined' && (navigator.language || (navigator.languages || [])[0])) || 'en-US';
+    const region = (new Intl.Locale(loc)).maximize().region || 'US';
+    return REGION_CURRENCY[region] || 'USD';
+  } catch (e) { return 'USD'; }
+}
+function currencyCode() {
+  let c = null;
+  try { c = S && S.settings && S.settings.currency; } catch (e) { /* state not loaded yet */ }
+  return c && c !== 'auto' ? c : deviceCurrency();
+}
+const fmtCache = {};
+let HIDE_AMOUNTS = false;   // "hide amounts" privacy setting
 function usd(n) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n || 0);
+  if (HIDE_AMOUNTS) return '••••';
+  const code = currencyCode();
+  const f = fmtCache[code] || (fmtCache[code] = new Intl.NumberFormat('en-US', { style: 'currency', currency: code }));
+  return f.format(n || 0);
+}
+/* "$", "€", "£" ... for labels */
+function currencySymbol() {
+  try { const p = new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode(), currencyDisplay: 'narrowSymbol' }).formatToParts(0).find(x => x.type === 'currency'); return p ? p.value : '$'; }
+  catch (e) { return '$'; }
 }
 
 function monthKey(d) {
@@ -48,6 +80,9 @@ function sameMonth(a, b) { return monthKey(a) === monthKey(b); }
 
 /* [keywords found in the bank text, display name, category, confidence] */
 const MERCHANTS = [
+  // saving and investing (Roth IRA and the like)
+  [['ROTH IRA', 'ROTH CONTRIB', 'IRA CONTRIB', 'TRAD IRA', 'ROLLOVER IRA', '401K', '401(K)', '403B', '529 PLAN'], 'Retirement', 'finance', 0.92],
+  [['VANGUARD', 'SCHWAB', 'ROBINHOOD', 'ACORNS', 'E*TRADE', 'ETRADE', 'WEALTHFRONT', 'BETTERMENT', 'FIDELITY INV', 'TD AMERITRADE', 'M1 FINANCE', 'STASH INVEST', 'BROKERAGE', 'COINBASE'], 'Investing', 'finance', 0.88],
   [['ATM WITHDRAW', 'WITHDRAWAL ATM', 'WITHDRAWL ATM', 'ATM CASH', 'CASH WITHDRAW', 'ATM WDL', 'WDL ATM'], 'Cash', 'other', 0.9],
   // gas
   [['RACETRAC'], 'RaceTrac', 'gas', 0.93], [['QUIKTRIP'], 'QuikTrip', 'gas', 0.9], [['CIRCLE K'], 'Circle K', 'gas', 0.9],
@@ -122,6 +157,7 @@ function bankCategory(pfc) {
   const d = String(pfc.d || '');
   if (d === 'FOOD_AND_DRINK_GROCERIES') cat = 'groceries';
   if (d === 'TRANSPORTATION_GAS') cat = 'gas';
+  if (/INVESTMENT_AND_RETIREMENT/.test(d)) cat = 'finance';
   const own = d === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT' || /ACCOUNT_TRANSFER$/.test(d);
   if (own) cat = 'transfer';
   return { cat, conf: PFC_CONF[pfc.c] || 0.5, own, label: (CATS[cat] || CATS.other).title.toLowerCase() };
@@ -280,6 +316,8 @@ function defaultState() {
       textSize: 1,
       motion: 'auto',      // auto | off
       backupDays: 7,       // 0 = no reminder
+      currency: 'auto',    // 'auto' = the phone's region, or a code like EUR
+      corners: 'sharp',    // sharp | rounded
       defaultPot: 'spending',
       linked: false,       // true once real bank accounts are linked (see server/README.md)
       countFrom: null,     // YYYY-MM-DD: purchases before this day are kept as history, not sent to Review
@@ -290,11 +328,12 @@ function defaultState() {
       { id: 'savings', name: 'Savings', icon: '🏦', balance: 0, target: 5000, core: true },
     ],
     potLog: [],           // every movement in or out of a pot
-    roundMode: 'nearest', // how spending is rounded when deducted from a pot: 'off' | 'nearest' | 'up'
+    roundMode: 'nearest', // how spending is rounded when deducted from a pot: 'off' | 'nearest'
     budgetRuns: [],
     budgetUndo: null,    // what the month looked like before the last Apply/Update
     adjustments: [],      // month-end redistributions
     learned: {},
+    statementsSeen: [],   // months whose statement you have opened or dismissed
     todos: [],
     notes: [],
     lastSync: null,
@@ -317,6 +356,8 @@ function migrate(old) {
   const s = Object.assign(defaultState(), old);
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
   if (s.settings.palette === 'terminal') s.settings.palette = 'dusk';
+  if (s.roundMode === 'up') s.roundMode = 'nearest';
+  if (s.settings.startTab === 'income') s.settings.startTab = 'budget';
   if (old.settings && old.settings.theme && !old.settings.mode) { const t = old.settings.theme; s.settings.mode = t === 'paper' ? 'light' : t === 'auto' ? 'auto' : 'dark'; }
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
   if (old.namesV !== 2) {                                   // older transactions get the newer, verb-free names and cross-checked confidence
@@ -392,7 +433,7 @@ function replaceState(obj) {
 function seedDemo() {
   const day = (ago, h, m) => { const x = new Date(); x.setDate(x.getDate() - ago); x.setHours(h, m, 0, 0); return x.toISOString(); };
   S = defaultState();
-  S.demoSeeded = true; S.useSampleData = false;
+  S.demoSeeded = true; S.demoV = 2; S.useSampleData = false;
   S.settings.name = 'Demo';
   S.accounts = [
     { id: 'd-chk', name: 'Everyday Checking', official: 'Everyday Checking', institution: 'Demo Bank', kind: 'checking', subtype: 'checking', mask: '1234', balance: 4210.55, current: 4210.55 },
@@ -410,9 +451,17 @@ function seedDemo() {
     [13, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [14, 16, 20, 'CVS/PHARMACY #4411', -18.9, 'd-cc'], [15, 20, 5, 'TARGET 00012345', -64.31, 'd-cc'],
     [16, 12, 15, 'PUBLIX #0456', -72.88, 'd-chk'], [18, 9, 30, 'STARBUCKS STORE 1182', -5.85, 'd-cc'], [19, 18, 10, 'KROGER #1488 ANYTOWN', -101.4, 'd-chk'],
     [20, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [22, 21, 0, 'REGAL CINEMAS', -28, 'd-cc'], [24, 13, 0, 'SHELL OIL 57444', -41.25, 'd-cc'],
+    // earlier in the previous month, so its statement has a full month behind it
+    [25, 12, 30, 'PUBLIX #0456', -64.1, 'd-chk'], [26, 10, 0, 'VANGUARD ROTH IRA CONTRIB', -200, 'd-chk'], [27, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'],
+    [27, 18, 40, 'TST* LOCAL TACO SHOP', -17.8, 'd-cc'], [28, 14, 5, 'AMZN MKTP US*8H2KD01', -34.99, 'd-cc'], [29, 9, 10, 'SQ *CORNER COFFEE CO', -5.5, 'd-cc'],
+    [30, 17, 45, 'SHELL OIL 57444', -36.9, 'd-cc'], [31, 20, 30, 'KROGER #1488 ANYTOWN', -93.77, 'd-chk'], [32, 8, 0, 'ANYTOWN POWER CO', -88.4, 'd-chk'],
+    [33, 11, 20, 'CHICK-FIL-A #01234', -12.9, 'd-cc'], [33, 15, 0, 'ACH DEPOSIT FREELANCE CLIENT LLC', 450, 'd-chk'], [34, 19, 15, 'NETFLIX.COM', -15.49, 'd-cc'],
+    [34, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [36, 13, 25, 'CVS/PHARMACY #4411', -22.35, 'd-cc'], [38, 16, 0, 'TARGET 00012345', -48.2, 'd-cc'],
   ];
   ingest(rows.map((r, i) => ({ id: 'demo-' + i, accountID: r[5], rawName: r[3], amount: r[4], date: day(r[0], r[1], r[2]) })));
   logEntry('spending', 1800, 'Demo starting balance', 'budget');
+  S.budgetRuns.push({ monthKey: monthKey(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15)), earnings: 3750, fixedTotal: 1125, savingsPercent: 10, savingsAmount: 375, leftover: 2250,
+    earningsBreakdown: [{ sourceId: null, name: 'Job', amount: 3750, edited: false }], fixedItems: S.fixedExpenses.map(e => ({ name: e.name, amount: e.amount })), ranAt: new Date().toISOString() });
   logEntry('savings', 2400, 'Demo starting balance', 'budget');
   const open = new Set(['demo-0', 'demo-1', 'demo-3']);   // leave a few for Review so there is something to sort
   for (const t of S.transactions) if (t.amount < 0 && !t.isIgnored && !open.has(t.id)) assign(t.id, 'spending');
@@ -542,7 +591,6 @@ const potEntries = potId => S.potLog.filter(e => e.potId === potId).sort((a, b) 
 function deduction(amount) {
   const a = Math.abs(amount);
   if (S.roundMode === 'nearest') return Math.round(a);
-  if (S.roundMode === 'up') return Math.ceil(a - 1e-9);
   return round2(a);
 }
 
@@ -1290,7 +1338,7 @@ function eraseEverything() {
   save();
 }
 
-if (DEMO && !S.demoSeeded) seedDemo();   // after everything above is defined
+if (DEMO && (!S.demoSeeded || S.demoV !== 2)) seedDemo();   // after everything above is defined
 
 /* On every start: remember each purchase's account name (so it survives an account being removed), and tidy leftovers. */
 /* A name you see over and over is a name the app can trust more: +8% per repeat, up to 92%. Never overrides a category you set. */
@@ -1317,3 +1365,99 @@ function boostRepeats() {
   if (healOrphans()) ch = true;
   if (ch) save();
 })();
+
+
+/* ---------- monthly statements ---------- */
+/* A statement is worked out from your records on demand, so it is always up to date and nothing extra is stored but "seen". */
+
+const keyToDate = key => { const [y, m] = key.split('-').map(Number); return new Date(y, m - 1, 1); };
+const shiftKey = (key, n) => { const d = keyToDate(key); return monthKey(new Date(d.getFullYear(), d.getMonth() + n, 1)); };
+const NOT_A_SPEND = /between|before start|not a spend/i;
+const stmtOut = t => isExpense(t) && t.category !== 'transfer' && !(t.isIgnored && NOT_A_SPEND.test(t.ignoredWhy || ''));
+
+/* Months that have records, newest first. The current month is included (it reads "so far"). */
+function statementKeys() {
+  const set = new Set(S.transactions.map(t => monthKey(t.date)));
+  const cur = monthKey(new Date());
+  return [...set].filter(k => k <= cur).sort().reverse();
+}
+/* The month that just ended, if it has records and you haven't opened its statement yet. */
+function newStatementKey() {
+  const k = shiftKey(monthKey(new Date()), -1);
+  return statementKeys().includes(k) && !(S.statementsSeen || []).includes(k) ? k : null;
+}
+function markStatementSeen(key) { S.statementsSeen = S.statementsSeen || []; if (!S.statementsSeen.includes(key)) { S.statementsSeen.push(key); save(); } }
+
+function monthStatement(key) {
+  const start = keyToDate(key), end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59);
+  const cur = monthKey(new Date()) === key;
+  const days = end.getDate(), elapsed = cur ? new Date().getDate() : days;
+  const txs = S.transactions.filter(t => monthKey(t.date) === key).sort((a, b) => new Date(a.date) - new Date(b.date));
+  const incomeTx = txs.filter(isIncomeCounted);
+  const out = txs.filter(stmtOut);
+  const spend = out.filter(t => t.category !== 'finance');
+  const invested = out.filter(t => t.category === 'finance').reduce((a, t) => a + Math.abs(t.amount), 0);
+  const sum = l => round2(l.reduce((a, t) => a + Math.abs(t.amount), 0));
+  const income = round2(incomeTx.reduce((a, t) => a + t.amount, 0));
+  const spent = sum(spend);
+
+  const bySrc = {};
+  for (const t of incomeTx) {
+    const src = t.incomeSourceID && S.incomeSources.find(x => x.id === t.incomeSourceID);
+    const name = src ? src.name : (t.extraIncomeLabel || 'Other');
+    bySrc[name] = round2((bySrc[name] || 0) + t.amount);
+  }
+  const prevKeyStr = shiftKey(key, -1);
+  const prevSpend = S.transactions.filter(t => monthKey(t.date) === prevKeyStr && stmtOut(t) && t.category !== 'finance');
+  const prevBy = {};
+  for (const t of prevSpend) prevBy[t.category] = round2((prevBy[t.category] || 0) + Math.abs(t.amount));
+  const prevSpent = sum(prevSpend);
+  const prevIncome = round2(S.transactions.filter(t => monthKey(t.date) === prevKeyStr && isIncomeCounted(t)).reduce((a, t) => a + t.amount, 0));
+
+  const cats = {};
+  for (const t of spend) { const c = cats[t.category] || (cats[t.category] = { total: 0, count: 0 }); c.total += Math.abs(t.amount); c.count++; }
+  const byCat = Object.entries(cats).map(([cat, v]) => ({ cat, title: (CATS[cat] || CATS.other).title, icon: (CATS[cat] || CATS.other).icon, color: (CATS[cat] || CATS.other).color,
+    total: round2(v.total), count: v.count, pct: spent ? v.total / spent : 0, prev: prevBy[cat] || 0 })).sort((a, b) => b.total - a.total);
+
+  const mer = {};
+  for (const t of spend) { const n = t.simpleName || t.rawName; const m = mer[n] || (mer[n] = { name: n, total: 0, count: 0 }); m.total += Math.abs(t.amount); m.count++; }
+  const merchants = Object.values(mer).map(m => ({ ...m, total: round2(m.total) })).sort((a, b) => b.total - a.total).slice(0, 8);
+
+  const dayTotals = {};
+  for (const t of spend) { const d = new Date(t.date).getDate(); dayTotals[d] = (dayTotals[d] || 0) + Math.abs(t.amount); }
+  const wk = [0, 0, 0, 0, 0, 0, 0];
+  for (const t of spend) wk[new Date(t.date).getDay()] += Math.abs(t.amount);
+  const WK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const wkMax = Math.max(...wk);
+  const noSpendDays = Math.max(elapsed - Object.keys(dayTotals).length, 0);
+  const priciest = Object.entries(dayTotals).sort((a, b) => b[1] - a[1])[0];
+
+  const run = runByKey(key);
+  const recurring = round2(out.filter(t => t.category === 'bills').reduce((a, t) => a + Math.abs(t.amount), 0));
+
+  const endIso = end.getTime();
+  const potChange = id => round2(S.potLog.filter(e => e.potId === id && monthKey(e.date) === key).reduce((a, e) => a + e.amount, 0));
+  const afterMonth = id => round2(S.potLog.filter(e => e.potId === id && new Date(e.date).getTime() > endIso).reduce((a, e) => a + e.amount, 0));
+  const pots = S.pots.map(p => {
+    const closing = round2(p.balance - afterMonth(p.id));
+    return { id: p.id, name: p.name, icon: p.icon, closing, change: potChange(p.id), target: p.target || null, pct: p.target ? Math.max(0, Math.min(closing / p.target, 1)) : null };
+  });
+
+  return {
+    key, label: start.toLocaleString('en-US', { month: 'long', year: 'numeric' }), partial: cur, days, elapsed,
+    income, incomeBy: Object.entries(bySrc).map(([name, total]) => ({ name, total })).sort((a, b) => b.total - a.total),
+    spent, invested: round2(invested), net: round2(income - spent - invested), kept: round2(income - spent),
+    savingsRate: income > 0 ? (income - spent) / income : null,
+    count: spend.length, avgPurchase: spend.length ? round2(spent / spend.length) : 0, dailyAvg: elapsed ? round2(spent / elapsed) : 0,
+    noSpendDays, priciestDay: priciest ? { day: +priciest[0], total: round2(priciest[1]) } : null,
+    busiestWeekday: wkMax > 0 ? { name: WK[wk.indexOf(wkMax)], total: round2(wkMax) } : null,
+    largest: spend.slice().sort((a, b) => a.amount - b.amount).slice(0, 5).map(t => ({ name: t.simpleName || t.rawName, amount: round2(Math.abs(t.amount)), date: t.date, category: t.category })),
+    byCat, merchants, recurring,
+    prev: { key: prevKeyStr, spent: prevSpent, income: prevIncome, has: prevSpend.length >= 5 },
+    budget: run ? { earnings: run.earnings, fixed: run.fixedTotal, savings: run.savingsAmount, allowance: run.leftover, spentVsAllowance: run.leftover ? spent / run.leftover : null } : null,
+    pots, goals: pots.filter(p => p.target),
+    accounts: S.accounts.map(a => ({ name: a.name, institution: a.institution || '', kind: a.kind, mask: a.mask || '', balance: a.balance, owed: a.kind === 'credit' || a.kind === 'loan' })),
+    txs: txs.map(t => ({ date: t.date, name: t.simpleName || t.rawName, raw: t.rawName, amount: t.amount, category: t.category, account: accountName(t.accountID),
+      pot: t.pot ? ((potById(t.pot) || {}).name || '') : '', note: t.isIgnored ? (t.ignoredWhy || '') : '' })),
+  };
+}
