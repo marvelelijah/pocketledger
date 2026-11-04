@@ -177,3 +177,7 @@ Before using a real bank, remove the pretend one so fake purchases don't mix wit
 - The server address and passphrase are stored only on your phone and are left out of backups.
 - To cut the connection at any time: tap **unlink** in the app, or delete the Worker in Cloudflare, or remove the connection in Plaid's dashboard.
 - If your passphrase ever leaks: change `APP_PASSPHRASE` in Cloudflare and enter the new one in the app.
+
+## Deploying from GitHub (optional)
+
+`wrangler.jsonc` sits at the top of the repository and points at `server/worker.js`. In Cloudflare: your Worker → Settings → Builds → connect `marvelelijah/pocketledger`, branch `main`, deploy command `npx wrangler deploy`, and leave the root directory empty. Every push then redeploys the Worker, and the values in `wrangler.jsonc` (not secrets) are applied.
