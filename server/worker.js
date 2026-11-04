@@ -130,11 +130,12 @@ const mapTx = t => ({
 const kindOf = a => a.type === 'credit' ? 'credit' : a.type === 'loan' ? 'loan' : a.type === 'investment' ? 'investment'
   : /savings|money market|cd|cash management|hsa|paypal|prepaid/i.test(a.subtype || '') ? 'savings' : 'checking';
 
-const mapAccount = (a, institution) => {
+const mapAccount = (a, institution, itemId) => {
   const kind = kindOf(a), b = a.balances || {};
   const owed = kind === 'credit' || kind === 'loan';
   return {
     id: 'plaid-' + a.account_id,
+    itemId,
     name: a.name + (a.mask ? ' ··' + a.mask : ''),
     official: a.official_name || '',
     institution,
@@ -150,7 +151,7 @@ const mapAccount = (a, institution) => {
 /* Pulls what's new since last time. If a bank has a lot of history, `more` is true and the app asks again. */
 async function sync(env) {
   const items = await getItems(env);
-  const out = { accounts: [], added: [], modified: [], removed: [], more: false, problems: [] };
+  const out = { accounts: [], added: [], modified: [], removed: [], more: false, problems: [], failed: [] };
   for (const item of items) {
     for (let attempt = 0; attempt < 2; attempt++) {
       let cursor = item.cursor || undefined, pages = 0, more = false;
@@ -169,11 +170,12 @@ async function sync(env) {
         if (e.code === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' && attempt === 0) continue;   // restart from the saved cursor
         // one bad bank (say, a leftover practice link) must not block the others
         out.problems.push((item.institution || 'A bank') + ': ' + e.message + (/environment/i.test(e.message) ? ' Unlink this one in Settings.' : ''));
+        out.failed.push(item.item_id);
         break;
       }
       item.cursor = cursor;
       out.added.push(...added); out.modified.push(...modified); out.removed.push(...removed);
-      out.accounts.push(...accounts.map(a => mapAccount(a, item.institution)));
+      out.accounts.push(...accounts.map(a => mapAccount(a, item.institution, item.item_id)));
       out.more = out.more || more;
       break;
     }

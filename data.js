@@ -921,9 +921,23 @@ function removeTx(id) {
 
 const firstOfMonthISO = () => { const n = new Date(); return n.getFullYear() + '-' + String(n.getMonth() + 1).padStart(2, '0') + '-01'; };
 
+/* Updates accounts one by one instead of replacing the whole list, so a bank that has trouble on one sync keeps the accounts it had. */
+function mergeAccounts(res) {
+  const fresh = res.accounts || [];
+  if (!fresh.length) return;
+  const failed = new Set(res.failed || []), seen = new Set(fresh.map(a => a.itemId).filter(Boolean));
+  const keep = S.accounts.filter(o => !fresh.some(a => a.id === o.id) && (!o.itemId || failed.has(o.itemId) || !seen.has(o.itemId)));
+  S.accounts = fresh.concat(keep.filter(o => String(o.id).startsWith('plaid-')));
+}
+
+/* Forget one bank's accounts (history stays). */
+function forgetBankAccounts(itemId, institution) {
+  S.accounts = S.accounts.filter(a => !(a.itemId === itemId || (!a.itemId && institution && a.institution === institution)));
+}
+
 /* res = { accounts, added, modified, removed } from the server */
 function ingestLinked(res) {
-  if (res.accounts && res.accounts.length) S.accounts = res.accounts;
+  mergeAccounts(res);
   if (!S.settings.countFrom) S.settings.countFrom = firstOfMonthISO();
   const from = new Date(S.settings.countFrom + 'T00:00:00');
   const norm = t => ({ id: t.id, accountID: t.accountID, rawName: t.rawName, amount: round2(t.amount), date: new Date(t.date).toISOString() });
