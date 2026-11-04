@@ -1,0 +1,21 @@
+// Template for deploying server/worker.js with wrangler (Cloudflare's command-line tool),
+// or for connecting this repository to Cloudflare so pushes deploy automatically.
+// To use it: copy this file to server/wrangler.jsonc and replace PASTE_YOUR_KV_NAMESPACE_ID.
+// Secrets (PLAID_CLIENT_ID, PLAID_SECRET, APP_PASSPHRASE) are NOT listed here on purpose:
+// they stay in Cloudflare (Settings > Variables and Secrets, or `wrangler secret put NAME`).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pocketledger-link",
+  "main": "worker.js",
+  "compatibility_date": "2025-09-01",
+  "workers_dev": true,
+  "vars": {
+    "PLAID_ENV": "sandbox",                              // change to "production" when you go live
+    "ALLOWED_ORIGIN": "https://marvelelijah.github.io"
+    // "REDIRECT_URI": "https://marvelelijah.github.io/pocketledger/"   // uncomment for OAuth banks (Chase etc.)
+  },
+  "kv_namespaces": [
+    // The ID is on dash.cloudflare.com > Workers KV > your "pocketledger" namespace. It is not a secret.
+    { "binding": "LEDGER", "id": "PASTE_YOUR_KV_NAMESPACE_ID" }
+  ]
+}
