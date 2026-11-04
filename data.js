@@ -707,14 +707,22 @@ function startFresh() {
 function spendingLevel(now) {
   const pot = potById('spending');
   const key = monthKey(now || new Date());
-  const month = S.potLog.filter(e => e.potId === 'spending' && monthKey(e.date) === key);
-  const net = round2(month.reduce((a, e) => a + e.amount, 0));
-  const inflow = round2(month.filter(e => e.amount > 0).reduce((a, e) => a + e.amount, 0));
-  const available = round2(pot.balance - net + inflow);
+  // spent = what purchases (and their rounding) took out this month; available = what you had to spend, including edits
+  const spentNet = round2(S.potLog.filter(e => e.potId === 'spending' && monthKey(e.date) === key && (e.kind === 'tx' || e.kind === 'round')).reduce((a, e) => a + e.amount, 0));
   const left = pot.balance;
-  const spent = round2(Math.max(available - left, 0));
+  const available = round2(left - spentNet);
+  const spent = round2(Math.max(-spentNet, 0));
   const pct = available > 0 ? Math.min(Math.max(left / available, 0), 1) : null;
   return { left, available, spent, pct };
+}
+
+/* Lets you correct the month's starting number; the difference is recorded as an entry you can undo. */
+function setSpendingAvailable(target) {
+  const L = spendingLevel(), diff = round2(target - L.available);
+  if (!diff) return false;
+  logEntry('spending', diff, 'Budget edited', 'manual');
+  save();
+  return true;
 }
 
 /* ---------- categories ---------- */

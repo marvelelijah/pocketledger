@@ -92,7 +92,7 @@ const numInput = (v, attrs, style) => `<input type="number" inputmode="decimal" 
 function potCard(p) {
   const pct = p.target > 0 ? Math.min(Math.max(p.balance / p.target, 0), 1) : null;
   return `<div class="card pot" data-action="openPot" data-id="${esc(p.id)}">
-    <div class="muted small">${emo(p.icon)} ${esc(p.name)} ›</div>
+    <div class="muted small">${emo(p.icon)} ${esc(p.name)}</div>
     <div class="big ${p.balance < 0 ? 'neg' : ''}" ${counted('pot-' + p.id, p.balance)}>${usd(p.balance)}</div>
     ${pct === null ? '' : `<div class="bar">${fill('pot-' + p.id, pct * 100)}</div><div class="muted small">of ${usd(p.target)} goal</div>`}
   </div>`;
@@ -114,9 +114,9 @@ function homeView() {
   <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
 
   <div class="grid3" style="margin-top:12px">
-    <div class="card tappable" data-action="tab" data-tab="income"><div class="muted small">Earned ›</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
-    <div class="card tappable" data-action="openPot" data-id="spending"><div class="muted small">Spent ›</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
-    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible ›</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
+    <div class="card tappable" data-action="tab" data-tab="income"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
+    <div class="card tappable" data-action="openPot" data-id="spending"><div class="muted small">Spent</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
+    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
 
   ${FEATURES.creditScore ? creditCard() : ''}
@@ -150,7 +150,7 @@ function acctCard(a) {
       ${line('This month', '<span class="pos">in ' + usd(inAmt) + '</span> · out ' + usd(Math.abs(outAmt)))}
       <div class="day" style="margin-top:8px">Recent</div>
       ${all.length ? all.slice(0, 8).map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted small">No transactions yet.</div>'}
-      ${all.length > 8 ? `<button class="link small" data-action="acctActivity" data-id="${esc(a.id)}">see all ${all.length} in Activity ›</button>` : ''}
+      ${all.length > 8 ? `<button class="link small" data-action="acctActivity" data-id="${esc(a.id)}">see all ${all.length} in Activity</button>` : ''}
     </div>` : ''}
   </div>`;
 }
@@ -223,6 +223,10 @@ function potView() {
       <div class="muted small">${Math.round(pct * 100)}% of ${usd(p.target)} goal</div>`}
     <div class="btn-row"><button class="btn" data-action="moveMoney" data-id="${esc(p.id)}">Move money</button></div>
   </div>
+  ${p.id === 'spending' ? (() => { const L = spendingLevel(); return `<div class="card"><h2>This month</h2>
+    <div class="field"><span>Available to spend</span>${numInput(L.available, 'data-change="spendAvail"', 'width:130px')}</div>
+    <div class="field"><span class="muted">Spent so far</span><span>${usd(L.spent)}</span></div>
+    <div class="muted small">Change the available amount if your starting number is off. Spending left adjusts to match, and you can undo it below.</div></div>`; })() : ''}
 
   <div class="row" style="margin:14px 4px 6px"><div class="day" style="margin:0">Money in · ${signed(sum(ins))}</div></div>
   <div class="card">${ins.length ? ins.map(potEntryRow).join('') : '<div class="muted">Nothing has come in yet.</div>'}</div>
@@ -239,18 +243,44 @@ function potView() {
 
 /* ---------- activity ---------- */
 
-/* Every word typed must appear somewhere: name, merchant, category, pot, amount, or date (e.g. "kroger 42", "gas october", "camera"). */
+/* Every word typed must match something. Words can be a name, merchant, category, pot, account, amount, or a date/time:
+   "kroger", "gas october", "tue", "2:30 pm", "evening", "11/4", "yesterday", "this week", "last month",
+   ">50", "<20", "10-40" (amounts), "income", "unsorted", "sorted". */
 function txMatches(t, query) {
-  const words = String(query || '').toLowerCase().replace(/\$/g, '').split(/\s+/).filter(Boolean);
+  let qs = String(query || '').toLowerCase().replace(/\$/g, '').replace(/\b(this|last) (week|month|year)\b/g, '@$1$2').trim();
+  const words = qs.split(/\s+/).filter(Boolean);
   if (!words.length) return true;
-  const d = new Date(t.date);
+  const d = new Date(t.date), now = new Date(), abs = Math.abs(t.amount);
+  const day0 = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
+  const days = Math.round((day0(now) - day0(d)) / 864e5);
+  const h = d.getHours();
+  const period = h < 5 ? 'night' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : h < 21 ? 'evening' : 'night';
+  const weekStart = day0(now); weekStart.setDate(weekStart.getDate() - weekStart.getDay());
+  const sameMonth = (x, y) => x.getFullYear() === y.getFullYear() && x.getMonth() === y.getMonth();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const hay = [
-    t.rawName, t.simpleName, (CATS[t.category] || {}).title || '', t.pot ? potName(t.pot) : '',
-    t.isIgnored ? 'ignored not a spend' : '', t.amount > 0 ? 'income deposit' : 'purchase',
-    Math.abs(t.amount).toFixed(2), String(Math.round(Math.abs(t.amount))),
-    d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }), d.toISOString().slice(0, 10),
+    t.rawName, t.simpleName, t.merchant || '', (CATS[t.category] || {}).title || '', t.pot ? potName(t.pot) : '', accountTitle(t.accountID),
+    t.isIgnored ? 'ignored not a spend ' + (t.ignoredWhy || '') : '', t.amount > 0 ? 'income deposit' : 'purchase expense spend',
+    t.pot || t.isIgnored || t.amount > 0 ? 'sorted' : 'unsorted pending review',
+    abs.toFixed(2), String(Math.round(abs)),
+    d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }),
+    d.toLocaleDateString('en-US', { weekday: 'short', month: 'short' }), d.toLocaleDateString('en-US'), d.toISOString().slice(0, 10),
+    d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }), String(h).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'), period,
   ].join(' ').toLowerCase();
-  return words.every(w => hay.includes(w));
+  return words.every(w => {
+    let m;
+    if (w === 'today') return days === 0;
+    if (w === 'yesterday') return days === 1;
+    if (w === '@thisweek') return day0(d) >= weekStart;
+    if (w === '@lastweek') { const s = new Date(weekStart); s.setDate(s.getDate() - 7); return day0(d) >= s && day0(d) < weekStart; }
+    if (w === '@thismonth') return sameMonth(d, now);
+    if (w === '@lastmonth') return sameMonth(d, lastMonth);
+    if (w === '@thisyear') return d.getFullYear() === now.getFullYear();
+    if (w === '@lastyear') return d.getFullYear() === now.getFullYear() - 1;
+    if ((m = w.match(/^(>=|<=|>|<)(\d+(?:\.\d+)?)$/))) { const n = +m[2]; return m[1] === '>' ? abs > n : m[1] === '<' ? abs < n : m[1] === '>=' ? abs >= n : abs <= n; }
+    if ((m = w.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/)) && !/^\d{4}-/.test(w)) return abs >= +m[1] && abs <= +m[2];
+    return hay.includes(w);
+  });
 }
 const searchBox = (id, value, change, ph) =>
   `<input id="${id}" type="search" placeholder="${ph}" value="${esc(value)}" data-change="${change}" data-live="1" autocapitalize="off" autocorrect="off" spellcheck="false" style="margin-bottom:10px">`;
@@ -279,7 +309,7 @@ function activityView() {
       style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
   return `<h1>Activity</h1>
-  ${searchBox('search', ui.search, 'search', 'Search')}
+  ${searchBox('search', ui.search, 'search', 'Name, date, time, category, $…')}
   <div class="chips">
     ${chip(null, 'All', SAGE, '')}
     ${Object.entries(CATS).map(([k, c]) => chip(k, c.title, c.color, c.icon)).join('')}
@@ -290,28 +320,27 @@ function activityView() {
 
 /* ---------- review ---------- */
 
-/* Spending first, then every other pot and goal, in one swipeable row that stays at the top. */
+/* Spending stays pinned at the top; every other pot and goal is stacked right under it. */
 function potStrip() {
-  const L = spendingLevel();
-  const card = p => {
-    if (p.id === 'spending') {
-      const pc = L.pct;
-      const color = pc == null ? 'var(--accent)' : pc > 0.5 ? 'var(--accent)' : pc > 0.2 ? 'var(--orange)' : 'var(--red)';
-      return `<div class="card spendbar pc" data-action="openPot" data-id="spending">
-        <div class="row"><span class="muted small">${emo(p.icon)} ${esc(p.name)} left ›</span><span class="small muted">${L.available > 0 ? Math.round((pc || 0) * 100) + '%' : ''}</span></div>
-        <div class="big ${L.left < 0 ? 'neg' : ''}" ${counted('spend', L.left)}>${usd(L.left)}</div>
-        ${pc == null ? '<div class="muted small">Apply this month\'s budget</div>' : `<div class="bar thick">${fill('spend', pc * 100, 'background:' + color)}</div>`}
-      </div>`;
-    }
-    const pc = p.target > 0 ? Math.min(Math.max(p.balance / p.target, 0), 1) : null;
-    return `<div class="card spendbar pc" data-action="openPot" data-id="${esc(p.id)}">
-      <div class="row"><span class="muted small">${emo(p.icon)} ${esc(p.name)} ›</span><span class="small muted">${pc == null ? '' : Math.round(pc * 100) + '%'}</span></div>
-      <div class="big ${p.balance < 0 ? 'neg' : ''}" ${counted('pot-' + p.id, p.balance)}>${usd(p.balance)}</div>
-      ${pc == null ? '<div class="muted small">no goal</div>' : `<div class="bar thick">${fill('pot-' + p.id, pc * 100)}</div>`}
+  const L = spendingLevel(), p = potById('spending');
+  const pc = L.pct;
+  const color = pc == null ? 'var(--accent)' : pc > 0.5 ? 'var(--accent)' : pc > 0.2 ? 'var(--orange)' : 'var(--red)';
+  const main = `<div class="stick"><div class="card spendbar" data-action="openPot" data-id="spending">
+    <div class="row"><span class="muted small">${emo(p.icon)} ${esc(p.name)} left</span>
+      <span class="small muted">${L.available > 0 ? Math.round((pc || 0) * 100) + '% left' : ''}</span></div>
+    <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}" ${counted('spend', L.left)}>${usd(L.left)}</div>
+      ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
+    ${pc == null ? '' : `<div class="bar thick">${fill('spend', pc * 100, 'background:' + color)}</div>`}
+  </div></div>`;
+  const others = S.pots.filter(x => x.id !== 'spending').map(x => {
+    const g = x.target > 0 ? Math.min(Math.max(x.balance / x.target, 0), 1) : null;
+    return `<div class="card spendbar prow" data-action="openPot" data-id="${esc(x.id)}">
+      <div class="row"><span class="muted small">${emo(x.icon)} ${esc(x.name)}${g == null ? '' : ' · ' + Math.round(g * 100) + '%'}</span>
+        <b class="${x.balance < 0 ? 'neg' : ''}" ${counted('pot-' + x.id, x.balance)}>${usd(x.balance)}</b></div>
+      ${g == null ? '' : `<div class="bar">${fill('pot-' + x.id, g * 100)}</div>`}
     </div>`;
-  };
-  const pots = [potById('spending'), ...S.pots.filter(p => p.id !== 'spending')].filter(Boolean);
-  return `<div class="stick"><div class="strip ${pots.length > 1 ? 'multi' : ''}">${pots.map(card).join('')}</div></div>`;
+  }).join('');
+  return main + (others ? `<div class="prows">${others}</div>` : '');
 }
 
 const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savings', loan: 'loan', investment: 'investment' };
@@ -371,14 +400,14 @@ function reviewChips() {
 function reviewView() {
   const q = ui.rsearch.trim();
   return `${potStrip()}
-  <div class="row"><h1>Review</h1><button class="btn plus" data-action="addTx" aria-label="Add purchase">＋</button></div>
+  <div class="row"><h1>Review</h1><button class="link plusbtn" data-action="addTx" aria-label="Add purchase">＋</button></div>
   ${backupBanner()}
   ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
     <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
     <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
-  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search')}
+  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Name, date, time, category, $…')}
   ${q ? '' : reviewChips()}
-  ${!q && pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} sorted ›</button>` : ''}
+  ${!q && pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} sorted</button>` : ''}
   <div id="rvList">${reviewListHTML()}</div>`;
 }
 
@@ -388,7 +417,7 @@ function incomeView() {
   const now = new Date();
   const items = countedIncome(now);
   const total = totalEarnings(now);
-  return `<div class="row"><h1>Income</h1><button class="link" data-action="addExtra" style="font-size:28px;line-height:1">＋</button></div>
+  return `<div class="row"><h1>Income</h1><button class="link plusbtn" data-action="addExtra" aria-label="Add extra income">＋</button></div>
 
   ${CD('i-src', 'Income sources', true, '<b class="pos">' + usd(total) + '</b>')}
     ${S.incomeSources.map(s => {
@@ -761,11 +790,16 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-04 f';
+const APP_VERSION = '2026-11-04 g';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
-  return `<div class="row" style="padding:4px 0"><span>${esc(i.institution)}<div class="muted small">${mine.length ? mine.length + ' account' + (mine.length === 1 ? '' : 's') + ': ' + mine.map(a => esc(a.name.replace(/ ··\d+$/, ''))).join(', ') : 'no accounts yet. Tap choose accounts.'}</div>${prob ? `<div class="err">${esc(prob)}</div>` : ''}</span><span><button class="link small" data-action="chooseAccts" data-id="${esc(i.item_id)}">choose accounts</button> <button class="link small" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></span></div>`;
+  return `<div class="linked">
+    <div class="linked-name">${esc(i.institution)}</div>
+    <div class="muted small linked-accts">${mine.length ? mine.length + ' account' + (mine.length === 1 ? '' : 's') + ': ' + mine.map(a => esc(a.name.replace(/ ··\d+$/, ''))).join(', ') : 'no accounts yet. Tap choose accounts.'}</div>
+    ${prob ? `<div class="err">${esc(prob)}</div>` : ''}
+    <div class="btn-row"><button class="btn" data-action="chooseAccts" data-id="${esc(i.item_id)}">choose accounts</button><button class="btn danger" data-action="unlinkItem" data-id="${esc(i.item_id)}">unlink</button></div>
+  </div>`;
 };
 
 function settingsView() {
@@ -794,11 +828,11 @@ function settingsView() {
     <div class="field" style="margin-top:8px"><span>Count purchases from</span><input type="date" value="${esc(st.countFrom || '')}" data-change="countFrom" style="width:160px"></div>
     <details class="info"><summary>Good to know</summary>
       <div class="muted small">
-      ▸ Read-only: it can see balances and purchases, never move money.<br>
-      ▸ Your bank password goes to Plaid's window, never to this app.<br>
-      ▸ Keys live on your private server, not in the app or on GitHub.<br>
-      ▸ Some banks (Chase) need the first link done in Safari${standalone ? ' (you are in the home-screen app now)' : ''}.<br>
-      ▸ Setup steps: <b>server/README.md</b>.
+      • Read-only: it can see balances and purchases, never move money.<br>
+      • Your bank password goes to Plaid's window, never to this app.<br>
+      • Keys live on your private server, not in the app or on GitHub.<br>
+      • Some banks (Chase) need the first link done in Safari${standalone ? ' (you are in the home-screen app now)' : ''}.<br>
+      • Setup steps: <b>server/README.md</b>.
       </div></details>
   ${CE}
   ${backupCard()}`;
@@ -1643,6 +1677,7 @@ function handleField(el, final) {
     case 'txAmount': m.amount = num(v); return;
     case 'txName': m.name = v; return;
     case 'txDate': m.date = v; return;
+    case 'spendAvail': if (final) { setSpendingAvailable(num(v)); render(); } return;
     case 'dlgType': { const d = ui.dialog; if (d) { d.typed = v; const b = $('dlgOkBtn'); if (b) b.disabled = v.trim().toUpperCase() !== d.word; } return; }
     // pots
     case 'potName': m.fields.name = v; return;
@@ -1757,6 +1792,26 @@ function endDrag() {
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
 
+/* Windows open and close with a short height animation instead of snapping. */
+document.addEventListener('click', e => {
+  const sum = e.target.closest && e.target.closest('details.coll > summary');
+  if (!sum) return;
+  const d = sum.parentElement, body = d.querySelector(':scope > .coll-body');
+  if (!body || !body.animate || S.settings.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  e.preventDefault();
+  if (d.__anim) { d.__anim.cancel(); body.style.overflow = ''; }
+  const ease = 'cubic-bezier(.2, .8, .2, 1)';
+  if (!d.open) {
+    d.open = true;
+    const h = body.offsetHeight; body.style.overflow = 'hidden';
+    d.__anim = body.animate([{ height: '0px', opacity: 0 }, { height: h + 'px', opacity: 1 }], { duration: 260, easing: ease });
+    d.__anim.onfinish = () => { body.style.overflow = ''; d.__anim = null; };
+  } else {
+    const h = body.offsetHeight; body.style.overflow = 'hidden';
+    d.__anim = body.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 200, easing: ease });
+    d.__anim.onfinish = () => { d.open = false; body.style.overflow = ''; d.__anim = null; };
+  }
+}, true);
 document.addEventListener('toggle', e => {
   const d = e.target;
   if (!d || !d.dataset || !d.dataset.k) return;

@@ -92,7 +92,6 @@ body { padding-top: env(safe-area-inset-top); }
 h1 { font: 400 calc(30px * var(--ts, 1))/1.1 'VT323', 'IBM Plex Mono', monospace; margin: 10px 0 14px; letter-spacing: .5px; text-transform: lowercase; color: var(--fg); }
 h1::before { content: '~/'; color: var(--sage); margin-right: 2px; }
 h2 { font: 500 calc(13px * var(--ts, 1))/1.3 'IBM Plex Mono', monospace; margin: 0 0 10px; color: var(--sage); text-transform: lowercase; }
-h2::before { content: '▸ '; }
 .muted { color: var(--fg-dim); }
 .small { font-size: calc(12px * var(--ts, 1)); }
 .pos { color: var(--green); }
@@ -257,8 +256,8 @@ textarea { resize: vertical; }
 @keyframes sheetDown { to { transform: translateY(105%); } }
 @keyframes dialogIn { from { opacity: 0; transform: scale(.9) translateY(8px); } }
 @keyframes dialogOut { to { opacity: 0; transform: scale(.94); } }
-@keyframes screenIn { from { opacity: 0; transform: translate(var(--dx, 0), 14px); } }
-@keyframes tabPop { 0% { transform: scale(.7); } 55% { transform: scale(1.22); } 100% { transform: scale(1); } }
+@keyframes screenIn { from { opacity: 0; transform: translateX(var(--dx, 0)); } }
+@keyframes tabPop { 0% { transform: scale(.85); } 100% { transform: scale(1); } }
 
 .scrim.in { animation: fadeIn .28s ease both; }
 .scrim.in .sheet { animation: sheetUp .5s cubic-bezier(.16, 1, .3, 1) backwards; }
@@ -267,18 +266,12 @@ textarea { resize: vertical; }
 .scrim.out .sheet { animation: sheetDown .32s cubic-bezier(.5, 0, .9, .5) forwards; }
 .scrim.out .dialog { animation: dialogOut .22s ease forwards; }
 
-#app.enter > * { animation: screenIn .5s cubic-bezier(.16, 1, .3, 1) backwards; }
-#app.enter > *:nth-child(2) { animation-delay: .04s; }
-#app.enter > *:nth-child(3) { animation-delay: .08s; }
-#app.enter > *:nth-child(4) { animation-delay: .12s; }
-#app.enter > *:nth-child(5) { animation-delay: .16s; }
-#app.enter > *:nth-child(6) { animation-delay: .20s; }
-#app.enter > *:nth-child(n+7) { animation-delay: .24s; }
-#tabbar button.pop span.i { animation: tabPop .45s cubic-bezier(.34, 1.56, .64, 1); }
+#app.enter { animation: screenIn .24s cubic-bezier(.2, .8, .2, 1) backwards; }
+#tabbar button.pop span.i { animation: tabPop .28s cubic-bezier(.2, .8, .2, 1); }
 #tabbar button.on::before { animation: fadeIn .3s ease backwards; }
 
 /* springy press feedback */
-.btn, .tx, .card.pot, .spendbar, .chip, .seg button, #tabbar button, .sel, .opt, .link { transition: transform .35s cubic-bezier(.34, 1.56, .64, 1), background-color .2s, border-color .2s, color .2s; }
+.btn, .tx, .card.pot, .spendbar, .chip, .seg button, #tabbar button, .sel, .opt, .link { transition: transform .22s cubic-bezier(.2, .8, .2, 1), background-color .2s, border-color .2s, color .2s; }
 .btn:active, .card.pot:active, .spendbar:active, .chip:active, .sel:active { transform: scale(.96); transition-duration: .08s; }
 .tx:active, .opt:active { transform: scale(.985); transition-duration: .08s; }
 .seg button:active, #tabbar button:active, .link:active { transform: scale(.92); transition-duration: .08s; }
@@ -366,10 +359,7 @@ input, textarea, .mono, .sheet, .dialog { -webkit-user-select: text; user-select
 .bal { font-size: calc(10.5px * var(--ts, 1)); color: var(--fg-dim); margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* pots strip on Review */
-.strip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -20px; padding: 0 20px; scrollbar-width: none; overscroll-behavior-x: contain; }
-.strip .pc { flex: 1 0 100%; scroll-snap-align: start; margin-bottom: 8px; min-width: 0; }
-.strip.multi .pc { flex-basis: 78%; }
-.allclear { text-align: center; font-size: 34px; color: var(--sage); padding: 22px 0; line-height: 1; }
+.allclear { text-align: center; font-size: 22px; color: var(--sage); padding: 6px 0; line-height: 1; }
 .btn.plus { font-size: 20px; line-height: 1; padding: 6px 16px; }
 .profile { padding: 4px 12px; }
 .profile b { font-size: calc(15px * var(--ts, 1)); }
@@ -393,3 +383,14 @@ html[data-demo]::after { content: ''; position: fixed; inset: 0; border: 3px sol
 details.info summary { cursor: pointer; color: var(--fg-dim); font-size: calc(12px * var(--ts, 1)); margin-top: 10px; }
 .link { white-space: normal; text-align: left; }
 .row > .link, .row .link.small { white-space: nowrap; flex: none; }
+.plusbtn { font-size: 28px; line-height: 1; padding: 0 4px; font-weight: 400; }
+
+.prows { margin-bottom: 6px; }
+.prow { padding: 8px 12px; margin-bottom: 6px; }
+.prow .bar { margin: 6px 0 0; height: 6px; }
+.linked { border-top: 1px solid var(--line); padding: 10px 0; min-width: 0; }
+.linked-name { font-weight: 600; overflow-wrap: anywhere; }
+.linked-accts { overflow-wrap: anywhere; margin-top: 2px; }
+.linked .btn-row { margin-top: 8px; }
+.linked .btn { padding: 8px 10px; }
+.field input[type="date"] { width: auto; max-width: 56%; font-size: calc(14px * var(--ts, 1)); padding: 8px 6px; }
