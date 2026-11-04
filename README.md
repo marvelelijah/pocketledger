@@ -65,3 +65,9 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 - Settings → *Demo mode* shows the app with entirely made-up data (amber frame and a DEMO tag). Your real data and bank link are never read in demo mode and come back when you exit.
 - Entries you add by hand can be edited or deleted from their detail sheet.
 - Settings shows the app version at the bottom so you can confirm you are on the latest copy.
+
+## Latest changes
+- Five tabs (Review, Home, Activity, Income, Budget). Windows in Budget, Settings and Income can be collapsed and stay that way.
+- Review shows Spending and every other pot or goal in a swipeable row. Rounding differences go straight to Spending, so there is no month-end check.
+- Applying or updating the monthly budget asks first and can be undone. Erase, clear and restore need a typed word.
+- Themes: Dusk (default), Harvest, Lagoon, Midnight, Sandstone, Garnet, each with dark and light. Every text colour is checked to at least 4.5:1 contrast (WCAG 2.x).

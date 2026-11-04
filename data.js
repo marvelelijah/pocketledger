@@ -275,8 +275,8 @@ function defaultState() {
     useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
     settings: {
       name: '',            // only shown on this phone
-      palette: 'terminal', // terminal | harvest | lagoon | midnight | sandstone | garnet
-      mode: 'auto',        // auto | dark | light
+      palette: 'dusk',     // dusk | harvest | lagoon | midnight | sandstone | garnet
+      mode: 'dark',        // dark | light | auto
       textSize: 1,
       motion: 'auto',      // auto | off
       backupDays: 7,       // 0 = no reminder
@@ -292,6 +292,7 @@ function defaultState() {
     potLog: [],           // every movement in or out of a pot
     roundMode: 'nearest', // how spending is rounded when deducted from a pot: 'off' | 'nearest' | 'up'
     budgetRuns: [],
+    budgetUndo: null,    // what the month looked like before the last Apply/Update
     adjustments: [],      // month-end redistributions
     learned: {},
     todos: [],
@@ -315,6 +316,7 @@ function loadState() {
 function migrate(old) {
   const s = Object.assign(defaultState(), old);
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
+  if (s.settings.palette === 'terminal') s.settings.palette = 'dusk';
   if (old.settings && old.settings.theme && !old.settings.mode) { const t = old.settings.theme; s.settings.mode = t === 'paper' ? 'light' : t === 'auto' ? 'auto' : 'dark'; }
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
   if (old.namesV !== 2) {                                   // older transactions get the newer, verb-free names and cross-checked confidence
@@ -548,11 +550,15 @@ function deduction(amount) {
 function assign(id, potId) {
   const t = txById(id);
   if (!t || !isExpense(t)) return;
-  removeLogs(e => e.kind === 'tx' && e.txId === id);
+  removeLogs(e => (e.kind === 'tx' || e.kind === 'round') && e.txId === id);
   t.pot = null;
   if (potId && potById(potId)) {
-    logEntry(potId, -deduction(t.amount), t.simpleName, 'tx', { txId: id, date: t.date, exact: Math.abs(t.amount) });
+    const ded = deduction(t.amount);
+    logEntry(potId, -ded, t.simpleName, 'tx', { txId: id, date: t.date, exact: Math.abs(t.amount) });
     t.pot = potId;
+    // Rounding is never lost: whatever rounding took (or gave back) goes straight to Spending.
+    const diff = round2(ded - Math.abs(t.amount));
+    if (diff !== 0 && potById('spending')) logEntry('spending', diff, 'Rounding', 'round', { txId: id, date: t.date });
   }
   t.isIgnored = false;
   save();
@@ -561,7 +567,7 @@ function assign(id, potId) {
 function ignoreTx(id, why) {
   const t = txById(id);
   if (!t) return;
-  removeLogs(e => e.kind === 'tx' && e.txId === id);
+  removeLogs(e => (e.kind === 'tx' || e.kind === 'round') && e.txId === id);
   t.pot = null;
   t.isIgnored = true;
   t.ignoredWhy = why || 'Not a spend';
@@ -782,6 +788,11 @@ function applyBudget(breakdown, date) {
   const savingsAmount = round2(earnings * pct / 100);
   const leftover = round2(earnings - fixed - savingsAmount);
 
+  S.budgetUndo = {
+    monthKey: key, at: new Date().toISOString(),
+    prevRun: S.budgetRuns.find(r => r.monthKey === key) ? JSON.parse(JSON.stringify(S.budgetRuns.find(r => r.monthKey === key))) : null,
+    prevLogs: S.potLog.filter(e => e.kind === 'budget' && e.monthKey === key).map(e => Object.assign({}, e)),
+  };
   removeLogs(e => e.kind === 'budget' && e.monthKey === key);
   logEntry('spending', leftover, 'Budget: left for spending', 'budget', { monthKey: key });
   if (savingsAmount) logEntry('savings', savingsAmount, 'Budget: savings (' + pct + '% of earnings)', 'budget', { monthKey: key });
@@ -799,7 +810,45 @@ function applyBudget(breakdown, date) {
   return run;
 }
 
-/* ---------- month-end check: find and redistribute small discrepancies ---------- */
+/* Puts the month's budget back the way it was before the last Apply/Update. */
+function undoBudget() {
+  const u = S.budgetUndo;
+  if (!u) return false;
+  removeLogs(e => e.kind === 'budget' && e.monthKey === u.monthKey);
+  for (const e of u.prevLogs) { const pot = potById(e.potId); if (!pot) continue; S.potLog.push(Object.assign({}, e)); pot.balance = round2(pot.balance + e.amount); }
+  S.budgetRuns = S.budgetRuns.filter(r => r.monthKey !== u.monthKey);
+  if (u.prevRun) S.budgetRuns.push(u.prevRun);
+  S.budgetRuns.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  S.budgetUndo = null;
+  save();
+  return true;
+}
+
+/* Balance after each transaction, per account, counted back from the account's current balance. */
+function runningBalances() {
+  const out = {}, by = {};
+  for (const t of S.transactions) (by[t.accountID] = by[t.accountID] || []).push(t);
+  for (const [id, list] of Object.entries(by)) {
+    const a = accountById(id);
+    if (!a || typeof a.balance !== 'number') continue;
+    let bal = a.balance;
+    for (const t of list.slice().sort((x, y) => new Date(y.date) - new Date(x.date))) { out[t.id] = bal; bal = round2(bal - t.amount); }
+  }
+  return out;
+}
+
+/* Average per month a source has paid: from your pasted history if there is some, otherwise from your own deposits. */
+function sourceMonthlyAverage(s) {
+  const nm = String(s.name || '').toLowerCase(), kw = String(s.matchKeyword || '').toLowerCase();
+  const h = incomeSummary().find(x => { const n = x.name.toLowerCase(); return n === nm || (nm && (n.includes(nm) || nm.includes(n))) || (kw && n.includes(kw)); });
+  if (h && h.monthMean) return h.monthMean;
+  const cur = monthKey(new Date()), months = {};
+  for (const t of S.transactions) if (t.incomeSourceID === s.id && monthKey(t.date) !== cur) months[monthKey(t.date)] = (months[monthKey(t.date)] || 0) + t.amount;
+  const v = Object.values(months);
+  return v.length ? round2(v.reduce((a, x) => a + x, 0) / v.length) : null;
+}
+
+/* ---------- month-end check (no longer shown; kept for old data) ---------- */
 
 /* Rounding: what was exactly spent from pots this month vs what was deducted. */
 function roundingStats(key) {
@@ -901,8 +950,9 @@ function incomeSummary(now) {
     // the middle month, not the average: one big month (an extra paycheck, a bonus) shouldn't set your budget
     const vals = done.map(i => o.months[i]).sort((x, y) => x - y);
     const monthlyAvg = vals.length ? (vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2) : o.total;
+    const monthMean = done.length ? round2(done.reduce((a, i) => a + o.months[i], 0) / done.length) : null;
     return Object.assign(o, {
-      avg: round2(avg), cv, recent: o.last >= cur - 2, monthlyAvg: round2(monthlyAvg),
+      monthMean, avg: round2(avg), cv, recent: o.last >= cur - 2, monthlyAvg: round2(monthlyAvg),
       kind: o.n <= 2 ? 'one-off' : (cv < 0.25 && o.n >= 4 ? 'regular' : 'varies'),
     });
   }).sort((a, b) => (b.recent - a.recent) || (b.last - a.last) || (b.total - a.total));

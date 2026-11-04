@@ -4,9 +4,9 @@ const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
 const modalRoot = document.getElementById('modal-root');
 
-const TAB_KEYS = ['review', 'home', 'activity', 'income', 'budget', 'plan'];
+const TAB_KEYS = ['review', 'home', 'activity', 'income', 'budget'];
 const ui = {
-  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', stack: false, stackIdx: 0, linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
+  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -22,7 +22,7 @@ const monthName = d => d.toLocaleString('en-US', { month: 'long', year: 'numeric
 const monthLabel = key => { const [y, m] = key.split('-').map(Number); return monthName(new Date(y, m - 1, 1)); };
 
 /* Emoji, tinted to a color so they sit in the palette instead of shouting. */
-let SAGE = '#a9bea1', DIM = '#9c9786';
+let SAGE = '#f2a488', DIM = '#a29fc0';
 const tintCache = {};
 function tintFilter(hex) {
   if (tintCache[hex]) return tintCache[hex];
@@ -72,10 +72,18 @@ function txRow(t, tag, opts) {
     <div class="right">
       <div class="amt ${t.amount > 0 ? 'pos' : ''}">${usd(t.amount)}</div>
       <div class="meta">${label ? esc(label) : ''} ${badge(t)}</div>
+      ${RB[t.id] !== undefined ? `<div class="bal">bal ${usd(RB[t.id])}</div>` : ''}
     </div>
   </div>`;
 }
 
+
+/* Collapsible windows: native <details>, remembered between visits. */
+const dOpen = (k, def) => { const v = (S.settings.coll || {})[k]; return (v === undefined ? def : v === 'open') ? 'open' : ''; };
+const CD = (k, title, def, right, cls) => `<details class="card coll ${cls || ''}" data-k="${k}" ${dOpen(k, def)}><summary><h2>${title}</h2>${right ? `<span class="coll-r">${right}</span>` : ''}</summary><div class="coll-body">`;
+const CE = '</div></details>';
+
+let RB = {};
 const emptyBox = (title, text) => `<div class="empty"><b>${title}</b>${text}</div>`;
 const numInput = (v, attrs, style) => `<input type="number" inputmode="decimal" step="any" value="${r2(v)}" ${style ? `style="${style}"` : ''} ${attrs}>`;
 
@@ -106,9 +114,9 @@ function homeView() {
   <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
 
   <div class="grid3" style="margin-top:12px">
-    <div class="card"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
-    <div class="card"><div class="muted small">Spent</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
-    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible YTD ›</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
+    <div class="card tappable" data-action="tab" data-tab="income"><div class="muted small">Earned ›</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
+    <div class="card tappable" data-action="openPot" data-id="spending"><div class="muted small">Spent ›</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
+    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible ›</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
 
   ${FEATURES.creditScore ? creditCard() : ''}
@@ -251,7 +259,8 @@ function activityListHTML() {
   const list = S.transactions.filter(t => (!ui.afilter || t.accountID === ui.afilter) && (!ui.filter || t.category === ui.filter) && txMatches(t, ui.search));
   if (!list.length) return emptyBox('No transactions', 'Try a different search or category.');
   let html = '', lastDay = '', open = false;
-  for (const t of list) {
+  const lim = ui.actLimit || 60;
+  for (const t of list.slice(0, lim)) {
     const day = new Date(t.date).toDateString();
     if (day !== lastDay) {
       if (open) html += '</div>';
@@ -260,7 +269,7 @@ function activityListHTML() {
     }
     html += txRow(t, incomeTag(t));
   }
-  return html + (open ? '</div>' : '');
+  return html + (open ? '</div>' : '') + (list.length > lim ? `<button class="btn full" data-action="moreAct">show more (${list.length - lim})</button>` : '');
 }
 
 function activityView() {
@@ -269,30 +278,40 @@ function activityView() {
     return `<button class="chip" data-action="filter" data-cat="${key || ''}"
       style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
-  const open = ui.findOpen || ui.search || ui.filter;
-  return `<div class="row"><h1>Activity</h1><button class="link" data-action="toggleFind" aria-label="Search and filter">${open ? '✕' : '🔍'}</button></div>
-  ${open ? `${searchBox('search', ui.search, 'search', 'Search')}
+  return `<h1>Activity</h1>
+  ${searchBox('search', ui.search, 'search', 'Search')}
   <div class="chips">
-    ${chip(null, 'All', '#A3B89C', '')}
+    ${chip(null, 'All', SAGE, '')}
     ${Object.entries(CATS).map(([k, c]) => chip(k, c.title, c.color, c.icon)).join('')}
-  </div>` : ''}
+  </div>
   ${ui.afilter ? `<div class="row" style="margin-bottom:8px"><span class="muted small">Showing only ${esc(accountTitle(ui.afilter))}</span><button class="link small" data-action="clearAfilter">show all ✕</button></div>` : ''}
   <div id="actList">${activityListHTML()}</div>`;
 }
 
 /* ---------- review ---------- */
 
-function spendingBar() {
+/* Spending first, then every other pot and goal, in one swipeable row that stays at the top. */
+function potStrip() {
   const L = spendingLevel();
-  const p = L.pct;
-  const color = p == null ? 'var(--accent)' : p > 0.5 ? 'var(--accent)' : p > 0.2 ? 'var(--orange)' : 'var(--red)';
-  return `<div class="stick"><div class="card spendbar" data-action="openPot" data-id="spending">
-    <div class="row"><span class="muted small">${emo(potById('spending').icon)} spending left this month ›</span>
-      <span class="small muted">${L.available > 0 ? Math.round((p || 0) * 100) + '% left' : ''}</span></div>
-    <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}" ${counted('spend', L.left)}>${usd(L.left)}</div>
-      ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
-    ${p == null ? '' : `<div class="bar thick">${fill('spend', p * 100, 'background:' + color)}</div>`}
-  </div></div>`;
+  const card = p => {
+    if (p.id === 'spending') {
+      const pc = L.pct;
+      const color = pc == null ? 'var(--accent)' : pc > 0.5 ? 'var(--accent)' : pc > 0.2 ? 'var(--orange)' : 'var(--red)';
+      return `<div class="card spendbar pc" data-action="openPot" data-id="spending">
+        <div class="row"><span class="muted small">${emo(p.icon)} ${esc(p.name)} left ›</span><span class="small muted">${L.available > 0 ? Math.round((pc || 0) * 100) + '%' : ''}</span></div>
+        <div class="big ${L.left < 0 ? 'neg' : ''}" ${counted('spend', L.left)}>${usd(L.left)}</div>
+        ${pc == null ? '<div class="muted small">Apply this month\'s budget</div>' : `<div class="bar thick">${fill('spend', pc * 100, 'background:' + color)}</div>`}
+      </div>`;
+    }
+    const pc = p.target > 0 ? Math.min(Math.max(p.balance / p.target, 0), 1) : null;
+    return `<div class="card spendbar pc" data-action="openPot" data-id="${esc(p.id)}">
+      <div class="row"><span class="muted small">${emo(p.icon)} ${esc(p.name)} ›</span><span class="small muted">${pc == null ? '' : Math.round(pc * 100) + '%'}</span></div>
+      <div class="big ${p.balance < 0 ? 'neg' : ''}" ${counted('pot-' + p.id, p.balance)}>${usd(p.balance)}</div>
+      ${pc == null ? '<div class="muted small">no goal</div>' : `<div class="bar thick">${fill('pot-' + p.id, pc * 100)}</div>`}
+    </div>`;
+  };
+  const pots = [potById('spending'), ...S.pots.filter(p => p.id !== 'spending')].filter(Boolean);
+  return `<div class="stick"><div class="strip ${pots.length > 1 ? 'multi' : ''}">${pots.map(card).join('')}</div></div>`;
 }
 
 const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savings', loan: 'loan', investment: 'investment' };
@@ -338,8 +357,8 @@ function reviewListHTML() {
         <span class="muted small" style="white-space:nowrap">${list.length} to sort</span></div>
       <div class="card">${list.map(reviewItem).join('')}</div>`;
   }).join('');
-  return `${groups || `<div class="card">${emptyBox('all caught up ' + emo('✅'), 'Tap ＋ Purchase when you buy something.')}</div>`}
-  ${rec.length ? `<div class="day">Recently sorted</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
+  return `${groups || (q || only ? '' : '<div class="allclear" aria-label="All sorted">✓</div>')}
+  ${rec.length ? `<div class="day">${q || only ? 'Sorted' : 'Recently sorted'}</div><div class="card">${rec.map(t => txRow(t)).join('')}</div>` : ''}`;
 }
 
 function reviewChips() {
@@ -350,15 +369,16 @@ function reviewChips() {
 }
 
 function reviewView() {
-  return `${spendingBar()}
-  <div class="row"><h1>Review</h1><span><button class="link" data-action="toggleFind" aria-label="Search">${ui.findOpen || ui.rsearch ? '✕' : '🔍'}</button> <button class="btn" data-action="addTx">＋ Purchase</button></span></div>
+  const q = ui.rsearch.trim();
+  return `${potStrip()}
+  <div class="row"><h1>Review</h1><button class="btn plus" data-action="addTx" aria-label="Add purchase">＋</button></div>
   ${backupBanner()}
   ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
     <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
     <button class="btn full" style="margin-top:8px" data-action="startFresh">Clear sample data &amp; start fresh</button></div>` : ''}
-  ${pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} sorted ›</button>` : ''}
-  ${reviewChips()}
-  ${ui.findOpen || ui.rsearch ? searchBox('rsearch', ui.rsearch, 'rsearch', 'Search') : ''}
+  ${searchBox('rsearch', ui.rsearch, 'rsearch', 'Search')}
+  ${q ? '' : reviewChips()}
+  ${!q && pending().length > 1 ? `<button class="link small" style="margin-bottom:8px" data-action="clearReview">Mark all ${pending().length} sorted ›</button>` : ''}
   <div id="rvList">${reviewListHTML()}</div>`;
 }
 
@@ -367,31 +387,29 @@ function reviewView() {
 function incomeView() {
   const now = new Date();
   const items = countedIncome(now);
+  const total = totalEarnings(now);
   return `<div class="row"><h1>Income</h1><button class="link" data-action="addExtra" style="font-size:28px;line-height:1">＋</button></div>
-  <div class="card"><div class="muted small">Earned in ${monthName(now)}</div><div class="big pos" style="font-size:32px">${usd(totalEarnings(now))}</div></div>
 
-  <div class="card"><h2>Income sources</h2>
+  ${CD('i-src', 'Income sources', true, '<b class="pos">' + usd(total) + '</b>')}
     ${S.incomeSources.map(s => {
-      const got = receivedFrom(s, now);
+      const got = receivedFrom(s, now), avg = sourceMonthlyAverage(s);
+      const avgTxt = avg ? `<span class="muted small">avg ${usd(avg)}/mo</span>` : '';
       if (s.variable) {
         return `<div style="padding:6px 0"><div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
-          <div class="muted small">Varies month to month · received this month</div></div>`;
+          <div class="row"><span class="muted small">varies</span>${avgTxt}</div></div>`;
       }
       const pct = s.expectedAmount > 0 ? Math.min(got / s.expectedAmount, 1) : 0;
       return `<div style="padding:6px 0">
         <div class="row"><b>${esc(s.name || 'Unnamed source')}</b><b>${usd(got)}</b></div>
         <div class="bar">${fill('src-' + s.id, pct * 100)}</div>
-        <div class="muted small">of ${usd(s.expectedAmount)} expected</div></div>`;
+        <div class="row"><span class="muted small">of ${usd(s.expectedAmount)}</span>${avgTxt}</div></div>`;
     }).join('') || '<div class="muted">No income sources yet.</div>'}
-    <button class="link" data-action="editSources">Edit income sources</button>
-  </div>
+    <button class="link" data-action="editSources">Edit sources</button>
+  ${CE}
 
-  <div class="card"><h2>Counted this month</h2>
-    ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">No income counted yet this month.</div>'}
-    <div class="muted small" style="margin-top:6px">Tap a deposit to remove extra income. Use ＋ to count another deposit as tips, a gift, etc. Variable income like freelance is added to your budget by hand on the Budget tab.</div>
-  </div>
-
-  <button class="btn full" data-action="openHist">Income history &amp; cross-check ›</button>`;
+  ${CD('i-count', 'Counted this month', true)}
+    ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">Nothing counted yet.</div>'}
+  ${CE}`;
 }
 
 /* ---------- income history ---------- */
@@ -506,28 +524,6 @@ function discHTML(d) {
 
 const checkKeys = () => [...new Set([monthKey(new Date()), ...S.budgetRuns.map(r => r.monthKey)])].sort().reverse();
 
-function checkCard() {
-  const keys = checkKeys();
-  if (!ui.checkMonth || !keys.includes(ui.checkMonth)) ui.checkMonth = keys[0];
-  const key = ui.checkMonth;
-  const rs = roundingStats(key);
-  const d = discrepancy(key, ui.actual);
-  return `<div class="card"><h2>Month-end check</h2>
-    ${selBtn('checkMonth', '', '', 'width:100%')}
-    <div class="field" style="margin-top:8px"><span>Spent from pots (exact)</span><span>${usd(rs.exact)}</span></div>
-    <div class="field"><span>Deducted (rounded)</span><span>${usd(rs.deducted)}</span></div>
-    <div class="field"><span>Rounding difference</span><b class="${rs.diff > 0 ? 'pos' : rs.diff < 0 ? 'neg' : ''}">${signed(rs.diff)}</b></div>
-    <div class="field"><span>All pots add up to</span><b id="pots-total">${usd(potsTotal())}</b></div>
-    <div class="field"><span>Round spending when deducting</span>
-      ${selBtn('roundMode', '')}</div>
-    <div class="field"><span>Real money you have for them <span class="muted small">(optional)</span></span>
-      ${ui.actual == null ? numInput(0, 'id="actual" data-change="actual" data-live="1" placeholder="0"', 'width:120px').replace('value="0"', 'value=""') : numInput(ui.actual, 'id="actual" data-change="actual" data-live="1"', 'width:120px')}</div>
-    <div class="muted small">Leave it blank to check only the rounding. Enter your real count to catch any other missing or extra dollars.</div>
-    <div id="disc-box" style="margin-top:6px">${discHTML(d)}</div>
-    <div class="field"><span>Put it in</span>${selBtn('adjTarget', '')}</div>
-  </div>`;
-}
-
 function historyDetail(run) {
   const key = run.monthKey;
   const txs = monthTxs(key);
@@ -562,7 +558,7 @@ function historyDetail(run) {
 
 function historyCard() {
   if (!S.budgetRuns.length) return '';
-  return `<div class="card"><h2>Budget history</h2>
+  return `${CD('b-hist', 'Budget history', false)}
     ${S.budgetRuns.map(r => {
       const open = !!ui.openRuns[r.monthKey];
       return `<div class="hist">
@@ -572,7 +568,7 @@ function historyCard() {
         </div>
         ${open ? historyDetail(r) : ''}
       </div>`;
-    }).join('')}</div>`;
+    }).join('')}${CE}`;
 }
 
 function budgetView() {
@@ -584,7 +580,7 @@ function budgetView() {
   <div class="card row"><b style="font-size:17px">${monthName(now)}</b>
     <span class="badge ${run ? 'b-hi' : 'b-mid'}">${run ? 'Applied' : 'Not applied yet'}</span></div>
 
-  <div class="card"><h2>Earnings this month</h2>
+  ${CD('b-earn', 'Earnings this month', true)}
     ${c.rows.map(r => {
       const note = r.mode === 'expected' ? 'No deposit yet, using your expected amount'
         : r.mode === 'none' ? (S.incomeSources.find(x => x.id === r.sourceId).variable ? 'Nothing received this month' : 'Nothing received yet')
@@ -601,10 +597,9 @@ function budgetView() {
     }).join('') || '<div class="muted">Add an income source on the Income tab.</div>'}
     ${extra.length ? `<div class="day">Extra income · already in your pots</div>${extra.map(t => txRow(t, incomeTag(t))).join('')}` : ''}
     <div class="field" style="border-top:1px solid var(--line);margin-top:6px"><span><b>Earnings to budget</b></span><b id="earn-total">${usd(c.earn)}</b></div>
-    <div class="muted small">Pulled from the deposits on your Income tab. Tap Edit only to fix a difference.</div>
-  </div>
+  ${CE}
 
-  <div class="card"><h2>Constant monthly expenses</h2>
+  ${CD('b-fixed', 'Constant monthly expenses', true)}
     ${S.fixedExpenses.map(e => `<div class="field">
       <input class="wide" placeholder="Name" value="${esc(e.name)}" data-change="fixedName" data-id="${e.id}" data-live="1">
       ${numInput(e.amount, `data-change="fixedAmt" data-id="${e.id}" data-live="1"`, 'width:100px')}
@@ -615,22 +610,20 @@ function budgetView() {
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
     <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.fixed)}</b></div>
-  </div>
+  ${CE}
 
-  <div class="card"><h2>Result</h2>
+  ${CD('b-result', 'Result', true)}
     <div class="field"><span><b>Added to Spending</b></span><b id="res-left" class="${c.left < 0 ? 'neg' : 'pos'}">${usd(c.left)}</b></div>
     <div class="field"><span><b>Added to Savings</b></span><b id="res-save" class="pos">${usd(c.save)}</b></div>
-    <button class="btn primary full" data-action="applyBudget">${run ? "Update this month's budget" : 'Apply ' + now.toLocaleString('en-US', { month: 'long' }) + ' budget'}</button>
-    <div class="muted small" style="margin-top:8px">Nothing happens until you tap this. Updating a month that's already applied replaces its numbers, so nothing is counted twice.</div>
-  </div>
-
-  ${checkCard()}
+    <button class="btn ${run ? '' : 'primary'} full" style="margin-top:10px" data-action="applyBudget">${run ? 'Update ' + now.toLocaleString('en-US', { month: 'long' }) + '…' : 'Apply ' + now.toLocaleString('en-US', { month: 'long' }) + ' budget…'}</button>
+    ${S.budgetUndo && S.budgetUndo.monthKey === monthKey(now) ? '<button class="btn full" style="margin-top:8px" data-action="undoBudget">↩ Undo the last ' + (S.budgetUndo.prevRun ? 'update' : 'apply') + '</button>' : ''}
+  ${CE}
 
   ${historyCard()}`;
 }
 
 function backupCard() {
-  return `<div class="card"><h2>Backup &amp; restore</h2>
+  return `${CD('s-backup', 'Backup &amp; restore', false)}
     <div class="muted small" style="margin-bottom:8px">${S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'No backup yet.'} Your data lives only on this phone, so keep a copy somewhere private.</div>
     <button class="btn primary full" data-action="shareCode">Email myself a backup code</button>
     <div class="muted small" style="margin:6px 0 10px">Opens the share sheet. Choose Mail and send it to yourself. It can't send by itself; a web page has no way to email on its own.</div>
@@ -641,7 +634,7 @@ function backupCard() {
     <button class="btn full" style="margin-top:8px" data-action="restoreNotes">Bring back only my notes &amp; to-dos from this code</button>
     <input type="file" id="importFile" accept="application/json,.json" hidden data-change="import">
     <div class="muted small" style="margin-top:8px">Restoring replaces everything on this phone. The code contains your financial data, so keep that email private and never post it online.</div>
-  </div>`;
+  ${CE}`;
 }
 
 /* Only touch the DOM when the content changed, so a tap on a button isn't lost when a text field blurs. */
@@ -745,12 +738,22 @@ function topbar() {
   const nm = (S.settings.name || '').trim();
   const handle = DEMO ? 'demo@pocketledger' : (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@pocketledger';
   return `<div class="topbar"><span class="prompt">${esc(handle)}${DEMO ? '<span class="demo-tag">DEMO</span>' : ''}${syncLabel() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
-    <button class="profile" data-action="openSettings" aria-label="Profile and settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}<span>settings</span></button></div>`;
+    <button class="profile" data-action="openSettings" aria-label="Settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}</button></div>`;
 }
 
-const PALETTES = [['terminal', 'Terminal', ['#1b1a16', '#a9bea1', '#de9770', '#dcae62', '#ebe6d6']], ['harvest', 'Harvest', ["#335c67", "#fff3b0", "#e09f3e", "#9e2a2b", "#540b0e"]], ['lagoon', 'Lagoon', ["#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51"]], ['midnight', 'Midnight', ["#0d1321", "#1d2d44", "#3e5c76", "#748cab", "#f0ebd8"]], ['sandstone', 'Sandstone', ["#edede9", "#d6ccc2", "#f5ebe0", "#e3d5ca", "#d5bdaf"]], ['garnet', 'Garnet', ["#4f000b", "#720026", "#ce4257", "#ff7f51", "#ff9b54"]]];
-const MODES = [['auto', 'auto'], ['dark', 'dark'], ['light', 'light']];
-const themeKey = () => { const st = S.settings, dark = st.mode === 'auto' ? !matchMedia('(prefers-color-scheme: light)').matches : st.mode === 'dark'; return st.palette === 'terminal' ? (dark ? 'charcoal' : 'paper') : st.palette + '-' + (dark ? 'dark' : 'light'); };
+const PALETTES = [['dusk', 'Dusk', ["#1c1a2e", "#f2a488", "#8fb4f0", "#e58fb4", "#ece8f5"]], ['harvest', 'Harvest', ["#335c67", "#fff3b0", "#e09f3e", "#9e2a2b", "#540b0e"]], ['lagoon', 'Lagoon', ["#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51"]], ['midnight', 'Midnight', ["#0d1321", "#1d2d44", "#3e5c76", "#748cab", "#f0ebd8"]], ['sandstone', 'Sandstone', ["#edede9", "#d6ccc2", "#f5ebe0", "#e3d5ca", "#d5bdaf"]], ['garnet', 'Garnet', ["#4f000b", "#720026", "#ce4257", "#ff7f51", "#ff9b54"]]];
+const MODES = [['dark', 'dark'], ['light', 'light'], ['auto', 'auto']];
+/* WCAG 2.x contrast: nudge a colour lighter or darker until it reads on the current background. */
+const lumOf = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+const ratio = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+function readableOn(hex, bgs, dark) {
+  let [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  for (let n = 0; n < 40 && !bgs.every(bg => ratio('#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''), bg) >= 4.5); n++) {
+    const t = dark ? 255 : 0; r += (t - r) * 0.08; g += (t - g) * 0.08; b += (t - b) * 0.08; [r, g, b] = [r, g, b].map(Math.round);
+  }
+  return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
+}
+const themeKey = () => { const st = S.settings, dark = st.mode === 'auto' ? !matchMedia('(prefers-color-scheme: light)').matches : st.mode === 'dark'; return (PALETTES.some(p => p[0] === st.palette) ? st.palette : 'dusk') + '-' + (dark ? 'dark' : 'light'); };
 
 function linkStatus() {
   if (S.settings.linked) return ['linked', 'b-hi'];
@@ -758,7 +761,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-04 e';
+const APP_VERSION = '2026-11-04 f';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -770,12 +773,12 @@ function settingsView() {
   const [statusText, statusCls] = linkStatus();
   const standalone = window.navigator.standalone === true;
   const demoCard = DEMO
-    ? `<div class="card demo-card"><h2>Demo mode is on</h2><div class="muted small">Everything here is made up. Your real data is safe and hidden.</div>
-        <div class="btn-row"><button class="btn primary" data-action="demoOff">exit demo</button><button class="btn" data-action="demoReset">reset demo</button></div></div>`
-    : `<div class="card"><h2>Demo mode</h2><div class="muted small">Show the app with made-up numbers.</div>
-        <div class="btn-row"><button class="btn" data-action="demoOn">start demo</button></div></div>`;
+    ? `${CD('s-demo','Demo mode is on',true,'','demo-card')}<div class="muted small">Everything here is made up. Your real data is safe and hidden.</div>
+        <div class="btn-row"><button class="btn primary" data-action="demoOff">exit demo</button><button class="btn" data-action="demoReset">reset demo</button></div>${CE}`
+    : `${CD('s-demo','Demo mode',false)}<div class="muted small">Show the app with made-up numbers.</div>
+        <div class="btn-row"><button class="btn" data-action="demoOn">start demo</button></div>${CE}`;
   const bank = DEMO ? '' : `
-  <div class="card"><h2>Bank accounts</h2>
+  ${CD('s-bank','Bank accounts',false)}
     <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
     ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : ''}
     <div class="stack" style="margin-top:8px">
@@ -797,20 +800,20 @@ function settingsView() {
       ▸ Some banks (Chase) need the first link done in Safari${standalone ? ' (you are in the home-screen app now)' : ''}.<br>
       ▸ Setup steps: <b>server/README.md</b>.
       </div></details>
-  </div>
+  ${CE}
   ${backupCard()}`;
   return `<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>
   <h1>Settings</h1>
   ${DEMO ? '' : ''}
-  <div class="card"><h2>You</h2>
+  ${CD('s-you','You',false)}
     <div class="field"><span>Name</span><input class="wide" placeholder="optional" value="${esc(st.name)}" data-change="profileName" autocomplete="off" style="text-align:right"></div>
     <div class="field"><span>Open on</span>${selBtn('startTab', '')}</div>
-    <div class="field"><span>Screen switcher</span>${selBtn('nav', '')}</div>
     <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
+    <div class="field"><span>Round spending</span>${selBtn('roundMode', '')}</div>
     <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
-  </div>
+  ${CE}
 
-  <div class="card"><h2>Look</h2>
+  ${CD('s-look','Look',false)}
     <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
     <div class="muted small" style="margin:12px 0 6px">Mode</div>
     ${seg(MODES, st.mode, 'setMode')}
@@ -818,18 +821,18 @@ function settingsView() {
     ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
     <div class="muted small" style="margin:12px 0 6px">Animations</div>
     ${seg([['auto', 'on'], ['off', 'off']], st.motion, 'setMotion')}
-  </div>
+  ${CE}
   ${bank}
   ${demoCard}
 
-  <div class="card"><h2>This phone</h2>
+  ${CD('s-phone','This phone',false)}
     <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button>${DEMO ? '' : '<button class="btn" data-action="clearTx">clear transactions</button>'}</div>
     ${DEMO ? '' : '<div class="btn-row"><button class="btn danger" data-action="eraseAll">erase all data</button></div>'}
     <div class="muted small" style="margin-top:8px">Version ${APP_VERSION}</div>
-  </div>`;
+  ${CE}`;
 }
 
-const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView, plan: planView };
+const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, income: incomeView, budget: budgetView };
 
 /* ---------- modals ---------- */
 
@@ -915,28 +918,25 @@ function addTxModal() {
 
 function extraModal() {
   const m = ui.modal;
+  m.sel = m.sel || {};
   const cands = S.transactions.filter(t => t.amount > 0 && !t.extraIncomeLabel);   // includes job deposits
-  const chosen = m.selected && txById(m.selected);
-  const labels = ['Tips', 'Gift', 'Refund', 'Side gig', 'Other'];
+  const n = Object.keys(m.sel).length;
   return sheet('Extra income', `
-    <div class="card"><h2>Pick a deposit from your history</h2>
-      ${cands.length ? cands.map(t => txRow(t, incomeTag(t), { action: 'pickExtra', check: m.selected === t.id })).join('') : '<div class="muted">No deposits yet.</div>'}
-      ${chosen && chosen.incomeSourceID ? `<div class="muted small" style="margin-top:8px">This deposit currently counts as ${esc(sourceName(chosen.incomeSourceID))}. Making it extra income moves it out of that job's budget earnings and into the pot you pick below.</div>` : ''}
-    </div>
-    <div class="card"><h2>What was it?</h2>
-      ${selBtn('extraLabel', '', '', 'width:100%')}
-      <div style="height:10px"></div>
-      <div class="muted small" style="margin-bottom:6px">Add it to…</div>
+    <div class="muted small" style="margin:0 2px 8px">Tap the deposits to count. You can pick several.</div>
+    <div class="card">${cands.length ? cands.map(t => txRow(t, incomeTag(t), { action: 'pickExtra', check: !!m.sel[t.id] })).join('') : '<div class="muted">No deposits yet.</div>'}</div>
+    ${(() => { const mv = Object.keys(m.sel).map(txById).filter(t => t && t.incomeSourceID); return mv.length ? `<div class="muted small" style="margin:0 2px 8px">${mv.length === 1 ? 'This deposit currently counts as ' + esc(sourceName(mv[0].incomeSourceID)) : mv.length + ' of these currently count as a job\'s pay'}. Making ${mv.length === 1 ? 'it' : 'them'} extra income moves ${mv.length === 1 ? 'it' : 'them'} out of that job's budget earnings.</div>` : ''; })()}
+    <div class="sheet-foot">
+      <div class="field"><span class="muted">What was it?</span>${selBtn('extraLabel', '', '', 'width:150px')}</div>
       ${seg(potOptions(), m.pot, 'extraPot')}
-    </div>
-    <button class="btn primary full" data-action="saveExtra" ${m.selected ? '' : 'disabled'}>Add extra income</button>`);
+      <button class="btn primary full" style="margin-top:8px" data-action="saveExtra" ${n ? '' : 'disabled'}>Add${n > 1 ? ' ' + n + ' deposits' : ''}</button>
+    </div>`);
 }
 
 function sourcesModal() {
   return sheet('Income sources', `
     ${S.incomeSources.map(s => `<div class="card stack">
       <input placeholder="Name (e.g. Full-time job)" value="${esc(s.name)}" data-change="srcName" data-id="${s.id}" data-live="1">
-      <label class="field"><span>Varies month to month (no expected amount)</span>
+      <label class="field"><span>Varies each month</span>
         <input type="checkbox" ${s.variable ? 'checked' : ''} data-change="srcVar" data-id="${s.id}"></label>
       ${s.variable ? '' : `<div class="field"><span>Expected per month</span>${numInput(s.expectedAmount, `data-change="srcAmt" data-id="${s.id}" data-live="1"`)}</div>`}
       <input placeholder="Bank text to match (e.g. PAYROLL)" value="${esc(s.matchKeyword)}" autocapitalize="characters" autocorrect="off" data-change="srcKey" data-id="${s.id}" data-live="1">
@@ -1003,7 +1003,6 @@ function pickDef(field, id) {
     case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
     case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
     case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
-    case 'nav': return { title: 'Screen switcher', options: [['bar', 'Tab bar'], ['stack', 'Stack button']], current: S.settings.nav || 'bar' };
     case 'startTab': return { title: 'Open on', options: TABS.map(t => [t[0], t[2]]), current: S.settings.startTab || 'review' };
     case 'defaultPot': return { title: 'New purchases come out of', options: pots(), current: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' };
     case 'backupDays': return { title: 'Backup reminder', options: [['7', 'Every 7 days'], ['14', 'Every 14 days'], ['30', 'Every 30 days'], ['0', 'Off']], current: String(S.settings.backupDays) };
@@ -1033,13 +1032,16 @@ function dialogHTML() {
     ${d.title ? `<div class="dtitle">${esc(d.title)}</div>` : ''}
     <div class="dmsg">${esc(d.message)}</div>
     ${d.code ? `<textarea readonly rows="5" style="margin-top:8px;font-size:12px">${esc(d.code)}</textarea>` : ''}
+    ${d.word ? `<div class="muted small" style="margin-top:10px">Type <b>${esc(d.word)}</b> to continue</div><input id="dlgType" class="small-in" data-change="dlgType" data-live="1" autocapitalize="characters" autocorrect="off" spellcheck="false" autocomplete="off" style="margin-top:6px">` : ''}
     <div class="btn-row">${d.cancel === false ? '' : '<button class="btn" data-action="dlgCancel">cancel</button>'}
-      <button class="btn ${d.danger ? 'danger' : 'primary'}" data-action="dlgOk">${esc(d.ok || 'ok')}</button></div>
+      <button id="dlgOkBtn" class="btn ${d.danger ? 'danger' : 'primary'}" data-action="dlgOk" ${d.word ? 'disabled' : ''}>${esc(d.ok || 'ok')}</button></div>
   </div></div>`;
 }
 
 const localDay = iso => { const d = new Date(iso); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
 const askConfirm = (message, ok, onOk, danger) => { ui.dialog = { message, ok, onOk, danger }; };
+/* For changes that can't be undone: the button stays off until the word is typed. */
+const askType = (message, word, ok, onOk) => { ui.dialog = { message, ok, onOk, danger: true, word, typed: '' }; };
 const askAlert = (message, title) => { ui.dialog = { message, title, cancel: false, ok: 'ok' }; };
 
 function pasteOutHTML() {
@@ -1100,56 +1102,17 @@ function modalHTML() {
 
 /* ---------- render ---------- */
 
-const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget'], ['plan', '✅', 'To-do']];
+const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['income', '💵', 'Income'], ['budget', '📊', 'Budget']];
 
 const ghostRoot = document.createElement('div');
 ghostRoot.id = 'ghost-root';
 document.body.appendChild(ghostRoot);
 
-/* Isometric "file view": the screens lie in a tilted stack; swipe or tap to shuffle, tap the front one to open it. */
-const stackRoot = document.createElement('div');
-stackRoot.id = 'stack';
-document.body.appendChild(stackRoot);
-let stackShown = false;
-function stackHTML() {
-  const n = TABS.length, pend = pending().length;
-  const cards = TABS.map(([k, icon, label], i) => `<div class="scard" data-i="${i}" data-action="stackTap"><span class="si">${emo(icon, SAGE)}</span><b>${label}</b>${k === 'review' && pend ? `<span class="pip">${pend}</span>` : ''}</div>`).join('');
-  return `<div class="stack-bg" data-action="closeStack"></div>
-    <div class="stack-scene"><div class="stack-board" style="--n:${n}">${cards}</div></div>
-    <button class="stack-x" data-action="closeStack" aria-label="Close">✕</button>
-    <div class="stack-hint">swipe or tap · tap front to open</div>`;
-}
-function paintStack() {
-  const n = TABS.length;
-  stackRoot.querySelectorAll('.scard').forEach(el => {
-    const i = +el.dataset.i, p = (i - ui.stackIdx + n) % n;
-    el.style.setProperty('--p', p);
-    el.classList.toggle('front', p === 0);
-  });
-}
-function paintStackLayer() {
-  if (ui.stack !== stackShown) {
-    stackShown = ui.stack;
-    if (ui.stack) { stackRoot.innerHTML = stackHTML(); stackRoot.classList.add('open'); requestAnimationFrame(() => stackRoot.classList.add('in')); }
-    else { stackRoot.classList.remove('in'); setTimeout(() => { if (!ui.stack) { stackRoot.classList.remove('open'); stackRoot.innerHTML = ''; } }, 320); }
-  }
-  if (ui.stack) paintStack();
-}
-(function stackSwipe() {
-  let y0 = null;
-  stackRoot.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; }, { passive: true });
-  stackRoot.addEventListener('touchend', e => {
-    if (y0 === null) return;
-    const dy = e.changedTouches[0].clientY - y0; y0 = null;
-    if (Math.abs(dy) > 28) { ui.stackIdx = (ui.stackIdx + (dy < 0 ? 1 : TABS.length - 1)) % TABS.length; ui.stackSwiped = Date.now(); paintStack(); }
-  }, { passive: true });
-  stackRoot.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > 8 && Date.now() - (ui.stackWheel || 0) > 180) { ui.stackWheel = Date.now(); ui.stackIdx = (ui.stackIdx + (e.deltaY > 0 ? 1 : TABS.length - 1)) % TABS.length; paintStack(); } }, { passive: true });
-})();
-
 let lastTab = null;
 const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k === 'ihist' ? 'income' : k)), 0);
 
 function render() {
+  RB = runningBalances();
   const y = window.scrollY;
   const oldSheet = modalRoot.querySelector('.sheet');
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
@@ -1166,16 +1129,8 @@ function render() {
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
   const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'income' : ui.tab;
-  if (S.settings.nav === 'stack') {
-    const cur = TABS[tabIndex(active)];
-    tabbar.className = 'single';
-    tabbar.innerHTML = `<button class="${tabChanged ? 'pop' : ''}" data-action="openStack" aria-label="Switch screen"><span class="i">${emo(cur[1], SAGE)}</span><span class="lbl">${cur[2]}</span><span class="grid">▤</span>${n && active !== 'review' ? `<span class="pip">${n}</span>` : ''}</button>`;
-  } else {
-    tabbar.className = '';
-    tabbar.innerHTML = TABS.map(([k, icon, label]) =>
-      `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
-  }
-  paintStackLayer();
+  tabbar.innerHTML = TABS.map(([k, icon, label]) =>
+    `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
 
   // pop-ups: slide/pop in when they appear, slide/pop out when they go
   const now = [ui.modal && 'sheet', ui.picker && 'picker', ui.dialog && 'dialog'].filter(Boolean);
@@ -1310,10 +1265,10 @@ async function restoreCode() {
   const box = $('restoreText');
   try {
     const obj = await decodeBackup(box ? box.value : '');
-    askConfirm('Replace everything on this phone with this backup?', 'restore', () => {
+    askType('Replace everything on this phone with this backup?', 'RESTORE', 'restore backup', () => {
       replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null;
       askAlert('Backup restored.');
-    }, true);
+    });
   } catch (e) {
     askAlert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.');
   }
@@ -1430,14 +1385,6 @@ function openPotEdit(id) {
 }
 
 const ACTIONS = {
-  openStack: () => { ui.stack = true; ui.stackIdx = tabIndex(ui.tab); },
-  closeStack: () => { ui.stack = false; },
-  stackTap: d => {
-    if (Date.now() - (ui.stackSwiped || 0) < 250) return;
-    const n = TABS.length, i = +d.i;
-    if (i === ui.stackIdx) { ui.stack = false; ui.tab = TABS[i][0]; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; }
-    else { ui.stackIdx = i; }
-  },
   demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { setDemo(true); location.reload(); }),
   demoOff: () => { setDemo(false); location.reload(); },
   demoReset: () => askConfirm('Reset the demo to its starting made-up data?', 'reset', () => { try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ } location.reload(); }, true),
@@ -1450,7 +1397,7 @@ const ACTIONS = {
   editTx: d => { const t = txById(d.id); if (!t) return; const e = S.potLog.find(x => x.kind === 'tx' && x.txId === t.id);
     ui.modal = { type: 'addTx', editId: t.id, kind: t.amount > 0 ? 'deposit' : 'purchase', amount: Math.abs(t.amount), name: t.rawName, pot: (e && e.potId) || 'none', date: localDay(t.date), back: { type: 'tx', id: t.id } }; },
   deleteTx: d => askConfirm('Delete this entry?', 'delete', () => { removeTx(d.id); save(); ui.modal = null; render(); }, true),
-  filter: d => { ui.filter = (ui.filter === d.cat || !d.cat) ? null : d.cat; },
+  filter: d => { ui.actLimit = 60; ui.filter = (ui.filter === d.cat || !d.cat) ? null : d.cat; },
   refresh: () => { doSync(); return false; },
 
   // settings
@@ -1464,12 +1411,12 @@ const ACTIONS = {
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
-  clearTx: () => askConfirm('Remove all transactions and pot history, and set every pot to $0? Your settings, income sources, expenses, to-dos and notes stay.', 'clear', () => {
+  clearTx: () => askType('Remove all transactions and pot history, and set every pot to $0? Settings, income sources, expenses and notes stay. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'CLEAR', 'clear transactions', () => {
     startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.linkMsg = 'Transactions cleared.';
-  }, true),
-  eraseAll: () => askConfirm('Erase everything stored on this phone? Back up first. This cannot be undone.', 'erase', () => {
+  }),
+  eraseAll: () => askType('Erase everything stored on this phone? This cannot be undone. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'ERASE', 'erase everything', () => {
     eraseEverything(); setLink({}); ui.linkItems = null; ui.linkMsg = ''; ui.tab = 'review'; applySettings(); doSync();
-  }, true),
+  }),
   checkLink: () => { checkLink(); return false; },
   linkBank: () => {
     if (S.useSampleData) askConfirm('Linking real accounts clears the sample data first. Continue?', 'continue', () => { startFresh(); openPlaid(); });
@@ -1508,8 +1455,8 @@ const ACTIONS = {
   syncTop: () => { autoSync(true); return false; },
   toggleAcct: d => { ui.openAcct[d.id] = !ui.openAcct[d.id]; },
   acctActivity: d => { ui.afilter = d.id; ui.tab = 'activity'; ui.resetScroll = true; ui.filter = null; ui.search = ''; },
+  moreAct: () => { ui.actLimit = (ui.actLimit || 60) + 60; },
   clearAfilter: () => { ui.afilter = null; },
-  toggleFind: () => { if (ui.findOpen || ui.search || ui.filter) { ui.findOpen = false; ui.search = ''; ui.filter = null; ui.rsearch = ''; } else ui.findOpen = true; },
   syncNow: () => { ui.linkMsg = 'Syncing…'; doSync().then(() => { ui.linkMsg = syncError ? syncError : 'Synced. ' + syncInfo; render(); }); },
   unlinkItem: d => askConfirm('Unlink this bank? Your history in the app stays; no new purchases will arrive.', 'unlink', async () => {
     try {
@@ -1528,7 +1475,7 @@ const ACTIONS = {
   closePick: () => { ui.picker = null; },
   choose: d => { const p = ui.picker; ui.picker = null; if (p) handleField({ dataset: { change: p.field, id: p.id }, type: 'select', value: d.v }, true); },
   dlgCancel: () => { ui.dialog = null; },
-  dlgOk: () => { const f = ui.dialog && ui.dialog.onOk; ui.dialog = null; if (f) f(); },
+  dlgOk: () => { const d = ui.dialog; if (!d || (d.word && String(d.typed || '').trim().toUpperCase() !== d.word)) return false; ui.dialog = null; if (d.onOk) d.onOk(); },
 
   // pots
   racct: d => { ui.racct = d.id; },
@@ -1589,10 +1536,10 @@ const ACTIONS = {
   },
 
   // income
-  addExtra: d => { ui.modal = { type: 'extra', selected: d.id || null, label: 'Tips', pot: 'spending' }; },
-  pickExtra: d => { ui.modal.selected = d.id; },
+  addExtra: d => { ui.modal = { type: 'extra', sel: d.id ? { [d.id]: true } : {}, label: 'Tips', pot: 'spending' }; },
+  pickExtra: d => { const s = ui.modal.sel; if (s[d.id]) delete s[d.id]; else s[d.id] = true; },
   extraPot: d => { ui.modal.pot = d.pot; },
-  saveExtra: () => { markExtraIncome(ui.modal.selected, ui.modal.label, ui.modal.pot); ui.modal = null; },
+  saveExtra: () => { Object.keys(ui.modal.sel).forEach(id => markExtraIncome(id, ui.modal.label, ui.modal.pot)); ui.modal = null; },
   removeExtra: d => removeExtraIncome(d.id),
   editSources: () => { ui.modal = { type: 'sources' }; },
   srcAdd: () => { S.incomeSources.push({ id: uid(), name: '', expectedAmount: 0, variable: false, matchKeyword: '' }); save(); },
@@ -1603,11 +1550,14 @@ const ACTIONS = {
   fixedDel: d => { S.fixedExpenses = S.fixedExpenses.filter(e => e.id !== d.id); save(); },
   editEarn: d => { const r = budgetCalc().rows.find(x => x.sourceId === d.id); delete ui.resetEarn[d.id]; ui.budgetInputs[d.id] = r ? r.amount : 0; },
   resetEarn: d => { delete ui.budgetInputs[d.id]; ui.resetEarn[d.id] = true; },
-  applyBudget: () => { applyBudget(budgetCalc().rows); ui.budgetInputs = {}; ui.resetEarn = {}; },
-  redistribute: () => {
-    const d = discrepancy(ui.checkMonth, ui.actual);
-    if (redistribute(ui.checkMonth, d, ui.adjTarget)) ui.actual = null;
+  applyBudget: () => {
+    const c = budgetCalc(), run = runFor(new Date()), mo = new Date().toLocaleString('en-US', { month: 'long' });
+    const msg = run
+      ? `${mo} is already applied (Spending +${usd(run.leftover)}, Savings +${usd(run.savingsAmount)}). Updating replaces that with Spending +${usd(c.left)} and Savings +${usd(c.save)}. You can undo it right after.`
+      : `Add ${usd(c.left)} to Spending and ${usd(c.save)} to Savings for ${mo}?`;
+    askConfirm(msg, run ? 'update' : 'apply', () => { applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; render(); });
   },
+  undoBudget: () => askConfirm('Put this month\'s budget back the way it was before the last change?', 'undo', () => { undoBudget(); render(); }),
   toggleRun: d => { ui.openRuns[d.key] = !ui.openRuns[d.key]; },
 
   // to-do & notes
@@ -1651,7 +1601,7 @@ function handleField(el, final) {
   const m = ui.modal;
   switch (d.change) {
     case 'search':
-      ui.search = v;
+      ui.search = v; ui.actLimit = 60;
       setHTMLIfChanged($('actList'), activityListHTML());
       return;
     case 'rsearch':
@@ -1675,7 +1625,6 @@ function handleField(el, final) {
     case 'actual': ui.actual = v === '' ? null : num(v); patchCheck(); return;
     case 'adjTarget': ui.adjTarget = v; return;
     case 'bulkTarget': ui.bulkTarget = v; return;
-    case 'nav': S.settings.nav = v; save(); render(); return;
     case 'startTab': S.settings.startTab = v; save(); return;
     case 'defaultPot': S.settings.defaultPot = v; save(); return;
     case 'backupDays': S.settings.backupDays = +v; save(); return;
@@ -1694,6 +1643,7 @@ function handleField(el, final) {
     case 'txAmount': m.amount = num(v); return;
     case 'txName': m.name = v; return;
     case 'txDate': m.date = v; return;
+    case 'dlgType': { const d = ui.dialog; if (d) { d.typed = v; const b = $('dlgOkBtn'); if (b) b.disabled = v.trim().toUpperCase() !== d.word; } return; }
     // pots
     case 'potName': m.fields.name = v; return;
     case 'potIcon': m.fields.icon = v; return;
@@ -1739,8 +1689,8 @@ const navState = () => ({ pl: 'app' });
 function syncHistory() { /* intentionally empty: screens are reached only through the tab bar and the page itself */ }
 try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''); } catch (e) { /* ignore */ }
 window.addEventListener('popstate', () => {
-  const hadPopup = !!(ui.modal || ui.picker || ui.dialog || ui.stack);
-  if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal(); else if (ui.stack) ui.stack = false;
+  const hadPopup = !!(ui.modal || ui.picker || ui.dialog);
+  if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal();
   try { history.pushState(navState(), ''); } catch (err) { /* ignore */ }
   if (hadPopup) render();
 });
@@ -1754,9 +1704,11 @@ function applySettings() {
   const cs = getComputedStyle(root);
   const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
   SAGE = read('--sage', SAGE); DIM = read('--fg-dim', DIM);
+  const bgHex = read('--bg', '#1c1a2e'), raiseHex = read('--raise', bgHex), dark = lumOf(bgHex) < 0.4;
+  for (const c of Object.values(CATS)) { c.base = c.base || c.color; c.color = readableOn(c.base, [bgHex, raiseHex], dark); }
   Object.keys(tintCache).forEach(k => delete tintCache[k]);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = read('--bg', '#1b1a16');
+  if (meta) meta.content = read('--bg', '#1c1a2e');
 }
 try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (S.settings.mode === 'auto') { applySettings(); render(); } }); } catch (e) { /* older browsers */ }
 
@@ -1767,11 +1719,12 @@ document.addEventListener('touchstart', e => {
   const sheet = e.target.closest && e.target.closest('.sheet');
   if (!sheet || e.touches.length !== 1 || e.target.closest('input, textarea')) { drag = null; return; }
   const fromHead = !!e.target.closest('.grab, .sheet-head');
-  if (!fromHead && sheet.scrollTop > 0) { drag = null; return; }
+  if (!fromHead) { drag = null; return; }   // text inside a pop-up can be selected without moving it
   drag = { sheet, scrim: sheet.parentElement, layer: sheet.parentElement.dataset.layer, y0: e.touches[0].clientY, t0: performance.now(), dy: 0, active: false, fromHead };
 }, { passive: true });
 document.addEventListener('touchmove', e => {
   if (!drag) return;
+  if (!drag.active && String(getSelection ? getSelection() : '').length) { drag = null; return; }
   const dy = e.touches[0].clientY - drag.y0;
   if (!drag.active) {
     if (dy > 8 && (drag.fromHead || drag.sheet.scrollTop <= 0)) { drag.active = true; drag.sheet.style.transition = 'none'; drag.scrim.style.transition = 'none'; }
@@ -1803,6 +1756,18 @@ function endDrag() {
 }
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
+
+document.addEventListener('toggle', e => {
+  const d = e.target;
+  if (!d || !d.dataset || !d.dataset.k) return;
+  S.settings.coll = S.settings.coll || {};
+  const v = d.open ? 'open' : 'shut';
+  if (S.settings.coll[d.dataset.k] !== v) { S.settings.coll[d.dataset.k] = v; save(); }
+}, true);
+document.addEventListener('focusin', e => {
+  const el = e.target;
+  if (el && el.type === 'search') setTimeout(() => { try { el.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (err) { /* ignore */ } }, 250);
+});
 
 // No pinch or double-tap zoom.
 document.addEventListener('gesturestart', e => e.preventDefault());
