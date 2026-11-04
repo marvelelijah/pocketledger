@@ -13,7 +13,7 @@
 const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 
 /* Shown in the app (Settings > check connection) so you can tell which version of this file is running. */
-const WORKER_VERSION = '2026-11-04 a';
+const WORKER_VERSION = '2026-11-04 b';
 
 export default {
   async fetch(req, env) {
