@@ -709,7 +709,9 @@ function incomeSummary(now) {
     const sd = Math.sqrt(o.amounts.reduce((a, x) => a + (x - avg) * (x - avg), 0) / o.n);
     const cv = avg ? sd / avg : 0;
     const done = Object.keys(o.months).map(Number).filter(i => i < cur).sort((a, b) => b - a).slice(0, 6);   // finished months only
-    const monthlyAvg = done.length ? done.reduce((a, i) => a + o.months[i], 0) / done.length : o.total;
+    // the middle month, not the average: one big month (an extra paycheck, a bonus) shouldn't set your budget
+    const vals = done.map(i => o.months[i]).sort((x, y) => x - y);
+    const monthlyAvg = vals.length ? (vals.length % 2 ? vals[(vals.length - 1) / 2] : (vals[vals.length / 2 - 1] + vals[vals.length / 2]) / 2) : o.total;
     return Object.assign(o, {
       avg: round2(avg), cv, recent: o.last >= cur - 2, monthlyAvg: round2(monthlyAvg),
       kind: o.n <= 2 ? 'one-off' : (cv < 0.25 && o.n >= 4 ? 'regular' : 'varies'),

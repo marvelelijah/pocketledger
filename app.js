@@ -403,6 +403,8 @@ function histImportCard(first) {
   </div>`;
 }
 
+const medianOf = a => { const v = a.slice().sort((x, y) => x - y), n = v.length; return n ? (n % 2 ? v[(n - 1) / 2] : (v[n / 2 - 1] + v[n / 2]) / 2) : 0; };
+
 function incomeHistoryView() {
   const back = `<div class="row"><button class="link" data-action="tab" data-tab="income">‹ income</button></div>`;
   if (!S.incomeHistory.length) return `${back}<h1>Income history</h1>
@@ -425,7 +427,7 @@ function incomeHistoryView() {
   <div class="card"><h2>Recent months</h2>
     ${months.map(m => `<div style="padding:4px 0"><div class="row"><span class="muted small">${histMonth(m.idx)}</span><b>${usd(m.total)}</b></div>
       <div class="bar">${fill('mo-' + m.idx, m.total / mmax * 100)}</div></div>`).join('')}
-    <div class="muted small" style="margin-top:6px">Averages ${usd(last12 / months.length)} a month over these ${months.length} months.</div>
+    <div class="muted small" style="margin-top:6px">Typical month: ${usd(medianOf(months.map(m => m.total)))} (the middle one). Average: ${usd(last12 / months.length)}, pulled up by big months.</div>
   </div>
 
   <div class="card"><h2>Where it comes from</h2>
@@ -433,7 +435,7 @@ function incomeHistoryView() {
       <div class="row"><b>${esc(o.name)}</b><b>${usd(o.total)}</b></div>
       <div class="small"><span class="pill ${o.recent ? 'on' : ''}">${o.recent ? 'still paying' : 'ended ' + histMonth(o.last)}</span> <span class="pill">${kindText[o.kind]}</span></div>
       <div class="muted small" style="margin-top:4px">${o.n} payment${o.n === 1 ? '' : 's'} · ${usd(o.avg)} each · ${histMonth(o.first)}${o.first === o.last ? '' : ' to ' + histMonth(o.last)}</div>
-      ${o.recent && o.kind === 'regular' ? `<div class="muted small">about ${usd(o.monthlyAvg)} in a typical month lately</div>` : ''}
+      ${o.recent && o.kind === 'regular' ? `<div class="muted small">about ${usd(o.monthlyAvg)} in a typical month (the middle one, so a 3-paycheck month doesn't count)</div>` : ''}
       <div class="muted small">${Object.keys(o.years).sort().map(y => y + ': ' + usd(o.years[y])).join(' · ')}</div>
     </div>`).join('')}
     ${ready.length ? `<div class="muted small" style="margin-top:8px">Not set up yet as income sources: ${ready.map(o => esc(o.name)).join(', ')}.</div>
