@@ -748,8 +748,9 @@ function topbar() {
     <button class="profile" data-action="openSettings" aria-label="Profile and settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}<span>settings</span></button></div>`;
 }
 
-const THEMES = [['auto', 'auto'], ['charcoal', 'charcoal'], ['black', 'black'], ['paper', 'paper']];
-const ACCENTS = [['sage', '#a9bea1'], ['terra', '#de9770'], ['amber', '#dcae62'], ['sky', '#8fb4d9'], ['rose', '#d99aa6']];
+const PALETTES = [['terminal', 'Terminal', ['#1b1a16', '#a9bea1', '#de9770', '#dcae62', '#ebe6d6']], ['harvest', 'Harvest', ["#335c67", "#fff3b0", "#e09f3e", "#9e2a2b", "#540b0e"]], ['lagoon', 'Lagoon', ["#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51"]], ['midnight', 'Midnight', ["#0d1321", "#1d2d44", "#3e5c76", "#748cab", "#f0ebd8"]], ['sandstone', 'Sandstone', ["#edede9", "#d6ccc2", "#f5ebe0", "#e3d5ca", "#d5bdaf"]], ['garnet', 'Garnet', ["#4f000b", "#720026", "#ce4257", "#ff7f51", "#ff9b54"]]];
+const MODES = [['auto', 'auto'], ['dark', 'dark'], ['light', 'light']];
+const themeKey = () => { const st = S.settings, dark = st.mode === 'auto' ? !matchMedia('(prefers-color-scheme: light)').matches : st.mode === 'dark'; return st.palette === 'terminal' ? (dark ? 'charcoal' : 'paper') : st.palette + '-' + (dark ? 'dark' : 'light'); };
 
 function linkStatus() {
   if (S.settings.linked) return ['linked', 'b-hi'];
@@ -757,7 +758,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-04 d';
+const APP_VERSION = '2026-11-04 e';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -810,8 +811,9 @@ function settingsView() {
   </div>
 
   <div class="card"><h2>Look</h2>
-    ${seg(THEMES, st.theme, 'setTheme')}
-    <div class="swatches" style="margin-top:12px">${ACCENTS.map(([k, c]) => `<button class="swatch ${st.accent === k ? 'on' : ''}" data-action="setAccent" data-pot="${k}" style="background:${c}" aria-label="${k}"></button>`).join('')}</div>
+    <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
+    <div class="muted small" style="margin:12px 0 6px">Mode</div>
+    ${seg(MODES, st.mode, 'setMode')}
     <div class="muted small" style="margin:12px 0 6px">Text size</div>
     ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
     <div class="muted small" style="margin:12px 0 6px">Animations</div>
@@ -1457,8 +1459,8 @@ const ACTIONS = {
     if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
   },
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
-  setTheme: d => { S.settings.theme = d.pot; save(); applySettings(); },
-  setAccent: d => { S.settings.accent = d.pot; save(); applySettings(); },
+  setPalette: d => { S.settings.palette = d.pot; save(); applySettings(); },
+  setMode: d => { S.settings.mode = d.pot; save(); applySettings(); },
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
@@ -1732,35 +1734,22 @@ document.addEventListener('change', e => { if (e.target.dataset && e.target.data
 
 /* ---------- start ---------- */
 
-/* Back/forward swipes move between the screens you visited in the app instead of leaving to GitHub. */
-const navState = () => ({ pl: 'app', tab: ui.tab, potId: ui.tab === 'pot' ? ui.potId : null });
-let popping = false;
-function syncHistory() {
-  if (popping) return;
-  const cur = history.state, n = navState();
-  if (!cur || cur.pl !== 'app' || cur.tab !== n.tab || cur.potId !== n.potId) history.pushState(n, '');
-}
+/* No back/forward between screens: swiping back never leaves or reshuffles the app. It only closes an open pop-up. */
+const navState = () => ({ pl: 'app' });
+function syncHistory() { /* intentionally empty: screens are reached only through the tab bar and the page itself */ }
 try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''); } catch (e) { /* ignore */ }
-window.addEventListener('popstate', e => {
-  const st = e.state;
-  if (!st || st.pl !== 'app' || ui.modal || ui.picker || ui.dialog || ui.stack) {   // the very first entry, or a pop-up is open: stay in the app
-    const hadPopup = !!(ui.modal || ui.picker || ui.dialog || ui.stack);
-    if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal(); else if (ui.stack) ui.stack = false;
-    if (hadPopup) render();
-    try { history.pushState(navState(), ''); } catch (err) { /* ignore */ }
-    return;
-  }
-  popping = true;
-  ui.tab = st.tab; ui.potId = st.potId; ui.selectMode = false; ui.selected = {}; ui.resetScroll = true;
-  render();
-  popping = false;
+window.addEventListener('popstate', () => {
+  const hadPopup = !!(ui.modal || ui.picker || ui.dialog || ui.stack);
+  if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal(); else if (ui.stack) ui.stack = false;
+  try { history.pushState(navState(), ''); } catch (err) { /* ignore */ }
+  if (hadPopup) render();
 });
 
 function applySettings() {
   const st = S.settings, root = document.documentElement;
-  const theme = st.theme === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'paper' : 'charcoal') : st.theme;
+  const theme = themeKey();
   if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
-  root.dataset.theme = theme; root.dataset.accent = st.accent; root.dataset.motion = st.motion;
+  root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion;
   root.style.setProperty('--ts', st.textSize);
   const cs = getComputedStyle(root);
   const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
@@ -1769,7 +1758,7 @@ function applySettings() {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = read('--bg', '#1b1a16');
 }
-try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (S.settings.theme === 'auto') { applySettings(); render(); } }); } catch (e) { /* older browsers */ }
+try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (S.settings.mode === 'auto') { applySettings(); render(); } }); } catch (e) { /* older browsers */ }
 
 /* Drag a pop-up down to close it. Starts from the handle/header, or from anywhere when scrolled to the top. */
 let drag = null;

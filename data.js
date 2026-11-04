@@ -275,8 +275,8 @@ function defaultState() {
     useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
     settings: {
       name: '',            // only shown on this phone
-      theme: 'charcoal',   // auto | charcoal | black | paper
-      accent: 'sage',      // sage | terra | amber | sky | rose
+      palette: 'terminal', // terminal | harvest | lagoon | midnight | sandstone | garnet
+      mode: 'auto',        // auto | dark | light
       textSize: 1,
       motion: 'auto',      // auto | off
       backupDays: 7,       // 0 = no reminder
@@ -315,6 +315,7 @@ function loadState() {
 function migrate(old) {
   const s = Object.assign(defaultState(), old);
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
+  if (old.settings && old.settings.theme && !old.settings.mode) { const t = old.settings.theme; s.settings.mode = t === 'paper' ? 'light' : t === 'auto' ? 'auto' : 'dark'; }
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
   if (old.namesV !== 2) {                                   // older transactions get the newer, verb-free names and cross-checked confidence
     for (const t of s.transactions || []) {
