@@ -311,7 +311,7 @@ function defaultState() {
     useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
     settings: {
       name: '',            // only shown on this phone
-      palette: 'dusk',     // dusk | harvest | lagoon | midnight | sandstone | garnet
+      palette: 'terminal', // terminal | tannhauser | mono | icedancer | vice | unit01
       mode: 'dark',        // dark | light | auto
       textSize: 1,
       motion: 'auto',      // auto | off
@@ -355,7 +355,9 @@ function loadState() {
 function migrate(old) {
   const s = Object.assign(defaultState(), old);
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
-  if (s.settings.palette === 'terminal') s.settings.palette = 'dusk';
+  const PAL_RENAME = { dusk: 'terminal', harvest: 'tannhauser', lagoon: 'mono', midnight: 'icedancer', sandstone: 'vice', garnet: 'unit01' };
+  if (PAL_RENAME[s.settings.palette]) s.settings.palette = PAL_RENAME[s.settings.palette];
+  s.settings.currency = 'auto';   // the currency follows the phone's region
   if (s.roundMode === 'up') s.roundMode = 'nearest';
   if (s.settings.startTab === 'income') s.settings.startTab = 'budget';
   if (old.settings && old.settings.theme && !old.settings.mode) { const t = old.settings.theme; s.settings.mode = t === 'paper' ? 'light' : t === 'auto' ? 'auto' : 'dark'; }
@@ -835,6 +837,20 @@ const runByKey = key => S.budgetRuns.find(r => r.monthKey === key);
 /* breakdown = [{ sourceId, name, amount }] — the earnings you decided to budget this month.
    Leftover after constant expenses and the savings percentage goes to Spending; the savings share goes to Savings.
    Applying again for the same month replaces the earlier entries, so nothing is counted twice. */
+/* Pots you created can have a share of each month's earnings set aside for them, like the Savings percentage. */
+const potShares = earnings => S.pots.filter(p => !p.core && p.percent > 0).map(p => ({ id: p.id, name: p.name, icon: p.icon, percent: p.percent, amount: round2(earnings * p.percent / 100) }));
+
+/* A percentage to suggest for a pot: with a goal, enough to reach it in about a year; without one, a small steady 5%. */
+function suggestedPercent(pot, earnings) {
+  if (pot.target > 0) {
+    const need = Math.max(pot.target - pot.balance, 0);
+    if (!need) return 0;
+    if (!(earnings > 0)) return 5;
+    return Math.min(Math.max(Math.round(need / 12 / earnings * 100 * 2) / 2, 0.5), 25);
+  }
+  return 5;
+}
+
 function applyBudget(breakdown, date) {
   date = date || new Date();
   const key = monthKey(date);
@@ -842,7 +858,8 @@ function applyBudget(breakdown, date) {
   const fixed = round2(fixedTotal());
   const pct = S.savingsPercent || 0;
   const savingsAmount = round2(earnings * pct / 100);
-  const leftover = round2(earnings - fixed - savingsAmount);
+  const shares = potShares(earnings);
+  const leftover = round2(earnings - fixed - savingsAmount - shares.reduce((a, x) => a + x.amount, 0));
 
   S.budgetUndo = {
     monthKey: key, at: new Date().toISOString(),
@@ -852,9 +869,10 @@ function applyBudget(breakdown, date) {
   removeLogs(e => e.kind === 'budget' && e.monthKey === key);
   logEntry('spending', leftover, 'Budget: left for spending', 'budget', { monthKey: key });
   if (savingsAmount) logEntry('savings', savingsAmount, 'Budget: savings (' + pct + '% of earnings)', 'budget', { monthKey: key });
+  for (const x of shares) if (x.amount) logEntry(x.id, x.amount, 'Budget: ' + x.name + ' (' + x.percent + '% of earnings)', 'budget', { monthKey: key });
 
   const run = {
-    monthKey: key, earnings, fixedTotal: fixed, savingsPercent: pct, savingsAmount, leftover,
+    monthKey: key, earnings, fixedTotal: fixed, savingsPercent: pct, savingsAmount, leftover, potShares: shares,
     earningsBreakdown: breakdown.map(b => ({ sourceId: b.sourceId, name: b.name, amount: round2(b.amount), edited: !!b.edited })),
     fixedItems: S.fixedExpenses.map(e => ({ name: e.name, amount: round2(e.amount) })),
     ranAt: new Date().toISOString(),
@@ -1272,9 +1290,9 @@ const firstOfMonthISO = () => { const n = new Date(); return n.getFullYear() + '
 function mergeAccounts(res) {
   const fresh = res.accounts || [];
   if (!fresh.length) return;
-  const failed = new Set(res.failed || []), seen = new Set(fresh.map(a => a.itemId).filter(Boolean));
-  const keep = S.accounts.filter(o => !fresh.some(a => a.id === o.id) && (!o.itemId || failed.has(o.itemId) || !seen.has(o.itemId)));
-  S.accounts = fresh.concat(keep.filter(o => String(o.id).startsWith('plaid-')));
+  // A sync can leave out accounts that had no news (a car loan, a savings account). Those stay; accounts only go when you remove the bank.
+  const keep = S.accounts.filter(o => !fresh.some(a => a.id === o.id) && String(o.id).startsWith('plaid-'));
+  S.accounts = fresh.concat(keep);
 }
 
 /* Forget one bank's accounts (history stays). */

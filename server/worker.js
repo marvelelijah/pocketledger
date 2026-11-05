@@ -13,7 +13,7 @@
 const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 
 /* Shown in the app (Settings > check connection) so you can tell which version of this file is running. */
-const WORKER_VERSION = '2026-11-04 b';
+const WORKER_VERSION = '2026-11-05 a';
 
 export default {
   async fetch(req, env) {
@@ -179,6 +179,8 @@ async function sync(env) {
         break;
       }
       item.cursor = cursor;
+      // The sync only lists accounts that had news. Ask for the full list so savings, car loans and the like never drop out.
+      try { const all = await plaid(env, '/accounts/get', { access_token: item.access_token }); if (all.accounts && all.accounts.length) accounts = all.accounts; } catch (e) { /* keep what the sync sent */ }
       out.added.push(...added); out.modified.push(...modified); out.removed.push(...removed);
       out.accounts.push(...accounts.map(a => mapAccount(a, item.institution, item.item_id)));
       out.more = out.more || more;

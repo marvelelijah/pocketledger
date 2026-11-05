@@ -515,7 +515,8 @@ function budgetCalc() {
   const fixed = r2(fixedTotal());
   const pct = S.savingsPercent || 0;
   const save = r2(earn * pct / 100);
-  return { rows, earn, fixed, pct, save, left: r2(earn - fixed - save) };
+  const shares = S.pots.filter(p => !p.core).map(p => ({ id: p.id, amount: r2(earn * (p.percent || 0) / 100) }));
+  return { rows, earn, fixed, pct, save, shares, left: r2(earn - fixed - save - shares.reduce((a, x) => a + x.amount, 0)) };
 }
 
 function discHTML(d) {
@@ -543,8 +544,9 @@ function historyDetail(run) {
     ${(run.earningsBreakdown || []).map(b => line(esc(b.name), usd(b.amount))).join('') || ''}
     ${line('<b>Earnings</b>', '<b>' + usd(run.earnings) + '</b>')}
     ${(run.fixedItems || []).map(f => line(esc(f.name || 'Expense'), '− ' + usd(f.amount))).join('')}
-    ${line('Constant expenses', '− ' + usd(run.fixedTotal))}
+    ${line('Expenses', '− ' + usd(run.fixedTotal))}
     ${run.savingsAmount ? line('Savings (' + run.savingsPercent + '%)', '− ' + usd(run.savingsAmount) + ' → Savings') : ''}
+    ${(run.potShares || []).map(x => line(esc(x.name) + ' (' + x.percent + '%)', '− ' + usd(x.amount) + ' → ' + esc(x.name))).join('')}
     ${line('<b>Left for spending</b>', '<b>' + usd(run.leftover) + '</b>', run.leftover < 0 ? 'neg' : 'pos')}
     ${adj.length ? `<div class="day">Month-end adjustments</div>${adj.map(a => line(fmtShort(a.date), signed(a.amount) + ' → ' + (a.target === 'all' ? 'all pots' : esc(potName(a.target))))).join('')}` : ''}
     <div class="day">Rounding</div>
@@ -628,7 +630,7 @@ function budgetView() {
     ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small">${usd(st.income)} in · ${usd(st.spent)} out</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
   ${CE}
 
-  ${CD('b-fixed', 'Constant monthly expenses', true)}
+  ${CD('b-fixed', 'Expenses', true)}
     ${S.fixedExpenses.map(e => `<div class="field">
       <input class="wide" placeholder="Name" value="${esc(e.name)}" data-change="fixedName" data-id="${e.id}" data-live="1">
       ${numInput(e.amount, `data-change="fixedAmt" data-id="${e.id}" data-live="1"`, 'width:100px')}
@@ -638,12 +640,16 @@ function budgetView() {
     <div class="field"><span>${emo('💰')} Savings %</span>
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
+    ${c.shares.map(x => { const p = potById(x.id), sug = suggestedPercent(p, c.earn); return `<div class="field" style="margin-top:10px"><span>${emo(p.icon)} ${esc(p.name)} %</span>
+      <span class="pctbox">${numInput(p.percent || 0, `data-change="potPct" data-id="${esc(p.id)}" data-live="1"`, 'width:70px')} %</span></div>
+    <div class="muted small">That's <b id="pot-amt-${esc(p.id)}">${usd(x.amount)}</b> set aside for ${esc(p.name)} this month.${sug && sug !== (p.percent || 0) ? ` Suggested: <button class="link small" data-action="usePotPct" data-id="${esc(p.id)}" data-v="${sug}">${sug}%</button>${p.target > 0 ? ' to reach your goal in about a year' : ''}` : ''}</div>`; }).join('')}
     <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.fixed)}</b></div>
   ${CE}
 
   ${CD('b-result', 'Result', true)}
     <div class="field"><span><b>Added to Spending</b></span><b id="res-left" class="${c.left < 0 ? 'neg' : 'pos'}">${usd(c.left)}</b></div>
     <div class="field"><span><b>Added to Savings</b></span><b id="res-save" class="pos">${usd(c.save)}</b></div>
+    ${c.shares.filter(x => x.amount).map(x => `<div class="field"><span><b>Added to ${esc(potName(x.id))}</b></span><b id="res-pot-${esc(x.id)}" class="pos">${usd(x.amount)}</b></div>`).join('')}
     <button class="btn ${run ? '' : 'primary'} full" style="margin-top:10px" data-action="applyBudget">${run ? 'Update ' + now.toLocaleString('en-US', { month: 'long' }) + '…' : 'Apply ' + now.toLocaleString('en-US', { month: 'long' }) + ' budget…'}</button>
     ${S.budgetUndo && S.budgetUndo.monthKey === monthKey(now) ? '<button class="btn full" style="margin-top:8px" data-action="undoBudget">↩ Undo the last ' + (S.budgetUndo.prevRun ? 'update' : 'apply') + '</button>' : ''}
   ${CE}
@@ -679,6 +685,7 @@ function patchBudget() {
   set('save-amt', usd(c.save));
   set('res-left', usd(c.left));
   set('res-save', usd(c.save));
+  c.shares.forEach(x => { set('pot-amt-' + x.id, usd(x.amount)); set('res-pot-' + x.id, usd(x.amount)); });
   const l = $('res-left');
   if (l) l.className = c.left < 0 ? 'neg' : 'pos';
 }
@@ -770,7 +777,7 @@ function topbar() {
     <button class="profile" data-action="openSettings" aria-label="Settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}</button></div>`;
 }
 
-const PALETTES = [['dusk', 'Dusk', ["#1c1a2e", "#f2a488", "#8fb4f0", "#e58fb4", "#ece8f5"]], ['harvest', 'Harvest', ["#335c67", "#fff3b0", "#e09f3e", "#9e2a2b", "#540b0e"]], ['lagoon', 'Lagoon', ["#264653", "#2a9d8f", "#e9c46a", "#f4a261", "#e76f51"]], ['midnight', 'Midnight', ["#0d1321", "#1d2d44", "#3e5c76", "#748cab", "#f0ebd8"]], ['sandstone', 'Sandstone', ["#edede9", "#d6ccc2", "#f5ebe0", "#e3d5ca", "#d5bdaf"]], ['garnet', 'Garnet', ["#4f000b", "#720026", "#ce4257", "#ff7f51", "#ff9b54"]]];
+const PALETTES = [["terminal", "Terminal", ["#18201c", "#2a362e", "#84a68e", "#cce5c6", "#e5e0d6"]], ["tannhauser", "Tannhauser", ["#a30502", "#f78b04", "#2b1718", "#153a42", "#027f93"]], ["mono", "Mono", ["#ffffff", "#999999", "#666666", "#333333", "#000000"]], ["icedancer", "Icedancer", ["#f2f2f3", "#8ec2f7", "#1149bc", "#fcd7fa", "#fc7288"]], ["vice", "Vice", ["#feda84", "#ff9b83", "#976393", "#685489", "#43457f"]], ["unit01", "Unit-01", ["#c7fba5", "#adf182", "#916cad", "#523874", "#dc7d68"]]];
 const MODES = [['dark', 'dark'], ['light', 'light'], ['auto', 'auto']];
 /* WCAG 2.x contrast: nudge a colour lighter or darker until it reads on the current background. */
 const lumOf = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
@@ -782,7 +789,7 @@ function readableOn(hex, bgs, dark) {
   }
   return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
-const themeKey = () => { const st = S.settings, dark = st.mode === 'auto' ? !matchMedia('(prefers-color-scheme: light)').matches : st.mode === 'dark'; return (PALETTES.some(p => p[0] === st.palette) ? st.palette : 'dusk') + '-' + (dark ? 'dark' : 'light'); };
+const themeKey = () => { const st = S.settings, dark = st.mode === 'auto' ? !matchMedia('(prefers-color-scheme: light)').matches : st.mode === 'dark'; return (PALETTES.some(p => p[0] === st.palette) ? st.palette : 'terminal') + '-' + (dark ? 'dark' : 'light'); };
 
 function linkStatus() {
   if (S.settings.linked) return ['linked', 'b-hi'];
@@ -790,7 +797,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-04 h';
+const APP_VERSION = '2026-11-05 a';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -808,7 +815,6 @@ function settingsView() {
   const standalone = window.navigator.standalone === true;
   const demoCard = DEMO
     ? `${CD('s-demo','Demo mode is on',true,'','demo-card')}<div class="muted small">Everything here is made up. Your real data is safe and hidden.</div>
-        <div class="btn-row"><button class="btn primary" data-action="openStatement" data-id="${shiftKey(monthKey(new Date()), -1)}">view last month's statement</button></div>
         <div class="btn-row"><button class="btn primary" data-action="demoOff">exit demo</button><button class="btn" data-action="demoReset">reset demo</button></div>${CE}`
     : `${CD('s-demo','Demo mode',false)}<div class="muted small">Show the app with made-up numbers.</div>
         <div class="btn-row"><button class="btn" data-action="demoOn">start demo</button></div>${CE}`;
@@ -826,7 +832,6 @@ function settingsView() {
       ${S.settings.linked ? '<button class="btn" data-action="syncNow">sync now</button>' : ''}
     </div>
     ${ui.linkItems && ui.linkItems.length ? `<div class="day">Linked</div>${ui.linkItems.map(i => { const mine = S.accounts.filter(a => a.itemId === i.item_id || (!a.itemId && a.institution === i.institution)); return LINKED_ROW(i, mine); }).join('')}` : ''}
-    <div class="field" style="margin-top:8px"><span>Count purchases from</span><input type="date" value="${esc(st.countFrom || '')}" data-change="countFrom" style="width:160px"></div>
     <details class="info"><summary>Good to know</summary>
       <div class="muted small">
       • Read-only: it can see balances and purchases, never move money.<br>
@@ -844,7 +849,6 @@ function settingsView() {
     <div class="field"><span>Open on</span>${selBtn('startTab', '')}</div>
     <div class="field"><span>New purchases come out of</span>${selBtn('defaultPot', '')}</div>
     <div class="field"><span>Round spending</span>${selBtn('roundMode', '')}</div>
-    <div class="field"><span>Currency</span>${selBtn('currency', '')}</div>
     <div class="field"><span>Backup reminder</span>${selBtn('backupDays', '')}</div>
   ${CE}
 
@@ -869,7 +873,7 @@ function settingsView() {
   ${CE}
 
   ${CD('s-look','Theme',false)}
-    <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
+    <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background-color:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
     <div class="muted small" style="margin:12px 0 6px">Corners</div>
     ${seg([['sharp', 'Sharp'], ['rounded', 'Rounded']], st.corners || 'sharp', 'setCorners')}
     <div class="muted small" style="margin:12px 0 6px">Mode</div>
@@ -1174,7 +1178,7 @@ function statementModal(key) {
       <div class="bar">${fill('st-' + key + c.cat, c.pct * 100, 'background:' + c.color)}</div>
       <div class="row"><span class="muted small">${pctTxt(c.pct)} of spending · ${c.count} purchase${c.count === 1 ? '' : 's'}</span>${st.prev.has && c.prev ? `<span class="muted small">${prevName}: ${usd(c.prev)}</span>` : ''}</div></div>`).join('') || '<div class="muted">No spending this month.</div>';
   const budget = st.budget ? `<div class="card"><h2>Budget</h2>
-      ${f('Earnings budgeted', usd(st.budget.earnings))}${f('Constant expenses', usd(st.budget.fixed))}${f('Set aside for savings', usd(st.budget.savings))}${f('Left to spend', usd(st.budget.allowance))}
+      ${f('Earnings budgeted', usd(st.budget.earnings))}${f('Expenses', usd(st.budget.fixed))}${f('Set aside for savings', usd(st.budget.savings))}${f('Left to spend', usd(st.budget.allowance))}
       ${st.budget.allowance ? `<div class="bar thick">${fill('st-' + key + 'bud', Math.min(st.budget.spentVsAllowance * 100, 100), st.budget.spentVsAllowance > 1 ? 'background:var(--red)' : '')}</div>
       <div class="muted small">Spent ${usd(st.spent)} of ${usd(st.budget.allowance)} (${pctTxt(st.budget.spentVsAllowance)}). ${st.budget.spentVsAllowance > 1 ? 'Over by ' + usd(st.spent - st.budget.allowance) + '.' : usd(st.budget.allowance - st.spent) + ' left.'}</div>` : ''}</div>` : '';
   const goals = st.goals.length ? `<div class="card"><h2>Goals</h2>${st.goals.map(g => `<div style="padding:5px 0"><div class="row"><span>${emo(g.icon)} ${esc(g.name)}</span><b>${usd(g.closing)} <span class="muted small">of ${usd(g.target)}</span></b></div>
@@ -1182,7 +1186,7 @@ function statementModal(key) {
       <div class="row"><span class="muted small">${pctTxt(g.pct)} there</span><span class="muted small">${g.change ? (g.change > 0 ? '+' : '−') + usd(Math.abs(g.change)) + ' this month' : 'no change this month'}</span></div></div>`).join('')}</div>` : '';
   const pots = `<div class="card"><h2>Pots at month end</h2>${st.pots.map(p => `<div class="field"><span>${emo(p.icon)} ${esc(p.name)}</span><span><b>${usd(p.closing)}</b> <span class="muted small">${p.change ? (p.change > 0 ? '+' : '−') + usd(Math.abs(p.change)) : ''}</span></span></div>`).join('')}</div>`;
   const accts = st.accounts.length ? `<div class="card"><h2>Accounts <span class="muted small">(balances today)</span></h2>${st.accounts.map(a => `<div class="field"><span>${esc(a.name)}${a.mask ? ' <span class="muted small">··' + esc(a.mask) + '</span>' : ''}</span><b class="${a.owed ? 'neg' : ''}">${a.owed ? '−' : ''}${usd(Math.abs(a.balance))}</b></div>`).join('')}</div>` : '';
-  const txList = st.txs.map(t => `<div class="field"><span style="min-width:0"><span class="muted small">${shortDay(t.date)}</span> ${esc(t.name)}<br><span class="muted small">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}</span></span><b class="${t.amount > 0 ? 'pos' : ''}">${t.amount > 0 ? '+' : '−'}${usd(Math.abs(t.amount))}</b></div>`).join('');
+  const txList = st.txs.map(t => `<div class="field"><span style="min-width:0"><span class="muted small">${shortDay(t.date)}</span> ${esc(t.name)}<br><span class="muted small">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}${t.raw && t.raw !== t.name ? '<br>Original: ' + esc(t.raw) : ''}</span></span><b class="${t.amount > 0 ? 'pos' : ''}">${t.amount > 0 ? '+' : '−'}${usd(Math.abs(t.amount))}</b></div>`).join('');
   return sheet(esc(st.label) + (st.partial ? ' · so far' : ''), `
     <div class="btn-row" style="margin-bottom:12px"><button class="btn primary" data-action="stmtPrint">save as PDF</button><button class="btn" data-action="stmtShare">share</button><button class="btn" data-action="stmtCsv">CSV</button></div>
     <div class="card"><h2>Summary</h2>
@@ -1225,18 +1229,18 @@ ${sec('Spending habits', tbl(habits))}
 ${sec('Where it went', tbl(st.byCat.map(c => [esc(c.title) + `<div class="bar"><i style="width:${Math.round(c.pct * 100)}%"></i></div>`, m(c.total) + ' · ' + pctTxt(c.pct)]), ['Category', 'Amount']))}
 ${st.merchants.length ? sec('Top places', tbl(st.merchants.map(x => [esc(x.name) + ' ×' + x.count, m(x.total)]))) : ''}
 ${st.largest.length ? sec('Largest purchases', tbl(st.largest.map(x => [shortDay(x.date) + ' ' + esc(x.name), m(x.amount)]))) : ''}
-${st.budget ? sec('Budget', tbl([['Earnings budgeted', m(st.budget.earnings)], ['Constant expenses', m(st.budget.fixed)], ['Set aside for savings', m(st.budget.savings)], ['Left to spend', m(st.budget.allowance)], ['Spent', m(st.spent) + (st.budget.allowance ? ' (' + pctTxt(st.budget.spentVsAllowance) + ' of it)' : '')]])) : ''}
+${st.budget ? sec('Budget', tbl([['Earnings budgeted', m(st.budget.earnings)], ['Expenses', m(st.budget.fixed)], ['Set aside for savings', m(st.budget.savings)], ['Left to spend', m(st.budget.allowance)], ['Spent', m(st.spent) + (st.budget.allowance ? ' (' + pctTxt(st.budget.spentVsAllowance) + ' of it)' : '')]])) : ''}
 ${st.goals.length ? sec('Goals', tbl(st.goals.map(g => [esc(g.name) + `<div class="bar"><i style="width:${Math.round(g.pct * 100)}%"></i></div>`, m(g.closing) + ' of ' + m(g.target) + ' · ' + pctTxt(g.pct) + (g.change ? ' · ' + (g.change > 0 ? '+' : '−') + m(Math.abs(g.change)) + ' this month' : '')]))) : ''}
 ${sec('Pots at month end', tbl(st.pots.map(p => [esc(p.name), m(p.closing) + (p.change ? ' (' + (p.change > 0 ? '+' : '−') + m(Math.abs(p.change)) + ')' : '')])))}
 ${st.incomeBy.length ? sec('Income', tbl(st.incomeBy.map(i => [esc(i.name), m(i.total)]))) : ''}
 ${st.accounts.length ? sec('Accounts (balances today)', tbl(st.accounts.map(a => [esc(a.name) + (a.mask ? ' ··' + esc(a.mask) : ''), (a.owed ? '−' : '') + m(Math.abs(a.balance))]))) : ''}
-${sec('Transactions (' + st.txs.length + ')', tbl(st.txs.map(t => [shortDay(t.date) + ' ' + esc(t.name) + `<div class="muted">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}</div>`, (t.amount > 0 ? '+' : '−') + m(Math.abs(t.amount))])))}
+${sec('Transactions (' + st.txs.length + ')', tbl(st.txs.map(t => [shortDay(t.date) + ' ' + esc(t.name) + `<div class="muted">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}${t.raw && t.raw !== t.name ? ' · Original: ' + esc(t.raw) : ''}</div>`, (t.amount > 0 ? '+' : '−') + m(Math.abs(t.amount))])))}
 <p class="muted" style="margin-top:24px">Made on your device by PocketLedger. Nothing was sent anywhere.</p></body></html>`;
 }
 
 function statementCsv(st) {
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  return ['Date,Description,Category,Account,Amount,Pot,Note', ...st.txs.map(t => [t.date.slice(0, 10), q(t.name), q((CATS[t.category] || CATS.other).title), q(t.account), t.amount.toFixed(2), q(t.pot), q(t.note)].join(','))].join('\n');
+  return ['Date,Description,Original name,Category,Account,Amount,Pot,Note', ...st.txs.map(t => [t.date.slice(0, 10), q(t.name), q(t.raw), q((CATS[t.category] || CATS.other).title), q(t.account), t.amount.toFixed(2), q(t.pot), q(t.note)].join(','))].join('\n');
 }
 
 async function shareFile(name, type, content, title) {
@@ -1347,6 +1351,21 @@ function placeSegs(animate) {
 }
 window.addEventListener('resize', () => placeSegs(false));
 
+/* Updates the tab bar in place, so its icons aren't torn down and redrawn (that was the flicker). */
+function updateTabbar(active, tabChanged, n) {
+  if (tabbar.children.length !== TABS.length) tabbar.innerHTML = TABS.map(([k]) => `<button data-action="tab" data-tab="${k}"></button>`).join('');
+  TABS.forEach(([k, icon, label], i) => {
+    const b = tabbar.children[i], on = active === k, pip = k === 'review' ? n : 0;
+    const sig = icon + '|' + label + '|' + pip;
+    if (b.dataset.sig !== sig) { b.dataset.sig = sig; b.innerHTML = `<span class="i">${emo(icon, on ? SAGE : DIM)}</span>${label}${pip ? `<span class="pip">${pip}</span>` : ''}`; }
+    const em = b.querySelector('.emo'), f = tintFilter(on ? SAGE : DIM);
+    if (em && em.style.filter !== f) em.style.filter = f;
+    b.classList.toggle('on', on);
+    b.classList.remove('pop');
+    if (on && tabChanged) { void b.offsetWidth; b.classList.add('pop'); }
+  });
+}
+
 function render() {
   RB = runningBalances();
   captureSegs();
@@ -1369,8 +1388,7 @@ function render() {
   if ($('actList')) $('actList').__html = activityListHTML();
   const n = pending().length;
   const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'budget' : ui.tab;
-  tabbar.innerHTML = TABS.map(([k, icon, label]) =>
-    `<button class="${active === k ? 'on' : ''}${active === k && tabChanged ? ' pop' : ''}" data-action="tab" data-tab="${k}"><span class="i">${emo(icon, active === k ? SAGE : DIM)}</span>${label}${k === 'review' && n ? `<span class="pip">${n}</span>` : ''}</button>`).join('');
+  updateTabbar(active, tabChanged, n);
 
   // pop-ups: slide/pop in when they appear, slide/pop out when they go
   const now = [ui.modal && 'sheet', ui.picker && 'picker', ui.dialog && 'dialog'].filter(Boolean);
@@ -1413,10 +1431,10 @@ function animateUI(entering) {
     const from = reduce ? w : (barState[k] != null ? barState[k] : 0);
     barState[k] = w;
     el.style.transition = 'none';
-    el.style.width = from + '%';
+    el.style.transform = 'scaleX(' + from / 100 + ')';
   });
   void document.body.offsetWidth;
-  bars.forEach(el => { el.style.transition = ''; el.style.width = el.dataset.w + '%'; });
+  bars.forEach(el => { el.style.transition = ''; el.style.transform = 'scaleX(' + el.dataset.w / 100 + ')'; });
 
   const jobs = [];
   document.querySelectorAll('[data-count]').forEach(el => {
@@ -1793,6 +1811,7 @@ const ACTIONS = {
   srcDel: d => { S.incomeSources = S.incomeSources.filter(s => s.id !== d.id); save(); },
 
   // budget
+  usePotPct: d => { const p = potById(d.id); if (p) { p.percent = +d.v; save(); } },
   fixedAdd: () => { S.fixedExpenses.push({ id: uid(), name: '', amount: 0 }); save(); },
   fixedDel: d => { S.fixedExpenses = S.fixedExpenses.filter(e => e.id !== d.id); save(); },
   editEarn: d => { const r = budgetCalc().rows.find(x => x.sourceId === d.id); delete ui.resetEarn[d.id]; ui.budgetInputs[d.id] = r ? r.amount : 0; },
@@ -1801,7 +1820,7 @@ const ACTIONS = {
     const c = budgetCalc(), run = runFor(new Date()), mo = new Date().toLocaleString('en-US', { month: 'long' });
     const msg = run
       ? `${mo} is already applied (Spending +${usd(run.leftover)}, Savings +${usd(run.savingsAmount)}). Updating replaces that with Spending +${usd(c.left)} and Savings +${usd(c.save)}. You can undo it right after.`
-      : `Add ${usd(c.left)} to Spending and ${usd(c.save)} to Savings for ${mo}?`;
+      : `Add ${usd(c.left)} to Spending and ${usd(c.save)} to Savings${c.shares.filter(x => x.amount).map(x => ', ' + usd(x.amount) + ' to ' + potName(x.id)).join('')} for ${mo}?`;
     askConfirm(msg, run ? 'update' : 'apply', () => { applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; render(); });
   },
   undoBudget: () => askConfirm('Put this month\'s budget back the way it was before the last change?', 'undo', () => { undoBudget(); render(); }),
@@ -1862,6 +1881,7 @@ function handleField(el, final) {
       return;
     // budget
     case 'earnInput': ui.budgetInputs[d.id] = num(v); patchBudget(); return;
+    case 'potPct': { const p = potById(el.dataset.id); if (p) { p.percent = Math.min(Math.max(num(v), 0), 100); save(); patchBudget(); } return; }
     case 'savePct': S.savingsPercent = Math.min(Math.max(num(v), 0), 100); save(); patchBudget(); return;
     case 'fixedKey': { const e = find(S.fixedExpenses); if (e) { e.matchKeyword = v.toUpperCase().trim(); save(); } return; }
     case 'pasteText': ui.modal.text = v; setHTMLIfChanged($('pasteOut'), pasteOutHTML()); return;
