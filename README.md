@@ -9,7 +9,7 @@ This repo is published with GitHub Pages. Open the live app link above in **Safa
 
 ## How it works
 - **Review (opens first):** a bar at the top shows how much of this month's spending money is left. Tap **＋ Purchase** when you buy something, then tap a pot to deduct from it. Purchases are rounded when deducted (nearest dollar by default; change it in the Budget tab's Month-end check).
-- **Theme:** a terminal style borrowed from elijahhalford.com (IBM Plex Mono throughout, outlined sections, lowercase labels), six palettes (Terminal, Tannhauser, Mono, Icedancer, Vice, Unit-01), dark/light/auto, and sharp or rounded corners. Theme changes cross-fade; the highlight in button rows slides. Emoji are tinted to their category color. Pop-ups, menus and confirmations are all inside the app, and any sheet can be dragged down to close.
+- **Theme:** a terminal style borrowed from elijahhalford.com (IBM Plex Mono throughout, outlined sections, lowercase labels), six palettes (Terminal, Tannhauser, Mono, Icedancer, Vice, Unit-01), dark only for now, and sharp or rounded corners. Screens switch instantly; the highlight in button rows slides. Emoji are tinted to their category color. Pop-ups, menus and confirmations are all inside the app, and any sheet can be dragged down to close.
 - **Home:** your pots (Spending, Savings, plus any you add with "＋ Add pot or goal"). Tap a pot to open its page: balance, goal progress, money in, money out. Tap a transaction to edit it, or use **Select** to move several at once.
 - **Income:** regular sources are matched automatically by bank text. A source marked "varies month to month" (like freelance) has no expected amount. Use ＋ to count any other deposit as extra income.
 - **Budget (always manual):** this month's income deposits are listed under each source and totaled for you (tap Edit only to fix a difference). Then set constant expenses and the savings percentage and tap Apply. Updating a month replaces its numbers so nothing double counts. 
@@ -57,7 +57,8 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 - **Confidence is cross-checked** from three places: a list of common merchants, common words in the name, and (once linked) the bank's own merchant name and category. When they agree confidence goes up; when they disagree it goes down. Categories you set yourself always win. The transaction detail says why it was read that way.
 - **Skips Review by itself:** card payments and transfers between your own accounts, and any charge that contains a fixed expense's bank text (Budget → Constant monthly expenses). They stay in Activity, marked "Between your accounts" or "Fixed expense".
 - **Review → "mark all as already sorted"** clears everything waiting, for when you've caught up outside the app.
-- **Home → Deductible** opens the list of what is being counted, by month and by name.
+- **Dashboard → Deductible** opens the list of what is being counted, by month and by name. Settings → Categories lets you add your own categories (and mark them tax deductible) or delete them.
+- **Statements → save as PDF** writes a real PDF on the device and opens the share sheet (Save to Files).
 - **Budget → Paste a list** reads your monthly expenses from text (Name, amount per line; "Savings 20%" sets the percentage).
 
 ## Screens, demo mode and editing
@@ -75,4 +76,4 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 - A **Finance** category covers Roth IRA, 401(k) and brokerage transfers.
 - Review shows Spending and every other pot or goal in a swipeable row. Rounding differences go straight to Spending, so there is no month-end check.
 - Applying or updating the monthly budget asks first and can be undone. Erase, clear and restore need a typed word.
-- Themes: Dusk (default), Harvest, Lagoon, Midnight, Sandstone, Garnet, each with dark and light. Every text colour is checked to at least 4.5:1 contrast (WCAG 2.x).
+- Themes: Terminal (default), Tannhauser, Mono, Icedancer, Vice, Unit-01 (dark). Every text colour is checked to at least 4.5:1 contrast (WCAG 2.x).

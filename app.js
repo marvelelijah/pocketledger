@@ -6,7 +6,7 @@ const modalRoot = document.getElementById('modal-root');
 
 const TAB_KEYS = ['review', 'home', 'activity', 'budget'];
 const ui = {
-  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
+  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, newCat: { title: '', icon: '', deduct: false }, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -120,7 +120,7 @@ function homeView() {
   <div class="grid3" style="margin-top:12px">
     <div class="card tappable" data-action="tab" data-tab="budget"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
     <div class="card tappable" data-action="openPot" data-id="spending"><div class="muted small">Spent</div><div class="stat" ${counted('spent', spentIn(now))}>${usd(spentIn(now))}</div></div>
-    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible</div><div class="stat" style="color:${CATS.videoCamera.color}" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
+    <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible</div><div class="stat" style="color:var(--sage)" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
 
   ${FEATURES.creditScore ? creditCard() : ''}
@@ -785,7 +785,6 @@ function topbar() {
 }
 
 const PALETTES = [["terminal", "Terminal", ["#18201c", "#2a362e", "#84a68e", "#cce5c6", "#e5e0d6"]], ["tannhauser", "Tannhauser", ["#a30502", "#f78b04", "#2b1718", "#153a42", "#027f93"]], ["mono", "Mono", ["#ffffff", "#999999", "#666666", "#333333", "#000000"]], ["icedancer", "Icedancer", ["#f2f2f3", "#8ec2f7", "#1149bc", "#fcd7fa", "#fc7288"]], ["vice", "Vice", ["#feda84", "#ff9b83", "#976393", "#685489", "#43457f"]], ["unit01", "Unit-01", ["#c7fba5", "#adf182", "#916cad", "#523874", "#dc7d68"]]];
-const MODES = [['dark', 'dark'], ['light', 'light'], ['auto', 'auto']];
 /* WCAG 2.x contrast: nudge a colour lighter or darker until it reads on the current background. */
 const lumOf = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const ratio = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
@@ -802,7 +801,7 @@ function readableOn(hex, bgs, dark) {
   }
   return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
-const themeKey = () => { const st = S.settings, dark = st.mode === 'auto' ? !matchMedia('(prefers-color-scheme: light)').matches : st.mode === 'dark'; return (PALETTES.some(p => p[0] === st.palette) ? st.palette : 'terminal') + '-' + (dark ? 'dark' : 'light'); };
+const themeKey = () => (PALETTES.some(p => p[0] === S.settings.palette) ? S.settings.palette : 'terminal') + '-dark';
 
 function linkStatus() {
   if (S.settings.linked) return ['linked', 'b-hi'];
@@ -810,7 +809,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 b';
+const APP_VERSION = '2026-11-05 c';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -885,12 +884,20 @@ function settingsView() {
       • Backups never include the passcode.</div></details>
   ${CE}
 
+  ${CD('s-cats','Categories',false)}
+    <div class="muted small" style="margin-bottom:8px">Add your own categories. Mark one tax deductible and its purchases count toward the Deductible total.</div>
+    ${(S.customCats || []).map(c => `<div class="field"><span>${emo(c.icon, (CATS[c.id] || {}).color)} ${esc(c.title)}</span><span class="hdr-r"><button class="chip ${c.deduct ? 'on' : ''}" data-action="catDed" data-id="${esc(c.id)}">${c.deduct ? 'deductible' : 'not deductible'}</button><button class="link danger small" data-action="catDel" data-id="${esc(c.id)}">delete</button></span></div>`).join('') || '<div class="muted small">None yet.</div>'}
+    <div class="muted small" style="margin:12px 0 6px">New category</div>
+    <div class="field"><span>Name</span><input class="wide" placeholder="e.g. Equipment" value="${esc(ui.newCat.title)}" data-change="newCatTitle" data-live="1" autocomplete="off" style="text-align:right"></div>
+    <div class="field"><span>Emoji</span><input class="wide" placeholder="🏷️" value="${esc(ui.newCat.icon)}" data-change="newCatIcon" data-live="1" autocomplete="off" style="text-align:right"></div>
+    ${seg([['yes', 'Tax deductible'], ['no', 'Not deductible']], ui.newCat.deduct ? 'yes' : 'no', 'catNewDed')}
+    <div class="btn-row"><button class="btn primary" data-action="catAdd">add category</button></div>
+  ${CE}
+
   ${CD('s-look','Theme',false)}
     <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background-color:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
     <div class="muted small" style="margin:12px 0 6px">Corners</div>
     ${seg([['sharp', 'Sharp'], ['rounded', 'Rounded']], st.corners || 'sharp', 'setCorners')}
-    <div class="muted small" style="margin:12px 0 6px">Mode</div>
-    ${seg(MODES, st.mode, 'setMode')}
     <div class="muted small" style="margin:12px 0 6px">Text size</div>
     ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
     <div class="muted small" style="margin:12px 0 6px">Animations</div>
@@ -1151,7 +1158,7 @@ function deductibleModal() {
   const byName = {};
   for (const t of list) byName[t.simpleName] = (byName[t.simpleName] || 0) + Math.abs(t.amount);
   return sheet('Deductible ' + year, `
-    <div class="card"><div class="muted small">Counted in ${year}</div><div class="big" style="color:${CATS.videoCamera.color}">${usd(total)}</div>
+    <div class="card"><div class="muted small">Counted in ${year}</div><div class="big" style="color:var(--sage)">${usd(total)}</div>
       <div class="muted small">${list.length} purchase${list.length === 1 ? '' : 's'} in ${cats.map(k => CATS[k].title).join(', ')}. Anything you change to another category stops counting, and anything you move into one starts counting. Purchases you marked "not a spend" still count here.</div>
       ${years.length > 1 ? `<div class="chips" style="margin:8px 0 0">${years.map(y => `<button class="chip ${y === year ? 'on' : ''}" data-action="dedYear" data-id="${y}">${y}</button>`).join('')}</div>` : ''}
     </div>
@@ -1267,12 +1274,130 @@ async function shareFile(name, type, content, title) {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+/* A real PDF, written by hand on this device (Courier, Letter size). No print dialog and nothing loaded from the internet,
+   so "save as PDF" works the same in Safari, from the home screen, and on a computer. */
+function statementPdf(st) {
+  const was = HIDE_AMOUNTS; HIDE_AMOUNTS = false;
+  try { return statementPdfInner(st); } finally { HIDE_AMOUNTS = was; }
+}
+function statementPdfInner(st) {
+  const COLS = 96, m = x => usd(x);
+  const lines = [];                                   // { t: text, b: bold }
+  const add = (t, b) => lines.push({ t: String(t), b: !!b });
+  const gap = () => add('');
+  const head = t => { gap(); add(t.toUpperCase(), true); add('-'.repeat(COLS)); };
+  const wrap = (txt, w, ind) => {
+    const out = []; let cur = '';
+    for (const word of String(txt).split(/\s+/)) {
+      let wd = word;
+      while (wd.length > w) { if (cur) { out.push(cur); cur = ''; } out.push(wd.slice(0, w)); wd = wd.slice(w); }
+      if (!cur) cur = wd; else if ((cur + ' ' + wd).length <= w) cur += ' ' + wd; else { out.push(cur); cur = wd; }
+    }
+    if (cur) out.push(cur);
+    return out.map((x, i) => (i ? ind : '') + x);
+  };
+  const row = (l, r, ind) => {
+    l = String(l); r = String(r);
+    const room = COLS - r.length - 2 - (ind || 0);
+    const parts = wrap(l, Math.max(room, 12), '');
+    parts.forEach((p, i) => {
+      const pad = ' '.repeat(ind || 0);
+      if (i < parts.length - 1) add(pad + p);
+      else { const dots = Math.max(2, COLS - (ind || 0) - p.length - r.length); add(pad + p + ' ' + '.'.repeat(dots - 2) + ' ' + r); }
+    });
+  };
+  const bar = p => { const n = Math.round(Math.max(0, Math.min(1, p)) * 20); return '[' + '#'.repeat(n) + '.'.repeat(20 - n) + ']'; };
+  const sgn = v => (v > 0 ? '+' : '-') + m(Math.abs(v));
+
+  add('POCKETLEDGER STATEMENT', true);
+  add(st.label + (st.partial ? ' (so far)' : '') + '  |  made ' + new Date().toLocaleDateString('en-US', { dateStyle: 'long' }));
+
+  head('Summary');
+  row('Income', m(st.income)); row('Spent', m(st.spent));
+  if (st.invested) row('Saved & invested', m(st.invested));
+  row('Kept (income - spent)', m(st.kept));
+  if (st.savingsRate != null) row('Kept of income', pctTxt(Math.max(st.savingsRate, 0)));
+
+  head('Spending habits');
+  row('Spent per day', m(st.dailyAvg)); row('Purchases', st.count + ' (average ' + m(st.avgPurchase) + ')'); row('No-spend days', st.noSpendDays + ' of ' + st.elapsed);
+  if (st.priciestDay) row('Priciest day', 'day ' + st.priciestDay.day + ': ' + m(st.priciestDay.total));
+  if (st.busiestWeekday) row('Biggest spending weekday', st.busiestWeekday.name + 's: ' + m(st.busiestWeekday.total));
+  row('Bills', m(st.recurring));
+
+  head('Where it went');
+  st.byCat.forEach(c => { row(c.title, m(c.total) + '  ' + pctTxt(c.pct)); add('   ' + bar(c.pct)); });
+
+  if (st.merchants.length) { head('Top places'); st.merchants.forEach(x => row(x.name + ' x' + x.count, m(x.total))); }
+  if (st.largest.length) { head('Largest purchases'); st.largest.forEach(x => row(shortDay(x.date) + ' ' + x.name, m(x.amount))); }
+  if (st.budget) {
+    head('Budget');
+    row('Earnings budgeted', m(st.budget.earnings)); row('Expenses', m(st.budget.fixed)); row('Set aside for savings', m(st.budget.savings)); row('Left to spend', m(st.budget.allowance));
+    row('Spent', m(st.spent) + (st.budget.allowance ? ' (' + pctTxt(st.budget.spentVsAllowance) + ' of it)' : ''));
+  }
+  if (st.goals.length) {
+    head('Goals');
+    st.goals.forEach(g => { row(g.name, m(g.closing) + ' of ' + m(g.target) + '  ' + pctTxt(g.pct)); add('   ' + bar(g.pct) + (g.change ? '  ' + sgn(g.change) + ' this month' : '')); });
+  }
+  head('Pots at month end');
+  st.pots.forEach(p => row(p.name, m(p.closing) + (p.change ? ' (' + sgn(p.change) + ')' : '')));
+  if (st.incomeBy.length) { head('Income'); st.incomeBy.forEach(i => row(i.name, m(i.total))); }
+  if (st.accounts.length) { head('Accounts (balances today)'); st.accounts.forEach(a => row(a.name + (a.mask ? ' ..' + a.mask : ''), (a.owed ? '-' : '') + m(Math.abs(a.balance)))); }
+
+  head('Transactions (' + st.txs.length + ')');
+  st.txs.forEach(t => {
+    row(shortDay(t.date) + '  ' + t.name, sgn(t.amount));
+    wrap((CATS[t.category] || CATS.other).title + ' | ' + t.account + (t.raw && t.raw !== t.name ? ' | Original: ' + t.raw : ''), COLS - 6, '').forEach(x => add('      ' + x));
+  });
+  gap(); add('Made on your device by PocketLedger. Nothing was sent anywhere.');
+
+  /* ---- bytes ---- */
+  const hex = s => {
+    let o = '';
+    for (const ch of s.normalize('NFKD')) {
+      let c = ch.charCodeAt(0);
+      if (c === 0xA0) c = 32;
+      else if (c === 0x2212 || c === 0x2013 || c === 0x2014) c = 45;
+      else if (c === 0xB7 || c === 0x2022) c = 124;
+      else if (c === 0x2019 || c === 0x2018) c = 39;
+      else if (c === 0x201C || c === 0x201D) c = 34;
+      else if (c === 0x20AC) c = 0x80;
+      else if (c === 0xA3 || c === 0xA5) c = c;
+      else if (c < 32 || c > 126) { if (c >= 0x300 && c <= 0x36F) continue; c = 63; }
+      if (c === 63 && ch !== '?') { if (/\p{Extended_Pictographic}|‍|️/u.test(ch)) continue; }
+      o += (c < 16 ? '0' : '') + c.toString(16);
+    }
+    return o;
+  };
+  const PER = 62, pages = [];
+  for (let i = 0; i < lines.length; i += PER) pages.push(lines.slice(i, i + PER));
+  const objs = [];                                    // index = object number - 1
+  objs[0] = '<< /Type /Catalog /Pages 2 0 R >>';
+  objs[2] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>';
+  objs[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Courier-Bold /Encoding /WinAnsiEncoding >>';
+  const kids = [];
+  pages.forEach((pg, pi) => {
+    const n = objs.length + 1;
+    let s = 'BT\n9 TL\n40 744 Td\n';
+    pg.forEach(l => { s += '/' + (l.b ? 'F2' : 'F1') + ' 9 Tf\n<' + hex(l.t) + '> Tj T*\n'; });
+    s += 'ET\n';
+    s += 'BT\n/F1 8 Tf\n40 24 Td\n<' + hex('PocketLedger statement ' + st.label + '   page ' + (pi + 1) + ' of ' + pages.length) + '> Tj\nET\n';
+    objs[n - 1] = '<< /Length ' + s.length + ' >>\nstream\n' + s + 'endstream';
+    objs[n] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ' + n + ' 0 R >>';
+    kids.push((n + 1) + ' 0 R');
+  });
+  objs[1] = '<< /Type /Pages /Kids [' + kids.join(' ') + '] /Count ' + pages.length + ' >>';
+  let out = '%PDF-1.4\n'; const offs = [];
+  objs.forEach((o, i) => { offs.push(out.length); out += (i + 1) + ' 0 obj\n' + o + '\nendobj\n'; });
+  const x = out.length;
+  out += 'xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n' + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  out += 'trailer\n<< /Size ' + (objs.length + 1) + ' /Root 1 0 R >>\nstartxref\n' + x + '\n%%EOF\n';
+  const bytes = new Uint8Array(out.length);
+  for (let i = 0; i < out.length; i++) bytes[i] = out.charCodeAt(i) & 255;
+  return bytes;
+}
 function printStatement(key) {
-  const fr = document.createElement('iframe');
-  fr.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
-  fr.srcdoc = statementDoc(monthStatement(key));
-  fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { shareFile('pocketledger-statement-' + key + '.html', 'text/html', statementDoc(monthStatement(key)), 'PocketLedger statement'); } setTimeout(() => fr.remove(), 60000); };
-  document.body.appendChild(fr);
+  const st = monthStatement(key);
+  shareFile('pocketledger-statement-' + key + '.pdf', 'application/pdf', statementPdf(st), 'PocketLedger statement');
 }
 
 function modalHTML() {
@@ -1296,44 +1421,11 @@ function modalHTML() {
 
 const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Dashboard'], ['activity', '📋', 'Activity'], ['budget', '📊', 'Budget']];
 
-const ghostRoot = document.createElement('div');
-ghostRoot.id = 'ghost-root';
-document.body.appendChild(ghostRoot);
-
 let lastTab = null;
 const tabIndex = k => Math.max(TABS.findIndex(t => t[0] === (k === 'pot' ? 'home' : k === 'ihist' ? 'budget' : k)), 0);
 
 /* ---------- motion helpers ---------- */
 const motionOff = () => S.settings.motion === 'off' || (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
-
-/* A frozen copy of what is on screen, laid over the page so it can fade away while the new screen appears. */
-function makeGhost(withTabbar) {
-  const g = document.createElement('div');
-  g.className = 'ghost-view';
-  g.dataset.theme = document.documentElement.dataset.theme;
-  const inner = document.createElement('div');
-  inner.style.cssText = 'position:absolute;left:0;right:0;top:' + (-window.scrollY) + 'px;padding-top:env(safe-area-inset-top)';
-  const copy = app.cloneNode(true);
-  copy.classList.remove('enter');
-  copy.querySelectorAll('[data-bar],[data-count]').forEach(el => { el.removeAttribute('data-bar'); el.removeAttribute('data-count'); });
-  inner.appendChild(copy);
-  g.appendChild(inner);
-  if (withTabbar) { const tb = tabbar.cloneNode(true); tb.removeAttribute('id'); g.appendChild(tb); tb.style.cssText = 'position:fixed;left:0;right:0;bottom:0;display:flex'; }
-  document.body.appendChild(g);
-  return g;
-}
-function fadeGhost(g, ms, move) {
-  if (!g.animate) { g.remove(); return; }
-  const a = g.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: move ? `translateX(${move}px)` : 'none' }], { duration: ms, easing: 'cubic-bezier(.3, 0, .2, 1)', fill: 'forwards' });
-  a.onfinish = a.oncancel = () => g.remove();
-  setTimeout(() => g.remove(), ms + 200);
-}
-/* Changes the theme with a cross-fade between the old and the new look. */
-function themeFade(change) {
-  const g = motionOff() ? null : makeGhost(false);
-  change();   // the click handler re-renders right after this returns
-  if (g) fadeGhost(g, 520);
-}
 
 /* The highlight in a row of buttons slides from the old choice to the new one. */
 const segPrev = {}, segAnim = {};
@@ -1387,15 +1479,7 @@ function render() {
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
 
-  app.classList.remove('enter');
-  const tabGhost = tabChanged && lastTab !== null && !motionOff() ? makeGhost(false) : null;
   app.innerHTML = (ui.tab === 'settings' ? '' : topbar()) + VIEWS[ui.tab]();
-  if (tabChanged) {
-    const dir = ui.tab === 'settings' ? 1 : lastTab === 'settings' ? -1 : (lastTab === null || tabIndex(ui.tab) >= tabIndex(lastTab) ? 1 : -1);
-    app.style.setProperty('--dx', dir * 22 + 'px');
-    app.classList.add('enter');
-    if (tabGhost) fadeGhost(tabGhost, 220, -dir * 14);
-  }
   // remember what the live-patched areas currently show (see setHTMLIfChanged)
   if ($('disc-box')) $('disc-box').__html = discHTML(discrepancy(ui.checkMonth, ui.actual));
   if ($('actList')) $('actList').__html = activityListHTML();
@@ -1403,18 +1487,9 @@ function render() {
   const active = ui.tab === 'pot' ? 'home' : ui.tab === 'ihist' ? 'budget' : ui.tab;
   updateTabbar(active, tabChanged, n);
 
-  // pop-ups: slide/pop in when they appear, slide/pop out when they go
+  // pop-ups: fade/slide in when they appear, vanish when they go
   const now = [ui.modal && 'sheet', ui.picker && 'picker', ui.dialog && 'dialog'].filter(Boolean);
-  const before = [...modalRoot.children].filter(el => el.dataset && el.dataset.layer);
-  const beforeNames = before.map(el => el.dataset.layer);
-  before.forEach(el => {
-    if (!now.includes(el.dataset.layer) && !ui.skipGhost[el.dataset.layer]) {
-      const g = el.cloneNode(true);
-      g.classList.add('out');
-      ghostRoot.appendChild(g);
-      setTimeout(() => g.remove(), 380);
-    }
-  });
+  const beforeNames = [...modalRoot.children].filter(el => el.dataset && el.dataset.layer).map(el => el.dataset.layer);
   ui.skipGhost = {};
   modalRoot.innerHTML = (ui.modal ? modalHTML() : '') + (ui.picker ? pickerHTML() : '') + (ui.dialog ? dialogHTML() : '');
   [...modalRoot.children].forEach(el => { if (!beforeNames.includes(el.dataset.layer)) el.classList.add('in'); });
@@ -1441,7 +1516,7 @@ function animateUI(entering) {
   const bars = [...document.querySelectorAll('[data-bar]')];
   bars.forEach(el => {
     const k = el.dataset.bar, w = +el.dataset.w;
-    const from = reduce ? w : (barState[k] != null ? barState[k] : 0);
+    const from = reduce || entering ? w : (barState[k] != null ? barState[k] : w);
     barState[k] = w;
     el.style.transition = 'none';
     el.style.transform = 'scaleX(' + from / 100 + ')';
@@ -1453,7 +1528,7 @@ function animateUI(entering) {
   document.querySelectorAll('[data-count]').forEach(el => {
     const k = el.dataset.count, to = +el.dataset.val;
     let from = numState[k];
-    if (from == null) from = entering ? 0 : to;
+    if (from == null || entering) from = to;
     if (reduce) from = to;
     numState[k] = from;
     if (Math.abs(from - to) > 0.004) { jobs.push({ el, k, from, to }); el.textContent = usd(from); }
@@ -1678,9 +1753,19 @@ const ACTIONS = {
     if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
   },
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
-  setPalette: d => { themeFade(() => { S.settings.palette = d.pot; save(); applySettings(); }); },
-  setCorners: d => { themeFade(() => { S.settings.corners = d.pot; save(); applySettings(); }); },
-  setMode: d => { themeFade(() => { S.settings.mode = d.pot; save(); applySettings(); }); },
+  setPalette: d => { S.settings.palette = d.pot; save(); applySettings(); },
+  setCorners: d => { S.settings.corners = d.pot; save(); applySettings(); },
+  catNewDed: d => { ui.newCat.deduct = d.pot === 'yes'; },
+  catAdd: () => {
+    const n = ui.newCat;
+    if (!n.title.trim()) { askAlert('Give the category a name first.'); return; }
+    if (!addCategory(n.title, n.icon, n.deduct)) { askAlert('You already have a category with that name.'); return; }
+    ui.newCat = { title: '', icon: '', deduct: false }; applySettings();
+  },
+  catDed: d => { const c = (S.customCats || []).find(x => x.id === d.id); if (c) { setCategoryDeduct(d.id, !c.deduct); applySettings(); } },
+  catDel: d => { const c = (S.customCats || []).find(x => x.id === d.id); if (!c) return;
+    const n = S.transactions.filter(t => t.category === d.id).length;
+    askConfirm('Delete ' + c.title + '?' + (n ? ' Its ' + n + ' purchase' + (n === 1 ? '' : 's') + ' will move to Other.' : ''), 'delete', () => { removeCategory(d.id); applySettings(); render(); }, true); },
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
@@ -1910,6 +1995,8 @@ function handleField(el, final) {
     case 'startTab': S.settings.startTab = v; save(); return;
     case 'defaultPot': S.settings.defaultPot = v; save(); return;
     case 'backupDays': S.settings.backupDays = +v; save(); return;
+    case 'newCatTitle': ui.newCat.title = v; return;
+    case 'newCatIcon': ui.newCat.icon = v; return;
     case 'profileName': S.settings.name = v.trim().slice(0, 30); save(); if (final) render(); return;
     case 'countFrom': S.settings.countFrom = v || null; save(); return;
     case 'linkUrl': setLink(Object.assign(getLink(), { url: v.trim() })); return;
@@ -1976,12 +2063,22 @@ try { history.replaceState({ pl: 'base' }, ''); history.pushState(navState(), ''
 const STANDALONE = (window.navigator && window.navigator.standalone === true) || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
 if (STANDALONE) {
   document.documentElement.dataset.standalone = '1';
-  document.addEventListener('touchstart', e => {
-    const t = e.touches[0];
-    if (t && (t.clientX < 14 || t.clientX > window.innerWidth - 14) && e.cancelable) e.preventDefault();
-  }, { passive: false });
-  try { for (let i = 0; i < 3; i++) history.pushState(navState(), ''); } catch (e) { /* ignore */ }
+  let edge = false;
+  const EDGE = 28, atEdge = t => t && (t.clientX < EDGE || t.clientX > window.innerWidth - EDGE);
+  document.addEventListener('touchstart', e => { edge = atEdge(e.touches[0]); if (edge && e.cancelable) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchmove', e => { if (edge && e.cancelable) e.preventDefault(); }, { passive: false });
+  document.addEventListener('touchend', () => { edge = false; }, true);
+  try { for (let i = 0; i < 6; i++) history.pushState(navState(), ''); } catch (e) { /* ignore */ }
 }
+/* Tapping the iPhone status bar scrolls the page to the top. While a pop-up is open that should scroll the pop-up, not the page behind it. */
+let popupY = 0;
+window.addEventListener('scroll', () => {
+  if (!(ui.modal || ui.picker || ui.dialog)) { popupY = window.scrollY; return; }
+  if (window.scrollY === popupY) return;
+  const sheets = modalRoot.querySelectorAll('.sheet'), top = sheets[sheets.length - 1];
+  window.scrollTo(0, popupY);
+  if (top) top.scrollTo({ top: 0, behavior: 'smooth' });
+}, { passive: true });
 window.addEventListener('popstate', () => {
   const hadPopup = !!(ui.modal || ui.picker || ui.dialog);
   if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal();
@@ -2002,10 +2099,12 @@ function applySettings() {
   const bgHex = read('--bg', '#1c1a2e'), raiseHex = read('--raise', bgHex), dark = lumOf(bgHex) < 0.4;
   ACC = { sage: SAGE, terra: read('--acc-terra', SAGE), amber: read('--acc-amber', SAGE), sky: read('--acc-sky', SAGE), rose: read('--acc-rose', SAGE), green: read('--green', SAGE), red: read('--red', SAGE), fg: read('--fg', '#ffffff'), dim: DIM };
   // Category colors are built from the theme's own accents (and blends of them), so every theme looks like itself.
-  const CAT_MIX = { food: ['terra'], groceries: ['green'], gas: ['amber'], videoCamera: ['sky'], bills: ['sage'], shopping: ['rose'], entertainment: ['sky', 'rose'],
+  const CAT_MIX = { food: ['terra'], groceries: ['green'], gas: ['amber'], bills: ['sage'], shopping: ['rose'], entertainment: ['sky', 'rose'],
     health: ['red'], income: ['green', 'fg'], transfer: ['sky', 'dim'], finance: ['sage', 'green'], other: ['dim'] };
+  const CUSTOM_MIX = ['sky', 'amber', 'rose', 'terra', 'green', 'sage'];
+  let customN = 0;
   for (const [k, c] of Object.entries(CATS)) {
-    const m = CAT_MIX[k] || ['dim'];
+    const m = CAT_MIX[k] || (c.custom ? [CUSTOM_MIX[customN++ % CUSTOM_MIX.length]] : ['dim']);
     c.color = readableOn(m.length > 1 ? mixHex(ACC[m[0]], ACC[m[1]], 0.5) : ACC[m[0]], [bgHex, raiseHex], dark);
   }
   Object.keys(tintCache).forEach(k => delete tintCache[k]);
@@ -2013,7 +2112,6 @@ function applySettings() {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = read('--bg', '#1c1a2e');
 }
-try { matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => { if (S.settings.mode === 'auto') { applySettings(); render(); } }); } catch (e) { /* older browsers */ }
 
 /* Drag a pop-up down to close it. Starts from the handle/header, or from anywhere when scrolled to the top. */
 let drag = null;
@@ -2064,31 +2162,6 @@ function endDrag() {
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
 
-/* Windows open and close with a short height animation instead of snapping. */
-document.addEventListener('click', e => {
-  const sum = e.target.closest && e.target.closest('details.coll > summary');
-  if (!sum) return;
-  const d = sum.parentElement, body = d.querySelector(':scope > .coll-body');
-  if (!body || !body.animate || S.settings.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  e.preventDefault();
-  if (d.__anim) { d.__anim.cancel(); d.__anim = null; }
-  const ease = 'cubic-bezier(.2, .8, .2, 1)';
-  const play = (from, to, ms, done) => {
-    body.style.overflow = 'hidden';
-    const a = body.animate([{ height: from + 'px', opacity: from ? 1 : 0 }, { height: to + 'px', opacity: to ? 1 : 0 }], { duration: ms, easing: ease, fill: 'forwards' });
-    d.__anim = a;
-    a.onfinish = () => { done(); body.style.overflow = ''; a.cancel(); d.__anim = null; };   // cleaned up in the same frame, so nothing flashes
-  };
-  if (!d.open) {
-    d.classList.remove('closing'); d.open = true;
-    const h = body.offsetHeight;
-    play(0, h, 260, () => {});
-  } else {
-    const h = body.offsetHeight;
-    d.classList.add('closing');
-    play(h, 0, 220, () => { d.open = false; d.classList.remove('closing'); });
-  }
-}, true);
 document.addEventListener('toggle', e => {
   const d = e.target;
   if (d && d.open) setTimeout(() => placeSegs(false), 0);

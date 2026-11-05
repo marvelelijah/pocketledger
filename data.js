@@ -7,11 +7,10 @@ const FEATURES = {
   creditScore: false,
 };
 
-const CATS = {
+const BASE_CATS = {
   food:          { title: 'Food & Drink',   color: '#f97316', icon: '🍴' },
   groceries:     { title: 'Groceries',      color: '#22c55e', icon: '🛒' },
   gas:           { title: 'Gas',            color: '#eab308', icon: '⛽' },
-  videoCamera:   { title: 'Video & Camera', color: '#a855f7', icon: '📷', taxDeductible: true },
   bills:         { title: 'Bills',          color: '#3b82f6', icon: '⚡' },
   shopping:      { title: 'Shopping',       color: '#ec4899', icon: '🛍️' },
   entertainment: { title: 'Entertainment',  color: '#14b8a6', icon: '🎬' },
@@ -21,6 +20,44 @@ const CATS = {
   finance:       { title: 'Finance',        color: '#06b6d4', icon: '📈' },
   other:         { title: 'Other',          color: '#9ca3af', icon: '❔' },
 };
+
+/* The categories you add yourself live in your saved data (S.customCats); this object is the built-in list plus those. */
+const CATS = Object.assign({}, BASE_CATS);
+const CUSTOM_COLORS = ['#a855f7', '#f97316', '#14b8a6', '#eab308', '#ec4899', '#3b82f6', '#22c55e', '#ef4444'];
+function rebuildCats() {
+  for (const k of Object.keys(CATS)) delete CATS[k];
+  const own = (S && Array.isArray(S.customCats)) ? S.customCats : [];
+  const order = Object.keys(BASE_CATS);
+  const front = order.filter(k => !['income', 'transfer', 'finance', 'other'].includes(k));
+  const back = order.filter(k => ['income', 'transfer', 'finance', 'other'].includes(k));
+  front.forEach(k => { CATS[k] = BASE_CATS[k]; });
+  own.forEach((c, i) => { CATS[c.id] = { title: c.title, color: c.color || CUSTOM_COLORS[i % CUSTOM_COLORS.length], icon: c.icon || '🏷️', taxDeductible: !!c.deduct, custom: true }; });
+  back.forEach(k => { CATS[k] = BASE_CATS[k]; });
+}
+function addCategory(title, icon, deduct) {
+  title = String(title || '').trim().slice(0, 30);
+  if (!title) return null;
+  if (Object.values(CATS).some(c => c.title.toLowerCase() === title.toLowerCase())) return null;
+  const id = 'c-' + uid().slice(0, 8);
+  S.customCats = S.customCats || [];
+  S.customCats.push({ id, title, icon: String(icon || '').trim() || '🏷️', deduct: !!deduct, color: CUSTOM_COLORS[S.customCats.length % CUSTOM_COLORS.length] });
+  rebuildCats(); save();
+  return id;
+}
+function setCategoryDeduct(id, on) {
+  const c = (S.customCats || []).find(x => x.id === id);
+  if (c) { c.deduct = !!on; rebuildCats(); save(); }
+}
+/* Purchases in a deleted category move to Other, and anything you taught the app about it is forgotten. */
+function removeCategory(id) {
+  if (!(S.customCats || []).some(x => x.id === id)) return 0;
+  let n = 0;
+  for (const t of S.transactions) if (t.category === id) { t.category = 'other'; n++; }
+  for (const k of Object.keys(S.learned || {})) if (S.learned[k] === id) delete S.learned[k];
+  S.customCats = S.customCats.filter(x => x.id !== id);
+  rebuildCats(); save();
+  return n;
+}
 
 /* ---------- helpers ---------- */
 
@@ -224,7 +261,8 @@ function simplify(rawName, amount, learned, hint) {
   if (known && known[4] && bank && bank.own) auto = true;
 
   const key = merchantKey(rawName);
-  if (learned && learned[key]) { category = learned[key]; confidence = 0.99; why = 'You set this category'; auto = false; }
+  if (learned && learned[key] && CATS[learned[key]]) { category = learned[key]; confidence = 0.99; why = 'You set this category'; auto = false; }
+  if (!CATS[category]) category = CATS[REFINES[category]] ? REFINES[category] : (amount > 0 ? 'income' : 'other');   // a rule for a category you don't have
   return { phrase, category, confidence, why, auto };
 }
 
@@ -312,7 +350,7 @@ function defaultState() {
     settings: {
       name: '',            // only shown on this phone
       palette: 'terminal', // terminal | tannhauser | mono | icedancer | vice | unit01
-      mode: 'dark',        // dark | light | auto
+      mode: 'dark',        // dark only for now
       textSize: 1,
       motion: 'auto',      // auto | off
       backupDays: 7,       // 0 = no reminder
@@ -333,6 +371,7 @@ function defaultState() {
     budgetUndo: null,    // what the month looked like before the last Apply/Update
     adjustments: [],      // month-end redistributions
     learned: {},
+    customCats: [],       // categories you made yourself: { id, title, icon, deduct, color }
     statementsSeen: [],   // months whose statement you have opened or dismissed
     todos: [],
     notes: [],
@@ -343,6 +382,7 @@ function defaultState() {
 }
 
 let S = loadState();
+rebuildCats();
 
 function loadState() {
   let raw = null;
@@ -354,13 +394,14 @@ function loadState() {
 /* Brings data saved by the first version of the app up to date. */
 function migrate(old) {
   const s = Object.assign(defaultState(), old);
+  if (!Array.isArray(old.customCats)) s.customCats = [{ id: 'videoCamera', title: 'Video & Camera', icon: '📷', deduct: true, color: '#a855f7' }];   // was a built-in; now yours
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
   const PAL_RENAME = { dusk: 'terminal', harvest: 'tannhauser', lagoon: 'mono', midnight: 'icedancer', sandstone: 'vice', garnet: 'unit01' };
   if (PAL_RENAME[s.settings.palette]) s.settings.palette = PAL_RENAME[s.settings.palette];
   s.settings.currency = 'auto';   // the currency follows the phone's region
   if (s.roundMode === 'up') s.roundMode = 'nearest';
   if (s.settings.startTab === 'income') s.settings.startTab = 'budget';
-  if (old.settings && old.settings.theme && !old.settings.mode) { const t = old.settings.theme; s.settings.mode = t === 'paper' ? 'light' : t === 'auto' ? 'auto' : 'dark'; }
+  s.settings.mode = 'dark';   // light and auto are switched off for now
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
   if (old.namesV !== 2) {                                   // older transactions get the newer, verb-free names and cross-checked confidence
     for (const t of s.transactions || []) {
@@ -427,14 +468,14 @@ function save() {
 }
 
 function replaceState(obj) {
-  S = migrate(obj);
+  S = migrate(obj); rebuildCats();
   save();
 }
 
 /* ---------- demo mode: everything below is invented ---------- */
 function seedDemo() {
   const day = (ago, h, m) => { const x = new Date(); x.setDate(x.getDate() - ago); x.setHours(h, m, 0, 0); return x.toISOString(); };
-  S = defaultState();
+  S = defaultState(); rebuildCats();
   S.demoSeeded = true; S.demoV = 2; S.useSampleData = false;
   S.settings.name = 'Demo';
   S.accounts = [
@@ -823,7 +864,7 @@ const spentIn = d => inMonth(d)
   .filter(t => isExpense(t) && !t.isIgnored && t.category !== 'transfer')
   .reduce((a, t) => a + Math.abs(t.amount), 0);
 const taxDeductibleTotal = year => S.transactions
-  .filter(t => isExpense(t) && CATS[t.category].taxDeductible && new Date(t.date).getFullYear() === year)
+  .filter(t => isExpense(t) && (CATS[t.category] || {}).taxDeductible && new Date(t.date).getFullYear() === year)
   .reduce((a, t) => a + Math.abs(t.amount), 0);
 
 /* ---------- monthly budget (always applied by you, never automatically) ---------- */
@@ -1352,7 +1393,7 @@ async function syncLinked() {
 /* Wipe everything on this phone (not your server), back to a fresh install. */
 function eraseEverything() {
   try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
-  S = defaultState();
+  S = defaultState(); rebuildCats();
   save();
 }
 
