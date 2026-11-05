@@ -9,7 +9,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PocketLedger">
-<script>try{if(localStorage.getItem("pocketledger.lock"))document.documentElement.dataset.locked="1"}catch(e){}</script>
+<script>try{var d=document.documentElement;if(localStorage.getItem("pocketledger.lock"))d.dataset.locked="1";var dm=localStorage.getItem("pocketledger.demo")==="1",s=(JSON.parse(localStorage.getItem(dm?"pocketledger.demo.v1":"pocketledger.v1"))||{}).settings||{};d.dataset.theme=(s.palette||"vice")+"-dark";d.dataset.corners=s.corners||"rounded"}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-180.png">
@@ -20,6 +20,8 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="splash"><div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div></div>
+<script>try{if(sessionStorage.getItem("pl.splash")||navigator.webdriver)document.getElementById("splash").remove()}catch(e){}</script>
 <main id="app"></main>
 <nav id="tabbar"></nav>
 <div id="modal-root"></div>

@@ -355,6 +355,7 @@ function defaultState() {
       motion: 'auto',      // auto | off
       backupDays: 7,       // 0 = no reminder
       currency: 'auto',    // 'auto' = the phone's region, or a code like EUR
+      appIcon: 'classic',   // Home Screen icon look
       corners: 'rounded',  // sharp | rounded
       defaultPot: 'spending',
       linked: false,       // true once real bank accounts are linked (see server/README.md)

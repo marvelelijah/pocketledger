@@ -537,6 +537,7 @@ function etaHTML(pot, earn, pct) {
   return s;
 }
 
+const totalBreak = c => 'Bills ' + usd(c.fixed) + ' + savings ' + usd(c.save) + (c.potSum ? ' + pots ' + usd(c.potSum) : '');
 function budgetCalc() {
   const rows = earningAmounts();
   const earn = r2(rows.reduce((a, r) => a + r.amount, 0));
@@ -544,7 +545,8 @@ function budgetCalc() {
   const pct = S.savingsPercent || 0;
   const save = r2(earn * pct / 100);
   const shares = S.pots.filter(p => !p.core).map(p => ({ id: p.id, amount: r2(earn * (p.percent || 0) / 100) }));
-  return { rows, earn, fixed, pct, save, shares, left: r2(earn - fixed - save - shares.reduce((a, x) => a + x.amount, 0)) };
+  const potSum = r2(shares.reduce((x, y) => x + y.amount, 0));
+  return { rows, earn, fixed, pct, save, shares, potSum, total: r2(fixed + save + potSum), left: r2(earn - fixed - save - shares.reduce((a, x) => a + x.amount, 0)) };
 }
 
 function discHTML(d) {
@@ -674,7 +676,8 @@ function budgetView() {
       <span class="pctbox">${numInput(p.percent || 0, `data-change="potPct" data-id="${esc(p.id)}" data-live="1"`, 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="pot-amt-${esc(p.id)}">${usd(x.amount)}</b> set aside for ${esc(p.name)} this month.${sug && sug !== (p.percent || 0) ? ` Suggested: <button class="link small" data-action="usePotPct" data-id="${esc(p.id)}" data-v="${sug}">${sug}%</button>${p.target > 0 ? ' to reach your goal in about a year' : ''}` : ''}</div>
     <div class="muted small" id="eta-${esc(p.id)}">${etaHTML(p, c.earn, p.percent || 0)}</div>`; }).join('')}
-    <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.fixed)}</b></div>
+    <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.total)}</b></div>
+    <div class="muted small" id="fixed-break">${totalBreak(c)}</div>
   ${CE}
 
   ${CD('b-result', 'Result', true)}
@@ -712,7 +715,8 @@ function patchBudget() {
   const c = budgetCalc();
   const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
   set('earn-total', usd(c.earn));
-  set('fixed-total', usd(c.fixed));
+  set('fixed-total', usd(c.total));
+  set('fixed-break', totalBreak(c));
   set('save-amt', usd(c.save));
   const eta = (id, p, pct) => { const el = $(id); if (el && p) el.innerHTML = etaHTML(p, c.earn, pct); };
   eta('eta-savings', potById('savings'), S.savingsPercent || 0);
@@ -836,7 +840,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 e';
+const APP_VERSION = '2026-11-05 f';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -925,6 +929,10 @@ function settingsView() {
     <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background-color:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
     <div class="muted small" style="margin:12px 0 6px">Corners</div>
     ${seg([['sharp', 'Sharp'], ['rounded', 'Rounded']], st.corners || 'sharp', 'setCorners')}
+    <div class="muted small" style="margin:12px 0 6px">App icon</div>
+    <div class="igrid">${ICONS.map(([k, n]) => `<button class="iprev ${(st.appIcon || 'classic') === k ? 'on' : ''}" data-action="setIcon" data-pot="${k}"><img src="${iconURL(k, 120)}" alt="" width="60" height="60"><span class="small">${n}</span></button>`).join('')}</div>
+    <div class="muted small" style="margin-top:8px">The Home Screen picks up its icon when the app is added. To switch: pick one here, delete PocketLedger from your Home Screen, open this page in Safari, then Share → Add to Home Screen. Or save the image and use it with a Shortcut.</div>
+    <div class="btn-row"><button class="btn" data-action="saveIcon">save icon image</button></div>
     <div class="muted small" style="margin:12px 0 6px">Text size</div>
     ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
     <div class="muted small" style="margin:12px 0 6px">Animations</div>
@@ -1771,6 +1779,8 @@ function openPotEdit(id) {
 
 const ACTIONS = {
   demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { try { localStorage.removeItem(TOUR_KEY); } catch (e) { /* ignore */ } setDemo(true); location.reload(); }),
+  setIcon: d => { S.settings.appIcon = d.pot; save(); applyIcon(); },
+  saveIcon: () => { iconBlob(S.settings.appIcon || 'classic', 512).then(b => b && shareFile('pocketledger-icon.png', 'image/png', b, 'PocketLedger icon')); return false; },
   setHaptics: d => { S.settings.haptics = d.pot === 'on'; save(); if (d.pot === 'on') haptic(); },
   showTour: () => { tourShow(0); return false; },
   demoOff: () => { setDemo(false); location.reload(); },
@@ -1961,8 +1971,9 @@ const ACTIONS = {
       : `Add ${usd(c.left)} to Spending and ${usd(c.save)} to Savings${c.shares.filter(x => x.amount).map(x => ', ' + usd(x.amount) + ' to ' + potName(x.id)).join('')} for ${mo}?`;
     askConfirm(msg, run ? 'update' : 'apply', () => {
       applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; ui.tab = 'home';
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       rainArm(); showRainMsg();
-      render();
+      render(); window.scrollTo(0, 0);
     });
   },
   undoBudget: () => askConfirm('Put this month\'s budget back the way it was before the last change?', 'undo', () => { undoBudget(); render(); }),
@@ -2157,7 +2168,15 @@ function showRainMsg() {
   setTimeout(hideRainMsg, 25000);
 }
 function hideRainMsg() { const m = document.getElementById('rainmsg'); if (m) m.remove(); }
+/* Shaking a phone with a text box open makes iOS offer "Undo Typing". Close the text box (and any pop-up) and go to the top of the Dashboard first. */
+function shakeReset() {
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) ae.blur();
+  if (ui.modal || ui.picker || ui.dialog || ui.tab !== 'home') { ui.modal = null; ui.picker = null; ui.dialog = null; ui.tab = 'home'; render(); }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 function rainShake() {
+  shakeReset();
   if (motionOff()) return;
   hideRainMsg();
   rain.last = performance.now();
@@ -2197,31 +2216,82 @@ function rainFrame(t) {
   rain.raf = requestAnimationFrame(rainFrame);
 }
 
-/* ---------- haptics ----------
-   Android/Chrome can buzz directly. iPhone has no buzz call for web pages, but flipping a hidden iOS switch control gives the same tap. */
-const hapticLabel = (() => {
-  const l = document.createElement('label');
-  l.setAttribute('aria-hidden', 'true');
-  l.style.cssText = 'position:fixed;left:-99px;top:-99px;width:1px;height:1px;opacity:0;pointer-events:none';
-  l.innerHTML = '<input type="checkbox" switch tabindex="-1">';
-  document.body.appendChild(l);
-  return l;
-})();
-function haptic() {
-  if (S.settings.haptics === false) return;
-  try { if (navigator.vibrate && navigator.vibrate(8)) return; hapticLabel.click(); } catch (e) { /* no haptics here */ }
+/* ---------- app icon looks ----------
+   The Home Screen icon is read when the app is added, so these are drawn on the fly in the current theme's colors and
+   put into the page's apple-touch-icon link; the picker also lets you save the image. */
+const ICONS = [['classic', 'Classic'], ['theme', 'Theme'], ['inverse', 'Inverted'], ['prompt', 'Prompt'], ['light', 'Light'], ['night', 'Night']];
+const iconCache = {};
+function iconCanvas(k, size) {
+  const rs = getComputedStyle(document.documentElement);
+  const bg = rs.getPropertyValue('--bg').trim() || '#1c1a2e', ac = rs.getPropertyValue('--acc-sage').trim() || '#84a68e', fg = rs.getPropertyValue('--fg').trim() || '#eeeeee';
+  const look = { theme: [bg, ac, '$'], inverse: [ac, bg, '$'], prompt: [bg, ac, '~/'], light: ['#f4f1ea', '#1f3d2e', '$'], night: ['#050505', fg, '$'] }[k] || [bg, ac, '$'];
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d');
+  x.fillStyle = look[0]; x.fillRect(0, 0, size, size);
+  x.fillStyle = look[1]; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.font = `700 ${Math.round(size * (look[2] === '$' ? 0.66 : 0.5))}px ui-monospace, Menlo, Consolas, monospace`;
+  x.fillText(look[2], size / 2, size * 0.53);
+  return c;
 }
-document.addEventListener('click', e => {
-  if (e.target.closest && e.target.closest('button, [data-action], summary, .theme, .opt, .tappable')) haptic();
-}, true);
+function iconURL(k, size) {
+  if (k === 'classic') return size > 180 ? 'icon-512.png' : 'icon-180.png';
+  const key = k + size + document.documentElement.dataset.theme;
+  return iconCache[key] || (iconCache[key] = iconCanvas(k, size).toDataURL('image/png'));
+}
+function iconBlob(k, size) {
+  if (k === 'classic') return fetch('icon-512.png').then(r => r.blob()).then(b => b.arrayBuffer()).then(b => new Uint8Array(b)).catch(() => null);
+  return new Promise(res => iconCanvas(k, size).toBlob(b => b ? b.arrayBuffer().then(ab => res(new Uint8Array(ab))) : res(null), 'image/png'));
+}
+function applyIcon() {
+  const k = S.settings.appIcon || 'classic';
+  document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(l => { l.href = iconURL(k, 180); });
+}
+
+/* ---------- haptics ----------
+   iPhone (iOS 17.4+) plays a tap when a real finger toggles an <input type="checkbox" switch>. So, as in the ios-haptics library
+   (github.com/tijnjh/ios-haptics, MIT, by tijn), every button gets an invisible label with a hidden switch laid over it.
+   Other phones just buzz on click. */
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function hapticTrigger(el) {
+  if (!el || !IS_IOS || el.querySelector(':scope > [data-haptic-trigger]')) return;
+  const label = document.createElement('label');
+  label.setAttribute('data-haptic-trigger', ''); label.setAttribute('aria-hidden', 'true');
+  Object.assign(label.style, { position: 'absolute', inset: '0', touchAction: 'manipulation' });
+  label.style.setProperty('-webkit-tap-highlight-color', 'transparent');
+  const sw = document.createElement('input');
+  sw.type = 'checkbox'; sw.setAttribute('switch', ''); sw.tabIndex = -1;
+  Object.assign(sw.style, { position: 'absolute', width: '1px', height: '1px', margin: '0', visibility: 'hidden' });
+  sw.addEventListener('click', ev => ev.stopPropagation());   // the label re-sends its click to the switch; don't count it twice
+  label.append(sw);
+  if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+  el.insertAdjacentElement('beforeend', label);
+}
+const HAPTIC_SEL = 'button, summary, [data-action]:not(input):not(select):not(textarea):not(label)';
+let hapticQueued = false;
+function hapticSweep() {
+  hapticQueued = false;
+  if (!IS_IOS) return;
+  document.querySelectorAll(HAPTIC_SEL).forEach(hapticTrigger);
+}
+if (IS_IOS) {
+  const queue = () => { if (!hapticQueued) { hapticQueued = true; requestAnimationFrame(hapticSweep); } };
+  new MutationObserver(queue).observe(document.body, { childList: true, subtree: true });
+  queue();
+} else if (navigator.vibrate) {
+  document.addEventListener('click', e => {
+    if (S.settings.haptics !== false && e.target.closest && e.target.closest(HAPTIC_SEL)) navigator.vibrate(8);
+  }, true);
+}
+function haptic() { if (!IS_IOS && S.settings.haptics !== false && navigator.vibrate) navigator.vibrate(8); }
 
 /* ---------- opening title and the first-run tour ---------- */
 const TOUR_KEY = 'pocketledger.tour';
 const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (e) { return true; } };
 const TOUR = [
   { i: '👋', t: 'Hi, I\'m PocketLedger', p: 'Your pocket-sized money buddy. This quick tour takes about a minute, and I promise there\'s no quiz at the end.' },
+  { i: '🔗', t: 'Link your accounts', p: 'Tap the round initial at the top right to open Settings, then Bank accounts. Enter your link server address and passphrase, tap "check connection", then "link a bank" and choose which accounts to share. It\'s read-only, so I can look but never move money. Not ready? Add purchases by hand with the + button.' },
   { i: '📥', t: 'Review', p: 'New purchases from your bank land here, like mail. Tap a pot (Spending, Savings, whatever you\'ve made) to sort each one, or say "not a spend" for things like moving your own money.' },
-  { i: '🧠', t: 'I learn as you go', p: 'Tell me once that QuikTrip is gas and I\'ll remember it. The more you sort, the smarter I get, and the fewer taps you need. Think of it as training a very enthusiastic puppy.' },
+  { i: '🧠', t: 'I learn as you go', p: 'Tell me once that QuikTrip is gas and I\'ll remember it. The more you sort, the smarter I get, and the fewer taps you need.' },
   { i: '🏠', t: 'Dashboard', p: 'Your spending bar and every pot at a glance. Goals show how far along they are, and if you overshoot, they happily say 200%.' },
   { i: '🧾', t: 'Activity', p: 'Every purchase, searchable. Try words like "gas october" or ">50". Tap any purchase to fix its name, category or pot.' },
   { i: '📊', t: 'Budget', p: 'Once a month, line up your earnings, your expenses and how much to save, then apply the budget. It also shows when each goal would be reached, so nudging a percent up is satisfying.' },
@@ -2268,16 +2338,16 @@ function tourClick(e) {
   }
 }
 function showSplash() {
-  if (navigator.webdriver) return;   // automated test browsers skip the opening screens
+  if (navigator.webdriver) { const sp = document.getElementById('splash'); if (sp) sp.remove(); return; }   // automated test browsers skip the opening screens
   let again = false;
   try { again = !!sessionStorage.getItem('pl.splash'); sessionStorage.setItem('pl.splash', '1'); } catch (e) { /* still show it */ }
-  if (again) { if (!tourSeen() && !document.documentElement.dataset.locked) setTimeout(() => tourShow(0), 300); return; }
-  const el = document.createElement('div');
-  el.id = 'splash';
-  el.innerHTML = '<div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>';
-  document.body.appendChild(el);
+  if (again) { const sp = document.getElementById('splash'); if (sp) sp.remove(); if (!tourSeen() && !document.documentElement.dataset.locked) setTimeout(() => tourShow(0), 300); return; }
+  let el = document.getElementById('splash');
+  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
+  // the tour is built underneath the title, so the title fades straight into it
+  setTimeout(() => { if (!tourSeen() && !document.documentElement.dataset.locked) tourShow(0); }, 1100);
   setTimeout(() => el.classList.add('out'), 1300);
-  setTimeout(() => { el.remove(); if (!tourSeen() && !document.documentElement.dataset.locked) tourShow(0); }, 1800);
+  setTimeout(() => el.remove(), 1900);
 }
 showSplash();
 
@@ -2319,6 +2389,7 @@ function applySettings() {
   HIDE_AMOUNTS = !!st.hideAmounts;
   root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion; root.dataset.corners = st.corners || 'sharp';
   root.style.setProperty('--ts', st.textSize);
+  try { applyIcon(); } catch (e) { /* icon is optional */ }
   const cs = getComputedStyle(root);
   const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
   SAGE = read('--sage', SAGE); DIM = read('--fg-dim', DIM);

@@ -453,7 +453,7 @@ html.rain #app, html.rain #tabbar, html.rain .scrim { filter: hue-rotate(var(--h
 html.modal body { min-height: calc(100dvh + 24px); }
 #rainmsg { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 70; padding: 10px 18px; font-size: calc(20px * var(--ts, 1)); font-weight: 700; color: var(--sage); border: 1px solid var(--sage); background: var(--bg); animation: rainPulse 1.2s ease-in-out infinite; }
 @keyframes rainPulse { 50% { transform: translateX(-50%) scale(1.06); } }
-#splash { position: fixed; inset: 0; z-index: 900; background: var(--bg); display: grid; place-items: center; text-align: center; transition: opacity .5s ease; }
+#splash { position: fixed; inset: 0; z-index: 960; background: var(--bg); display: grid; place-items: center; text-align: center; transition: opacity .5s ease; }
 #splash.out { opacity: 0; }
 #splash h1 { font-size: calc(34px * var(--ts, 1)); margin: 0; }
 #splash .by { color: var(--fg-dim); margin-top: 8px; font-size: calc(13px * var(--ts, 1)); letter-spacing: .08em; }
@@ -467,3 +467,11 @@ html.modal body { min-height: calc(100dvh + 24px); }
 .tour-dots i { width: 6px; height: 6px; background: var(--line); display: block; border-radius: 50%; }
 .tour-dots i.on { background: var(--sage); }
 html[data-locked] #tour { visibility: hidden; }
+
+/* app icon picker */
+.igrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.iprev { border: 1px solid var(--line); background: var(--bg); color: var(--fg-dim); padding: 10px 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.iprev img { width: 60px; height: 60px; border-radius: 14px; display: block; pointer-events: none; }
+.iprev.on { border-color: var(--sage); color: var(--fg); }
+html[data-corners="rounded"] .iprev { border-radius: var(--r); }
+.iprev img { outline: 1px solid var(--line); outline-offset: -1px; }
