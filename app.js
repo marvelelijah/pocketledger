@@ -840,7 +840,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 f';
+const APP_VERSION = '2026-11-05 g';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1781,7 +1781,7 @@ const ACTIONS = {
   demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { try { localStorage.removeItem(TOUR_KEY); } catch (e) { /* ignore */ } setDemo(true); location.reload(); }),
   setIcon: d => { S.settings.appIcon = d.pot; save(); applyIcon(); },
   saveIcon: () => { iconBlob(S.settings.appIcon || 'classic', 512).then(b => b && shareFile('pocketledger-icon.png', 'image/png', b, 'PocketLedger icon')); return false; },
-  setHaptics: d => { S.settings.haptics = d.pot === 'on'; save(); if (d.pot === 'on') haptic(); },
+  setHaptics: d => { S.settings.haptics = d.pot === 'on'; save(); applySettings(); if (d.pot === 'on') haptic(); },
   showTour: () => { tourShow(0); return false; },
   demoOff: () => { setDemo(false); location.reload(); },
   demoReset: () => askConfirm('Reset the demo to its starting made-up data?', 'reset', () => { try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ } location.reload(); }, true),
@@ -1972,8 +1972,12 @@ const ACTIONS = {
     askConfirm(msg, run ? 'update' : 'apply', () => {
       applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; ui.tab = 'home';
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      rainArm(); showRainMsg();
       render(); window.scrollTo(0, 0);
+      if (navigator.webdriver) { rainArm(); showRainMsg(); return; }
+      /* iOS keeps an "Undo Typing" history for everything typed on the page, and a shake would offer it. A fresh page has none, so the app reloads
+         (the budget is already saved) and then waits for the shake. */
+      try { sessionStorage.setItem('pl.rain', '1'); sessionStorage.setItem('pl.skiplock', '1'); } catch (e) { /* ignore */ }
+      rainPermission().then(() => location.reload());
     });
   },
   undoBudget: () => askConfirm('Put this month\'s budget back the way it was before the last change?', 'undo', () => { undoBudget(); render(); }),
@@ -2134,16 +2138,19 @@ if (STANDALONE) {
    After a new budget is applied: shake the phone and every color slowly spins through the rainbow while dollar bills fall.
    Shaking needs the phone's motion sensor; iPhone asks permission once, when you tap the button. */
 const rain = { on: false, last: 0, hue: 0, raf: 0, prev: 0, spawn: 0, lx: null, ly: null, lz: null, bg: '', timer: 0 };
-function rainArm() {
-  const go = () => {
-    window.removeEventListener('devicemotion', rainMotion); window.addEventListener('devicemotion', rainMotion);
-    clearTimeout(rain.timer); rain.timer = setTimeout(() => window.removeEventListener('devicemotion', rainMotion), 25000);
-  };
-  try {
-    if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().then(r => { if (r === 'granted') go(); }).catch(() => {});
-    else go();
-  } catch (e) { /* no motion sensor */ }
+function rainListen() {
+  window.removeEventListener('devicemotion', rainMotion); window.addEventListener('devicemotion', rainMotion);
+  clearTimeout(rain.timer); rain.timer = setTimeout(() => window.removeEventListener('devicemotion', rainMotion), 25000);
 }
+/* Asks for motion access where the phone requires it (must be called from a tap). Resolves to true when shaking can be heard. */
+function rainPermission() {
+  try {
+    if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
+      return DeviceMotionEvent.requestPermission().then(r => r === 'granted').catch(() => false);
+  } catch (e) { /* no motion sensor */ }
+  return Promise.resolve(true);
+}
+function rainArm() { rainPermission().then(ok => { if (ok) rainListen(); }); }
 function rainMotion(e) {
   const a = e.accelerationIncludingGravity; if (!a) return;
   const x = a.x || 0, y = a.y || 0, z = a.z || 0;
@@ -2282,6 +2289,13 @@ if (IS_IOS) {
     if (S.settings.haptics !== false && e.target.closest && e.target.closest(HAPTIC_SEL)) navigator.vibrate(8);
   }, true);
 }
+/* A <summary> won't open its details when the click lands on the overlay (interactive content), so open it by hand. */
+document.addEventListener('click', e => {
+  const trig = e.target.closest && e.target.closest('[data-haptic-trigger]');
+  const sum = trig && trig.parentElement;
+  if (!sum || sum.tagName !== 'SUMMARY' || !sum.parentElement || sum.parentElement.classList.contains('coll')) return;
+  sum.parentElement.open = !sum.parentElement.open;
+});
 function haptic() { if (!IS_IOS && S.settings.haptics !== false && navigator.vibrate) navigator.vibrate(8); }
 
 /* ---------- opening title and the first-run tour ---------- */
@@ -2387,7 +2401,7 @@ function applySettings() {
   const theme = themeKey();
   if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
   HIDE_AMOUNTS = !!st.hideAmounts;
-  root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion; root.dataset.corners = st.corners || 'sharp';
+  root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion; root.dataset.corners = st.corners || 'sharp'; root.dataset.haptics = st.haptics === false ? 'off' : 'on';
   root.style.setProperty('--ts', st.textSize);
   try { applyIcon(); } catch (e) { /* icon is optional */ }
   const cs = getComputedStyle(root);
@@ -2515,6 +2529,13 @@ setInterval(() => { if (!document.hidden) autoSync(); }, 5 * 60 * 1000);
 
 // Ask the browser to keep this app's data even when storage is tight.
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+
+try {
+  if (sessionStorage.getItem('pl.rain') === '1') {
+    sessionStorage.removeItem('pl.rain');
+    ui.tab = 'home'; render(); rainListen(); showRainMsg();
+  }
+} catch (e) { /* ignore */ }
 
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
   navigator.serviceWorker.register('sw.js').catch(() => {});

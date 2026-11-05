@@ -475,3 +475,4 @@ html[data-locked] #tour { visibility: hidden; }
 .iprev.on { border-color: var(--sage); color: var(--fg); }
 html[data-corners="rounded"] .iprev { border-radius: var(--r); }
 .iprev img { outline: 1px solid var(--line); outline-offset: -1px; }
+html[data-haptics="off"] [data-haptic-trigger] { display: none !important; }

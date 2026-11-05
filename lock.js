@@ -187,5 +187,7 @@ Object.assign(ACTIONS, {
 });
 
 bioAvailable().then(v => { ui.bioAvail = v; if (ui.tab === 'settings') render(); });
-if (lockOn()) lockNow();
+let skipLock = false;   // the app reloads itself once after a new budget (see "make it rain"); that shouldn't ask for the passcode again
+try { skipLock = sessionStorage.getItem('pl.skiplock') === '1'; sessionStorage.removeItem('pl.skiplock'); } catch (e) { /* ignore */ }
+if (lockOn() && !skipLock) lockNow();
 else delete root.dataset.locked;
