@@ -23,11 +23,13 @@ const monthLabel = key => { const [y, m] = key.split('-').map(Number); return mo
 
 /* Emoji, tinted to a color so they sit in the palette instead of shouting. */
 let SAGE = '#f2a488', DIM = '#a29fc0';
+let ACC = {};   // the theme's accent colors as hex
 const tintCache = {};
 function tintFilter(hex) {
   if (tintCache[hex]) return tintCache[hex];
   const r = parseInt(hex.slice(1, 3), 16) / 255, g = parseInt(hex.slice(3, 5), 16) / 255, b = parseInt(hex.slice(5, 7), 16) / 255;
   const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, dl = mx - mn;
+  if (dl < 0.04) return (tintCache[hex] = `grayscale(1) brightness(${(0.55 + l * 0.9).toFixed(2)})`);   // gray themes (Mono) keep emoji gray too
   let h = 0, s = 0;
   if (dl > 0) {
     s = dl / (1 - Math.abs(2 * l - 1));
@@ -104,11 +106,12 @@ function backupBanner() {
     <button class="btn full" style="margin-top:8px" data-action="shareCode">Email myself a backup code</button></div>` : '';
 }
 
+const refreshBtn = extra => `<span class="hdr-r"><button class="link" data-action="refresh">${ui.syncing ? 'Syncing…' : 'Refresh'}</button>${extra || ''}</span>`;
+
 function homeView() {
   const now = new Date();
   return `
-  <div class="row"><h1>Home</h1>
-    ${S.useSampleData ? `<button class="link" data-action="refresh">${ui.syncing ? 'Syncing…' : 'Refresh'}</button>` : ''}</div>
+  <div class="row"><h1>Dashboard</h1>${refreshBtn()}</div>
 
   ${(() => { const nk = newStatementKey(); return nk ? `<div class="card tappable notice" data-action="openStatement" data-id="${nk}"><div class="row"><b>${emo('📄')} ${esc(monthLabel(nk))} statement is ready</b><button class="link" data-action="dismissStatement" data-id="${nk}" aria-label="Dismiss">✕</button></div><div class="muted small">Spending habits, goal progress and every transaction. Tap to open, then save as PDF or share.</div></div>` : ''; })()}
   <div class="grid2">${S.pots.map(potCard).join('')}</div>
@@ -213,7 +216,7 @@ function potView() {
   const others = S.pots.filter(x => x.id !== p.id);
 
   return `
-  <div class="row"><button class="link" data-action="tab" data-tab="home">‹ Home</button>
+  <div class="row"><button class="link" data-action="tab" data-tab="home">‹ Dashboard</button>
     <button class="link" data-action="editPot" data-id="${esc(p.id)}">Edit</button></div>
   <h1>${emo(p.icon)} ${esc(p.name)}</h1>
 
@@ -309,7 +312,7 @@ function activityView() {
     return `<button class="chip" data-action="filter" data-cat="${key || ''}"
       style="${on ? `background:${color};color:var(--bg);border-color:${color}` : `color:${color};border-color:${color}55`}">${icon ? (on ? emoDark(icon) : emo(icon, color)) + ' ' : ''}${label}</button>`;
   };
-  return `<h1>Activity</h1>
+  return `<div class="row"><h1>Activity</h1>${refreshBtn()}</div>
   ${searchBox('search', ui.search, 'search', 'Name, date, time, category, $…')}
   <div class="chips">
     ${chip(null, 'All', SAGE, '')}
@@ -322,26 +325,30 @@ function activityView() {
 /* ---------- review ---------- */
 
 /* Spending stays pinned at the top; every other pot and goal is stacked right under it. */
+/* Pots take turns being each accent color of the theme. */
+const potColorHex = i => ACC[['sky', 'rose', 'terra', 'amber', 'green'][i % 5]] || SAGE;
+const potColor = i => `var(--acc-${['sky', 'rose', 'terra', 'amber', 'green'][i % 5].replace('green', 'sage')})`;
+
 function potStrip() {
   const L = spendingLevel(), p = potById('spending');
   const pc = L.pct;
   const color = pc == null ? 'var(--accent)' : pc > 0.5 ? 'var(--accent)' : pc > 0.2 ? 'var(--orange)' : 'var(--red)';
-  const main = `<div class="stick"><div class="card spendbar" data-action="openPot" data-id="spending">
+  const main = `<div class="card spendbar" data-action="openPot" data-id="spending">
     <div class="row"><span class="muted small">${emo(p.icon)} ${esc(p.name)} left</span>
       <span class="small muted">${L.available > 0 ? Math.round((pc || 0) * 100) + '% left' : ''}</span></div>
     <div class="row"><div class="big ${L.left < 0 ? 'neg' : ''}" ${counted('spend', L.left)}>${usd(L.left)}</div>
       ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
     ${pc == null ? '' : `<div class="bar thick">${fill('spend', pc * 100, 'background:' + color)}</div>`}
-  </div></div>`;
-  const others = S.pots.filter(x => x.id !== 'spending').map(x => {
+  </div>`;
+  const others = S.pots.filter(x => x.id !== 'spending').map((x, i) => {
     const g = x.target > 0 ? Math.min(Math.max(x.balance / x.target, 0), 1) : null;
     return `<div class="card spendbar prow" data-action="openPot" data-id="${esc(x.id)}">
-      <div class="row"><span class="muted small">${emo(x.icon)} ${esc(x.name)}${g == null ? '' : ' · ' + Math.round(g * 100) + '%'}</span>
+      <div class="row"><span class="muted small">${emo(x.icon, potColorHex(i))} ${esc(x.name)}${g == null ? '' : ' · ' + Math.round(g * 100) + '%'}</span>
         <b class="${x.balance < 0 ? 'neg' : ''}" ${counted('pot-' + x.id, x.balance)}>${usd(x.balance)}</b></div>
-      ${g == null ? '' : `<div class="bar">${fill('pot-' + x.id, g * 100)}</div>`}
+      ${g == null ? '' : `<div class="bar">${fill('pot-' + x.id, g * 100, 'background:' + potColor(i))}</div>`}
     </div>`;
   }).join('');
-  return main + (others ? `<div class="prows">${others}</div>` : '');
+  return `<div class="stick">${main}${others ? `<div class="prows">${others}</div>` : ''}</div>`;
 }
 
 const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savings', loan: 'loan', investment: 'investment' };
@@ -401,7 +408,7 @@ function reviewChips() {
 function reviewView() {
   const q = ui.rsearch.trim();
   return `${potStrip()}
-  <div class="row"><h1>Review</h1><button class="link plusbtn" data-action="addTx" aria-label="Add purchase">＋</button></div>
+  <div class="row"><h1>Review</h1>${refreshBtn('<button class="link plusbtn" data-action="addTx" aria-label="Add purchase">＋</button>')}</div>
   ${backupBanner()}
   ${S.useSampleData ? `<div class="card banner"><b>You're looking at sample data</b>
     <div class="small">Nothing here is real. When you're ready, clear it and start with your own purchases.</div>
@@ -582,11 +589,11 @@ function budgetView() {
   const extra = countedIncome(now).filter(t => t.extraIncomeLabel);
   const items = countedIncome(now);
   const total = totalEarnings(now);
-  return `<div class="row"><h1>Budget</h1><button class="link plusbtn" data-action="addExtra" aria-label="Add extra income">＋</button></div>
+  return `<div class="row"><h1>Budget</h1>${refreshBtn('<button class="link plusbtn" data-action="addExtra" aria-label="Add extra income">＋</button>')}</div>
   <div class="card row"><b style="font-size:17px">${monthName(now)}</b>
     <span class="badge ${run ? 'b-hi' : 'b-mid'}">${run ? 'Applied' : 'Not applied yet'}</span></div>
 
-  ${CD('i-src', 'Income sources', true, '<b class="pos">' + usd(total) + '</b>')}
+  ${CD('i-src', 'Income sources', true)}
     ${S.incomeSources.map(s => {
       const got = receivedFrom(s, now), avg = sourceMonthlyAverage(s);
       const avgTxt = avg ? `<span class="muted small">avg ${usd(avg)}/mo</span>` : '';
@@ -626,7 +633,7 @@ function budgetView() {
     ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">Nothing counted yet.</div>'}
   ${CE}
 
-  ${CD('b-stmt', 'Statements', false, esc(String(statementKeys().length)))}
+  ${CD('b-stmt', 'Statements', false)}
     ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small">${usd(st.income)} in · ${usd(st.spent)} out</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
   ${CE}
 
@@ -782,6 +789,12 @@ const MODES = [['dark', 'dark'], ['light', 'light'], ['auto', 'auto']];
 /* WCAG 2.x contrast: nudge a colour lighter or darker until it reads on the current background. */
 const lumOf = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const ratio = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+function mixHex(a, b, t) {
+  const p = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const x = p(a), y = p(b);
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
 function readableOn(hex, bgs, dark) {
   let [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
   for (let n = 0; n < 40 && !bgs.every(bg => ratio('#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join(''), bg) >= 4.5); n++) {
@@ -797,7 +810,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 a';
+const APP_VERSION = '2026-11-05 b';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1281,7 +1294,7 @@ function modalHTML() {
 
 /* ---------- render ---------- */
 
-const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Home'], ['activity', '📋', 'Activity'], ['budget', '📊', 'Budget']];
+const TABS = [['review', '📥', 'Review'], ['home', '🏠', 'Dashboard'], ['activity', '📋', 'Activity'], ['budget', '📊', 'Budget']];
 
 const ghostRoot = document.createElement('div');
 ghostRoot.id = 'ghost-root';
@@ -1317,7 +1330,7 @@ function fadeGhost(g, ms, move) {
 }
 /* Changes the theme with a cross-fade between the old and the new look. */
 function themeFade(change) {
-  const g = motionOff() ? null : makeGhost(true);
+  const g = motionOff() ? null : makeGhost(false);
   change();   // the click handler re-renders right after this returns
   if (g) fadeGhost(g, 520);
 }
@@ -1987,7 +2000,14 @@ function applySettings() {
   const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
   SAGE = read('--sage', SAGE); DIM = read('--fg-dim', DIM);
   const bgHex = read('--bg', '#1c1a2e'), raiseHex = read('--raise', bgHex), dark = lumOf(bgHex) < 0.4;
-  for (const c of Object.values(CATS)) { c.base = c.base || c.color; c.color = readableOn(c.base, [bgHex, raiseHex], dark); }
+  ACC = { sage: SAGE, terra: read('--acc-terra', SAGE), amber: read('--acc-amber', SAGE), sky: read('--acc-sky', SAGE), rose: read('--acc-rose', SAGE), green: read('--green', SAGE), red: read('--red', SAGE), fg: read('--fg', '#ffffff'), dim: DIM };
+  // Category colors are built from the theme's own accents (and blends of them), so every theme looks like itself.
+  const CAT_MIX = { food: ['terra'], groceries: ['green'], gas: ['amber'], videoCamera: ['sky'], bills: ['sage'], shopping: ['rose'], entertainment: ['sky', 'rose'],
+    health: ['red'], income: ['green', 'fg'], transfer: ['sky', 'dim'], finance: ['sage', 'green'], other: ['dim'] };
+  for (const [k, c] of Object.entries(CATS)) {
+    const m = CAT_MIX[k] || ['dim'];
+    c.color = readableOn(m.length > 1 ? mixHex(ACC[m[0]], ACC[m[1]], 0.5) : ACC[m[0]], [bgHex, raiseHex], dark);
+  }
   Object.keys(tintCache).forEach(k => delete tintCache[k]);
   root.dataset.tone = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
@@ -2051,17 +2071,22 @@ document.addEventListener('click', e => {
   const d = sum.parentElement, body = d.querySelector(':scope > .coll-body');
   if (!body || !body.animate || S.settings.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   e.preventDefault();
-  if (d.__anim) { d.__anim.cancel(); body.style.overflow = ''; }
+  if (d.__anim) { d.__anim.cancel(); d.__anim = null; }
   const ease = 'cubic-bezier(.2, .8, .2, 1)';
+  const play = (from, to, ms, done) => {
+    body.style.overflow = 'hidden';
+    const a = body.animate([{ height: from + 'px', opacity: from ? 1 : 0 }, { height: to + 'px', opacity: to ? 1 : 0 }], { duration: ms, easing: ease, fill: 'forwards' });
+    d.__anim = a;
+    a.onfinish = () => { done(); body.style.overflow = ''; a.cancel(); d.__anim = null; };   // cleaned up in the same frame, so nothing flashes
+  };
   if (!d.open) {
-    d.open = true;
-    const h = body.offsetHeight; body.style.overflow = 'hidden';
-    d.__anim = body.animate([{ height: '0px', opacity: 0 }, { height: h + 'px', opacity: 1 }], { duration: 260, easing: ease });
-    d.__anim.onfinish = () => { body.style.overflow = ''; d.__anim = null; };
+    d.classList.remove('closing'); d.open = true;
+    const h = body.offsetHeight;
+    play(0, h, 260, () => {});
   } else {
-    const h = body.offsetHeight; body.style.overflow = 'hidden';
-    d.__anim = body.animate([{ height: h + 'px', opacity: 1 }, { height: '0px', opacity: 0 }], { duration: 200, easing: ease });
-    d.__anim.onfinish = () => { d.open = false; body.style.overflow = ''; d.__anim = null; };
+    const h = body.offsetHeight;
+    d.classList.add('closing');
+    play(h, 0, 220, () => { d.open = false; d.classList.remove('closing'); });
   }
 }, true);
 document.addEventListener('toggle', e => {
