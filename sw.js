@@ -1,5 +1,5 @@
 // Network-first so updates arrive; falls back to cache when offline.
-const CACHE = 'pocketledger-v23';
+const CACHE = 'pocketledger-v24';
 const ASSETS = ['./', './index.html', './style.css', './data.js', './app.js', './lock.js', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

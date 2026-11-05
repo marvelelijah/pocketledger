@@ -145,8 +145,8 @@ textarea { resize: vertical; }
   display: grid; place-items: center; padding: 0 4px; }
 
 /* Sheet */
-.scrim { position: fixed; inset: 0; background: rgba(8, 8, 6, .7); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
-.sheet { background: var(--bg); border-top: 1px solid var(--fg-dim); width: 100%; max-width: 640px; max-height: 92vh; overflow-y: auto;
+.scrim { position: fixed; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100%); background: rgba(8, 8, 6, .7); z-index: 10; display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--bg); border-top: 1px solid var(--fg-dim); width: 100%; max-width: 640px; max-height: 92%; overflow-y: auto;
   padding: 14px 20px calc(24px + env(safe-area-inset-bottom)); }
 .sheet-head { position: sticky; top: -14px; background: var(--bg); z-index: 2; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; color: var(--fg-dim); border-bottom: 1px solid var(--line); padding-bottom: 6px; }
 .sheet-head b { font-size: calc(13px * var(--ts, 1)); font-weight: 500; text-transform: lowercase; }
@@ -283,8 +283,8 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 .tappable { cursor: pointer; }
 .small-in { font-size: calc(13px * var(--ts, 1)); padding: 6px 10px; margin: -2px 0 8px; }
 
-html { overscroll-behavior: none; touch-action: pan-y; }
-body { min-height: 100vh; min-height: 100dvh; overscroll-behavior: none; }
+html { overscroll-behavior-x: none; touch-action: pan-y; }
+body { min-height: 100vh; min-height: 100dvh; overscroll-behavior-x: none; }
 #tabbar { position: fixed; bottom: 0; transform: translateZ(0); -webkit-transform: translateZ(0); }
 .themes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .theme { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 8px; border: 1px solid var(--line); background: none; color: var(--fg); font: inherit; text-align: left; }
@@ -372,7 +372,7 @@ html[data-corners="rounded"] .grab { border-radius: 999px; }
 html[data-corners="rounded"] #tabbar button.on::before { border-radius: 999px; }
 
 /* ---- home-screen app: solid status-bar strip, no edge bounce, safe areas ---- */
-html, body { overscroll-behavior: none; }
+html, body { overscroll-behavior-x: none; overscroll-behavior-y: auto; }
 body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 4; pointer-events: none; }
 html[data-tone="light"] body::before { background: #17151f; }
 html[data-standalone] body { padding-top: calc(env(safe-area-inset-top) + 16px); }
@@ -438,3 +438,13 @@ details.info summary { color: var(--soft); }
 input[type="checkbox"] { accent-color: var(--hot); }
 /* theme changes also glide on the tab bar, which is never rebuilt */
 #tabbar, #tabbar button, #tabbar .emo { transition: background-color .5s, border-color .5s, color .5s, filter .5s, transform .22s cubic-bezier(.2, .8, .2, 1); }
+
+.field > span.hdr-r { flex: none; }
+.hdr-r button { white-space: nowrap; }
+details.coll.anim { transition: height .24s cubic-bezier(.2, .8, .2, 1); }
+
+/* make it rain */
+html.rain #app, html.rain #tabbar, html.rain .scrim { filter: hue-rotate(var(--hue, 0deg)); }
+#rain { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 60; }
+.bill { position: absolute; top: -50px; animation: billFall linear forwards; will-change: transform; }
+@keyframes billFall { to { transform: translate3d(var(--dx), 115vh, 0) rotate(var(--rot)); } }

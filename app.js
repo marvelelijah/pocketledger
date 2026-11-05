@@ -92,11 +92,11 @@ const numInput = (v, attrs, style) => `<input type="number" inputmode="decimal" 
 /* ---------- home ---------- */
 
 function potCard(p) {
-  const pct = p.target > 0 ? Math.min(Math.max(p.balance / p.target, 0), 1) : null;
+  const raw = p.target > 0 ? Math.max(p.balance / p.target, 0) : null, pct = raw === null ? null : Math.min(raw, 1);
   return `<div class="card pot" data-action="openPot" data-id="${esc(p.id)}">
     <div class="muted small">${emo(p.icon)} ${esc(p.name)}</div>
     <div class="big ${p.balance < 0 ? 'neg' : ''}" ${counted('pot-' + p.id, p.balance)}>${usd(p.balance)}</div>
-    ${pct === null ? '' : `<div class="bar">${fill('pot-' + p.id, pct * 100)}</div><div class="muted small">of ${usd(p.target)} goal</div>`}
+    ${pct === null ? '' : `<div class="bar">${fill('pot-' + p.id, pct * 100)}</div><div class="muted small">${Math.round(raw * 100)}% of ${usd(p.target)} goal</div>`}
   </div>`;
 }
 
@@ -114,7 +114,8 @@ function homeView() {
   <div class="row"><h1>Dashboard</h1>${refreshBtn()}</div>
 
   ${(() => { const nk = newStatementKey(); return nk ? `<div class="card tappable notice" data-action="openStatement" data-id="${nk}"><div class="row"><b>${emo('📄')} ${esc(monthLabel(nk))} statement is ready</b><button class="link" data-action="dismissStatement" data-id="${nk}" aria-label="Dismiss">✕</button></div><div class="muted small">Spending habits, goal progress and every transaction. Tap to open, then save as PDF or share.</div></div>` : ''; })()}
-  <div class="grid2">${S.pots.map(potCard).join('')}</div>
+  ${spendMain()}
+  <div class="grid2">${S.pots.filter(p => p.id !== 'spending').map(potCard).join('')}</div>
   <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
 
   <div class="grid3" style="margin-top:12px">
@@ -207,11 +208,12 @@ function potEntryRow(e) {
 function potView() {
   const p = potById(ui.potId);
   if (!p) { ui.tab = 'home'; return homeView(); }
-  const entries = potEntries(p.id);
+  const all = potEntries(p.id), entries = all.filter(e => e.kind !== 'round');   // rounding still counts in the totals, it just isn't listed
   const ins = entries.filter(e => e.amount > 0);
   const outs = entries.filter(e => e.amount < 0);
   const sum = list => r2(list.reduce((a, e) => a + e.amount, 0));
-  const pct = p.target > 0 ? Math.min(Math.max(p.balance / p.target, 0), 1) : null;
+  const sumAll = f => r2(all.filter(f).reduce((a, e) => a + e.amount, 0));
+  const raw = p.target > 0 ? Math.max(p.balance / p.target, 0) : null, pct = raw === null ? null : Math.min(raw, 1);
   const nSel = Object.keys(ui.selected).length;
   const others = S.pots.filter(x => x.id !== p.id);
 
@@ -224,7 +226,7 @@ function potView() {
     <div class="muted small">Balance</div>
     <div class="big ${p.balance < 0 ? 'neg' : ''}" style="font-size:34px" ${counted('potpage-' + p.id, p.balance)}>${usd(p.balance)}</div>
     ${pct === null ? '' : `<div class="bar">${fill('pot-' + p.id, pct * 100)}</div>
-      <div class="muted small">${Math.round(pct * 100)}% of ${usd(p.target)} goal</div>`}
+      <div class="muted small">${Math.round(raw * 100)}% of ${usd(p.target)} goal</div>`}
     <div class="btn-row"><button class="btn" data-action="moveMoney" data-id="${esc(p.id)}">Move money</button></div>
   </div>
   ${p.id === 'spending' ? (() => { const L = spendingLevel(); return `<div class="card"><h2>This month</h2>
@@ -232,10 +234,10 @@ function potView() {
     <div class="field"><span class="muted">Spent so far</span><span>${usd(L.spent)}</span></div>
     <div class="muted small">Change the available amount if your starting number is off. Spending left adjusts to match, and you can undo it below.</div></div>`; })() : ''}
 
-  <div class="row" style="margin:14px 4px 6px"><div class="day" style="margin:0">Money in · ${signed(sum(ins))}</div></div>
+  <div class="row" style="margin:14px 4px 6px"><div class="day" style="margin:0">Money in · ${signed(sumAll(e => e.amount > 0))}</div></div>
   <div class="card">${ins.length ? ins.map(potEntryRow).join('') : '<div class="muted">Nothing has come in yet.</div>'}</div>
 
-  <div class="row" style="margin:14px 4px 6px"><div class="day" style="margin:0">Money out · ${signed(sum(outs))}</div>
+  <div class="row" style="margin:14px 4px 6px"><div class="day" style="margin:0">Money out · ${signed(sumAll(e => e.amount < 0))}</div>
     ${outs.some(e => e.kind === 'tx') ? `<button class="link small" data-action="toggleSelectMode">${ui.selectMode ? 'Cancel' : 'Select'}</button>` : ''}</div>
   <div class="card">${outs.length ? outs.map(potEntryRow).join('') : '<div class="muted">Nothing has come out yet.</div>'}</div>
   <div class="muted small" style="margin:0 4px">Tap a transaction to edit its category or pot.</div>
@@ -329,7 +331,7 @@ function activityView() {
 const potColorHex = i => ACC[['sky', 'rose', 'terra', 'amber', 'green'][i % 5]] || SAGE;
 const potColor = i => `var(--acc-${['sky', 'rose', 'terra', 'amber', 'green'][i % 5].replace('green', 'sage')})`;
 
-function potStrip() {
+function spendMain() {
   const L = spendingLevel(), p = potById('spending');
   const pc = L.pct;
   const color = pc == null ? 'var(--accent)' : pc > 0.5 ? 'var(--accent)' : pc > 0.2 ? 'var(--orange)' : 'var(--red)';
@@ -340,6 +342,10 @@ function potStrip() {
       ${L.available > 0 ? `<div class="muted small" style="text-align:right">of ${usd(L.available)}<br>${usd(L.spent)} spent</div>` : '<div class="muted small" style="text-align:right">Apply this month\'s budget<br>to see your level</div>'}</div>
     ${pc == null ? '' : `<div class="bar thick">${fill('spend', pc * 100, 'background:' + color)}</div>`}
   </div>`;
+  return main;
+}
+function potStrip() {
+  const main = spendMain();
   const others = S.pots.filter(x => x.id !== 'spending').map((x, i) => {
     const g = x.target > 0 ? Math.min(Math.max(x.balance / x.target, 0), 1) : null;
     return `<div class="card spendbar prow" data-action="openPot" data-id="${esc(x.id)}">
@@ -516,6 +522,21 @@ function earningAmounts() {
   });
 }
 
+/* "At this rate you reach the goal in …", plus what a few more percent would do, so the link between percent and date is visible. */
+function etaHTML(pot, earn, pct) {
+  const e = goalEta(pot, earn * pct / 100);
+  if (!e) return '';
+  if (e.done) return '✓ Goal already reached';
+  if (e.never) return 'Set a percent to see when you would reach ' + usd(pot.target);
+  const mo = n => n + (n === 1 ? ' month' : ' months');
+  let s = 'At this rate: <b>' + e.label + '</b> (' + mo(e.months) + ')';
+  if (earn > 0 && pct < 100) {
+    const more = goalEta(pot, earn * (pct + 5) / 100);
+    if (more && more.months < e.months) s += '<br>' + (pct + 5) + '%: ' + more.label + ' (' + mo(e.months - more.months) + ' sooner)';
+  }
+  return s;
+}
+
 function budgetCalc() {
   const rows = earningAmounts();
   const earn = r2(rows.reduce((a, r) => a + r.amount, 0));
@@ -647,9 +668,11 @@ function budgetView() {
     <div class="field"><span>${emo('💰')} Savings %</span>
       <span class="pctbox">${numInput(S.savingsPercent, 'data-change="savePct" data-live="1"', 'width:70px')} %</span></div>
     <div class="muted small">That's <b id="save-amt">${usd(c.save)}</b> set aside for Savings this month.</div>
+    <div class="muted small" id="eta-savings">${etaHTML(potById('savings'), c.earn, S.savingsPercent || 0)}</div>
     ${c.shares.map(x => { const p = potById(x.id), sug = suggestedPercent(p, c.earn); return `<div class="field" style="margin-top:10px"><span>${emo(p.icon)} ${esc(p.name)} %</span>
       <span class="pctbox">${numInput(p.percent || 0, `data-change="potPct" data-id="${esc(p.id)}" data-live="1"`, 'width:70px')} %</span></div>
-    <div class="muted small">That's <b id="pot-amt-${esc(p.id)}">${usd(x.amount)}</b> set aside for ${esc(p.name)} this month.${sug && sug !== (p.percent || 0) ? ` Suggested: <button class="link small" data-action="usePotPct" data-id="${esc(p.id)}" data-v="${sug}">${sug}%</button>${p.target > 0 ? ' to reach your goal in about a year' : ''}` : ''}</div>`; }).join('')}
+    <div class="muted small">That's <b id="pot-amt-${esc(p.id)}">${usd(x.amount)}</b> set aside for ${esc(p.name)} this month.${sug && sug !== (p.percent || 0) ? ` Suggested: <button class="link small" data-action="usePotPct" data-id="${esc(p.id)}" data-v="${sug}">${sug}%</button>${p.target > 0 ? ' to reach your goal in about a year' : ''}` : ''}</div>
+    <div class="muted small" id="eta-${esc(p.id)}">${etaHTML(p, c.earn, p.percent || 0)}</div>`; }).join('')}
     <div class="field"><span><b>Total expenses</b></span><b id="fixed-total">${usd(c.fixed)}</b></div>
   ${CE}
 
@@ -690,6 +713,9 @@ function patchBudget() {
   set('earn-total', usd(c.earn));
   set('fixed-total', usd(c.fixed));
   set('save-amt', usd(c.save));
+  const eta = (id, p, pct) => { const el = $(id); if (el && p) el.innerHTML = etaHTML(p, c.earn, pct); };
+  eta('eta-savings', potById('savings'), S.savingsPercent || 0);
+  c.shares.forEach(x => eta('eta-' + x.id, potById(x.id), (potById(x.id) || {}).percent || 0));
   set('res-left', usd(c.left));
   set('res-save', usd(c.save));
   c.shares.forEach(x => { set('pot-amt-' + x.id, usd(x.amount)); set('res-pot-' + x.id, usd(x.amount)); });
@@ -809,7 +835,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 c';
+const APP_VERSION = '2026-11-05 d';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1202,7 +1228,7 @@ function statementModal(key) {
       ${st.budget.allowance ? `<div class="bar thick">${fill('st-' + key + 'bud', Math.min(st.budget.spentVsAllowance * 100, 100), st.budget.spentVsAllowance > 1 ? 'background:var(--red)' : '')}</div>
       <div class="muted small">Spent ${usd(st.spent)} of ${usd(st.budget.allowance)} (${pctTxt(st.budget.spentVsAllowance)}). ${st.budget.spentVsAllowance > 1 ? 'Over by ' + usd(st.spent - st.budget.allowance) + '.' : usd(st.budget.allowance - st.spent) + ' left.'}</div>` : ''}</div>` : '';
   const goals = st.goals.length ? `<div class="card"><h2>Goals</h2>${st.goals.map(g => `<div style="padding:5px 0"><div class="row"><span>${emo(g.icon)} ${esc(g.name)}</span><b>${usd(g.closing)} <span class="muted small">of ${usd(g.target)}</span></b></div>
-      <div class="bar">${fill('st-' + key + 'g' + g.id, g.pct * 100)}</div>
+      <div class="bar">${fill('st-' + key + 'g' + g.id, Math.min(g.pct, 1) * 100)}</div>
       <div class="row"><span class="muted small">${pctTxt(g.pct)} there</span><span class="muted small">${g.change ? (g.change > 0 ? '+' : '−') + usd(Math.abs(g.change)) + ' this month' : 'no change this month'}</span></div></div>`).join('')}</div>` : '';
   const pots = `<div class="card"><h2>Pots at month end</h2>${st.pots.map(p => `<div class="field"><span>${emo(p.icon)} ${esc(p.name)}</span><span><b>${usd(p.closing)}</b> <span class="muted small">${p.change ? (p.change > 0 ? '+' : '−') + usd(Math.abs(p.change)) : ''}</span></span></div>`).join('')}</div>`;
   const accts = st.accounts.length ? `<div class="card"><h2>Accounts <span class="muted small">(balances today)</span></h2>${st.accounts.map(a => `<div class="field"><span>${esc(a.name)}${a.mask ? ' <span class="muted small">··' + esc(a.mask) + '</span>' : ''}</span><b class="${a.owed ? 'neg' : ''}">${a.owed ? '−' : ''}${usd(Math.abs(a.balance))}</b></div>`).join('')}</div>` : '';
@@ -1250,7 +1276,7 @@ ${sec('Where it went', tbl(st.byCat.map(c => [esc(c.title) + `<div class="bar"><
 ${st.merchants.length ? sec('Top places', tbl(st.merchants.map(x => [esc(x.name) + ' ×' + x.count, m(x.total)]))) : ''}
 ${st.largest.length ? sec('Largest purchases', tbl(st.largest.map(x => [shortDay(x.date) + ' ' + esc(x.name), m(x.amount)]))) : ''}
 ${st.budget ? sec('Budget', tbl([['Earnings budgeted', m(st.budget.earnings)], ['Expenses', m(st.budget.fixed)], ['Set aside for savings', m(st.budget.savings)], ['Left to spend', m(st.budget.allowance)], ['Spent', m(st.spent) + (st.budget.allowance ? ' (' + pctTxt(st.budget.spentVsAllowance) + ' of it)' : '')]])) : ''}
-${st.goals.length ? sec('Goals', tbl(st.goals.map(g => [esc(g.name) + `<div class="bar"><i style="width:${Math.round(g.pct * 100)}%"></i></div>`, m(g.closing) + ' of ' + m(g.target) + ' · ' + pctTxt(g.pct) + (g.change ? ' · ' + (g.change > 0 ? '+' : '−') + m(Math.abs(g.change)) + ' this month' : '')]))) : ''}
+${st.goals.length ? sec('Goals', tbl(st.goals.map(g => [esc(g.name) + `<div class="bar"><i style="width:${Math.round(Math.min(g.pct, 1) * 100)}%"></i></div>`, m(g.closing) + ' of ' + m(g.target) + ' · ' + pctTxt(g.pct) + (g.change ? ' · ' + (g.change > 0 ? '+' : '−') + m(Math.abs(g.change)) + ' this month' : '')]))) : ''}
 ${sec('Pots at month end', tbl(st.pots.map(p => [esc(p.name), m(p.closing) + (p.change ? ' (' + (p.change > 0 ? '+' : '−') + m(Math.abs(p.change)) + ')' : '')])))}
 ${st.incomeBy.length ? sec('Income', tbl(st.incomeBy.map(i => [esc(i.name), m(i.total)]))) : ''}
 ${st.accounts.length ? sec('Accounts (balances today)', tbl(st.accounts.map(a => [esc(a.name) + (a.mask ? ' ··' + esc(a.mask) : ''), (a.owed ? '−' : '') + m(Math.abs(a.balance))]))) : ''}
@@ -1919,7 +1945,11 @@ const ACTIONS = {
     const msg = run
       ? `${mo} is already applied (Spending +${usd(run.leftover)}, Savings +${usd(run.savingsAmount)}). Updating replaces that with Spending +${usd(c.left)} and Savings +${usd(c.save)}. You can undo it right after.`
       : `Add ${usd(c.left)} to Spending and ${usd(c.save)} to Savings${c.shares.filter(x => x.amount).map(x => ', ' + usd(x.amount) + ' to ' + potName(x.id)).join('')} for ${mo}?`;
-    askConfirm(msg, run ? 'update' : 'apply', () => { applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; render(); });
+    askConfirm(msg, run ? 'update' : 'apply', () => {
+      applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; ui.tab = 'home';
+      ui.dialog = { title: 'make it rain!', message: 'Your budget is set. Tap the button, then shake your phone.', cancel: false, ok: 'make it rain!', onOk: rainArm };
+      render();
+    });
   },
   undoBudget: () => askConfirm('Put this month\'s budget back the way it was before the last change?', 'undo', () => { undoBudget(); render(); }),
   toggleRun: d => { ui.openRuns[d.key] = !ui.openRuns[d.key]; },
@@ -1958,6 +1988,11 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target && e.target.id === 'todoText') { ACTIONS.addTodo(); render(); }
 });
 
+/* Keeps only emoji (the first two), dropping letters, numbers and symbols. */
+function emojiOnly(s) {
+  const m = String(s || '').match(/\p{Extended_Pictographic}(?:\uFE0F|\u20E3|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic})*/gu) || [];
+  return m.slice(0, 2).join('');
+}
 function handleField(el, final) {
   const d = el.dataset;
   const v = el.type === 'checkbox' ? el.checked : el.value;
@@ -1996,7 +2031,7 @@ function handleField(el, final) {
     case 'defaultPot': S.settings.defaultPot = v; save(); return;
     case 'backupDays': S.settings.backupDays = +v; save(); return;
     case 'newCatTitle': ui.newCat.title = v; return;
-    case 'newCatIcon': ui.newCat.icon = v; return;
+    case 'newCatIcon': { const e = emojiOnly(v); if (el.value !== e) el.value = e; ui.newCat.icon = e; return; }
     case 'profileName': S.settings.name = v.trim().slice(0, 30); save(); if (final) render(); return;
     case 'countFrom': S.settings.countFrom = v || null; save(); return;
     case 'linkUrl': setLink(Object.assign(getLink(), { url: v.trim() })); return;
@@ -2070,6 +2105,84 @@ if (STANDALONE) {
   document.addEventListener('touchend', () => { edge = false; }, true);
   try { for (let i = 0; i < 6; i++) history.pushState(navState(), ''); } catch (e) { /* ignore */ }
 }
+/* ---------- make it rain ----------
+   After a new budget is applied: shake the phone and every color slowly spins through the rainbow while dollar bills fall.
+   Shaking needs the phone's motion sensor; iPhone asks permission once, when you tap the button. */
+const rain = { on: false, last: 0, hue: 0, raf: 0, prev: 0, spawn: 0, lx: null, ly: null, lz: null, bg: '', timer: 0 };
+function rainArm() {
+  const go = () => {
+    window.removeEventListener('devicemotion', rainMotion); window.addEventListener('devicemotion', rainMotion);
+    clearTimeout(rain.timer); rain.timer = setTimeout(() => window.removeEventListener('devicemotion', rainMotion), 25000);
+  };
+  try {
+    if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function') DeviceMotionEvent.requestPermission().then(r => { if (r === 'granted') go(); }).catch(() => {});
+    else go();
+  } catch (e) { /* no motion sensor */ }
+}
+function rainMotion(e) {
+  const a = e.accelerationIncludingGravity; if (!a) return;
+  const x = a.x || 0, y = a.y || 0, z = a.z || 0;
+  if (rain.lx != null && Math.abs(x - rain.lx) + Math.abs(y - rain.ly) + Math.abs(z - rain.lz) > 22) rainShake();
+  rain.lx = x; rain.ly = y; rain.lz = z;
+}
+function hueShift(hex, deg) {
+  const n = parseInt(hex.replace('#', ''), 16), r = (n >> 16) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d) { s = d / (1 - Math.abs(2 * l - 1)); h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+  h = (h + deg + 360) % 360;
+  const f = k => { const q = (k + h / 30) % 12; return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(q - 3, 9 - q, 1)); };
+  return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+}
+function rainShake() {
+  if (motionOff()) return;
+  rain.last = performance.now();
+  if (rain.on) return;
+  rain.on = true; rain.prev = 0; rain.hue = 0;
+  const rs = document.documentElement;
+  rain.bg = (getComputedStyle(rs).getPropertyValue('--bg') || '').trim();
+  rs.classList.add('rain');
+  rain.raf = requestAnimationFrame(rainFrame);
+}
+function dropBills(n) {
+  let box = document.getElementById('rain');
+  if (!box) { box = document.createElement('div'); box.id = 'rain'; document.body.appendChild(box); }
+  for (let i = 0; i < n && box.children.length < 70; i++) {
+    const b = document.createElement('span');
+    b.className = 'bill'; b.textContent = Math.random() < .7 ? '💵' : '💸';
+    const dur = 2.4 + Math.random() * 2;
+    b.style.cssText = `left:${Math.random() * 96}%;font-size:${22 + Math.random() * 20}px;animation-duration:${dur}s;--dx:${(Math.random() - .5) * 90}px;--rot:${(Math.random() - .5) * 540}deg`;
+    b.addEventListener('animationend', () => b.remove());
+    box.appendChild(b);
+  }
+}
+function rainFrame(t) {
+  const dt = rain.prev ? Math.min(t - rain.prev, 50) : 16; rain.prev = t;
+  const rs = document.documentElement, shaking = performance.now() - rain.last < 700;
+  const next = rain.hue + dt * 0.2;                      // 200 degrees a second
+  if (shaking) {
+    rain.hue = next; rain.spawn += dt;
+    while (rain.spawn > 110) { rain.spawn -= 110; dropBills(3); }
+  } else if (Math.floor(next / 360) > Math.floor(rain.hue / 360)) {   // shaking stopped: finish the turn, then rest
+    rs.classList.remove('rain'); rs.style.removeProperty('--hue'); rs.style.removeProperty('--bg');
+    rain.on = false; rain.raf = 0; rain.hue = 0; return;
+  } else rain.hue = next;
+  const deg = rain.hue % 360;
+  rs.style.setProperty('--hue', deg + 'deg');
+  if (/^#[0-9a-f]{6}$/i.test(rain.bg)) rs.style.setProperty('--bg', hueShift(rain.bg, deg));
+  rain.raf = requestAnimationFrame(rainFrame);
+}
+
+/* The on-screen keyboard shrinks the visible area; pop-ups follow it so what you type stays in view. */
+if (window.visualViewport) {
+  const vv = window.visualViewport, rs = document.documentElement.style;
+  const fit = () => { rs.setProperty('--vvh', vv.height + 'px'); rs.setProperty('--vvt', vv.offsetTop + 'px'); };
+  vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
+}
+document.addEventListener('focusin', e => {
+  if (!e.target.closest || !e.target.closest('.sheet')) return;
+  setTimeout(() => { try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) { /* ignore */ } }, 350);
+});
 /* Tapping the iPhone status bar scrolls the page to the top. While a pop-up is open that should scroll the pop-up, not the page behind it. */
 let popupY = 0;
 window.addEventListener('scroll', () => {
@@ -2162,6 +2275,35 @@ function endDrag() {
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
 
+/* Windows open and close by sliding their height (one CSS transition between two measured heights, nothing re-rendered meanwhile). */
+document.addEventListener('click', e => {
+  const sum = e.target.closest && e.target.closest('details.coll > summary');
+  if (!sum) return;
+  const d = sum.parentElement;
+  e.preventDefault();
+  if (d._busy) return;
+  if (motionOff()) { d.open = !d.open; return; }
+  const cs = getComputedStyle(d);
+  const closedH = sum.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  const opening = !d.open;
+  let from, to;
+  if (opening) { from = d.offsetHeight; d.open = true; to = d.offsetHeight; }
+  else { from = d.offsetHeight; to = closedH; }
+  if (Math.abs(from - to) < 2) { d.open = opening; return; }
+  d._busy = true;
+  d.style.height = from + 'px'; d.style.overflow = 'hidden';
+  void d.offsetHeight;
+  d.classList.add('anim');
+  d.style.height = to + 'px';
+  let done = false;
+  const end = () => {
+    if (done) return; done = true;
+    d.classList.remove('anim'); d.style.height = ''; d.style.overflow = ''; d._busy = false;
+    if (!opening) d.open = false;
+  };
+  d.addEventListener('transitionend', ev => { if (ev.target === d && ev.propertyName === 'height') end(); });
+  setTimeout(end, 400);
+});
 document.addEventListener('toggle', e => {
   const d = e.target;
   if (d && d.open) setTimeout(() => placeSegs(false), 0);

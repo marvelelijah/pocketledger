@@ -40,7 +40,7 @@ function addCategory(title, icon, deduct) {
   if (Object.values(CATS).some(c => c.title.toLowerCase() === title.toLowerCase())) return null;
   const id = 'c-' + uid().slice(0, 8);
   S.customCats = S.customCats || [];
-  S.customCats.push({ id, title, icon: String(icon || '').trim() || '🏷️', deduct: !!deduct, color: CUSTOM_COLORS[S.customCats.length % CUSTOM_COLORS.length] });
+  S.customCats.push({ id, title, icon: ((String(icon || '').match(/\p{Extended_Pictographic}(?:\uFE0F|\u20E3|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic})*/gu) || []).slice(0, 2).join('')) || '🏷️', deduct: !!deduct, color: CUSTOM_COLORS[S.customCats.length % CUSTOM_COLORS.length] });
   rebuildCats(); save();
   return id;
 }
@@ -476,7 +476,7 @@ function replaceState(obj) {
 function seedDemo() {
   const day = (ago, h, m) => { const x = new Date(); x.setDate(x.getDate() - ago); x.setHours(h, m, 0, 0); return x.toISOString(); };
   S = defaultState(); rebuildCats();
-  S.demoSeeded = true; S.demoV = 2; S.useSampleData = false;
+  S.demoSeeded = true; S.demoV = 3; S.useSampleData = false;
   S.settings.name = 'Demo';
   S.accounts = [
     { id: 'd-chk', name: 'Everyday Checking', official: 'Everyday Checking', institution: 'Demo Bank', kind: 'checking', subtype: 'checking', mask: '1234', balance: 4210.55, current: 4210.55 },
@@ -485,29 +485,43 @@ function seedDemo() {
   ];
   S.fixedExpenses = [{ id: uid(), name: 'Rent', amount: 950, matchKeyword: 'RENT' }, { id: uid(), name: 'Phone', amount: 55, matchKeyword: 'PHONE' }, { id: uid(), name: 'Insurance', amount: 120, matchKeyword: 'INSURANCE' }];
   S.pots.find(p => p.id === 'savings').target = 8000;
+  S.savingsPercent = 10;
+  S.customCats = [{ id: 'videoCamera', title: 'Video & Camera', icon: '📷', deduct: true, color: '#a855f7' }]; rebuildCats();
+  S.fixedExpenses = [{ id: uid(), name: 'Rent', amount: 950, matchKeyword: 'RENT' }, { id: uid(), name: 'Phone', amount: 55, matchKeyword: 'PHONE' }, { id: uid(), name: 'Insurance', amount: 120, matchKeyword: 'INSURANCE' }];
+  /* The demo is set up for the turn of the month: last month is complete (budget applied, statement waiting to be opened),
+     this month has only its first paycheck, and its budget has not been made yet. */
+  const now = new Date(), Y = now.getFullYear(), M = now.getMonth(), today = now.getDate();
+  const at = (mo, dom, h, mi) => new Date(Y, M + mo, mo === 0 ? Math.min(dom, today) : dom, h, mi, 0, 0).toISOString();
+  const old = new Date(Y, M - 2, 20, 9, 0).toISOString();
+  logEntry('spending', 400, 'Demo starting balance', 'manual', { date: old });
+  logEntry('savings', 2400, 'Demo starting balance', 'manual', { date: old });
+  const trip = addPot('Vacation', '✈️', 0, 1200), lap = addPot('New laptop', '💻', 0, 2000);
+  logEntry(trip, 1500, 'Demo starting balance', 'manual', { date: old });      // past its goal: 125%
+  logEntry(lap, 650, 'Demo starting balance', 'manual', { date: old });
+  S.pots.find(p => p.id === trip).percent = 5; S.pots.find(p => p.id === lap).percent = 5;
+  const src = n => (S.incomeSources.find(x => x.name === n) || {}).id || null;
+  const prevD = new Date(Y, M - 1, 28, 9, 0);
+  applyBudget([{ sourceId: src('Full-time job'), name: 'Full-time job', amount: 2500 }, { sourceId: src('Freelance'), name: 'Freelance', amount: 600 }], prevD);
   const rows = [
-    [0, 9, 40, 'ZELLE FROM SAMPLE PERSON', 20, 'd-chk'], [1, 8, 12, 'QUIKTRIP 8071 ANYTOWN', -42.18, 'd-cc'], [2, 15, 42, 'SAMPLE CAMERA SHOP', -189.99, 'd-cc'],
-    [2, 12, 31, 'CHICK-FIL-A #01234', -11.47, 'd-cc'], [3, 9, 5, 'ADOBE *CREATIVE CLOUD', -59.99, 'd-cc'], [3, 9, 0, 'SPOTIFY USA', -11.99, 'd-cc'],
-    [4, 18, 20, 'KROGER #1488 ANYTOWN', -87.32, 'd-chk'], [5, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [6, 13, 55, 'SQ *CORNER COFFEE CO', -6.75, 'd-cc'],
-    [7, 17, 30, 'SHELL OIL 57444', -38.5, 'd-cc'], [8, 19, 45, 'NETFLIX.COM', -15.49, 'd-cc'], [9, 10, 2, 'ACH DEPOSIT FREELANCE CLIENT LLC', 600, 'd-chk'],
-    [10, 14, 12, 'AMZN MKTP US*2K4XY91', -23.18, 'd-cc'], [11, 12, 40, 'TST* LOCAL TACO SHOP', -14.2, 'd-cc'], [12, 8, 0, 'ANYTOWN POWER CO', -96.12, 'd-chk'],
-    [13, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [14, 16, 20, 'CVS/PHARMACY #4411', -18.9, 'd-cc'], [15, 20, 5, 'TARGET 00012345', -64.31, 'd-cc'],
-    [16, 12, 15, 'PUBLIX #0456', -72.88, 'd-chk'], [18, 9, 30, 'STARBUCKS STORE 1182', -5.85, 'd-cc'], [19, 18, 10, 'KROGER #1488 ANYTOWN', -101.4, 'd-chk'],
-    [20, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [22, 21, 0, 'REGAL CINEMAS', -28, 'd-cc'], [24, 13, 0, 'SHELL OIL 57444', -41.25, 'd-cc'],
-    // earlier in the previous month, so its statement has a full month behind it
-    [25, 12, 30, 'PUBLIX #0456', -64.1, 'd-chk'], [26, 10, 0, 'VANGUARD ROTH IRA CONTRIB', -200, 'd-chk'], [27, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'],
-    [27, 18, 40, 'TST* LOCAL TACO SHOP', -17.8, 'd-cc'], [28, 14, 5, 'AMZN MKTP US*8H2KD01', -34.99, 'd-cc'], [29, 9, 10, 'SQ *CORNER COFFEE CO', -5.5, 'd-cc'],
-    [30, 17, 45, 'SHELL OIL 57444', -36.9, 'd-cc'], [31, 20, 30, 'KROGER #1488 ANYTOWN', -93.77, 'd-chk'], [32, 8, 0, 'ANYTOWN POWER CO', -88.4, 'd-chk'],
-    [33, 11, 20, 'CHICK-FIL-A #01234', -12.9, 'd-cc'], [33, 15, 0, 'ACH DEPOSIT FREELANCE CLIENT LLC', 450, 'd-chk'], [34, 19, 15, 'NETFLIX.COM', -15.49, 'd-cc'],
-    [34, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [36, 13, 25, 'CVS/PHARMACY #4411', -22.35, 'd-cc'], [38, 16, 0, 'TARGET 00012345', -48.2, 'd-cc'],
+    // last month
+    [-1, 3, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [-1, 17, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [-1, 10, 10, 2, 'ACH DEPOSIT FREELANCE CLIENT LLC', 600, 'd-chk'],
+    [-1, 1, 8, 0, 'RENT PAYMENT SAMPLE PROPERTIES', -950, 'd-chk'], [-1, 2, 9, 0, 'PHONE BILL SAMPLE WIRELESS', -55, 'd-chk'], [-1, 2, 9, 5, 'INSURANCE SAMPLE MUTUAL', -120, 'd-chk'],
+    [-1, 2, 12, 30, 'PUBLIX #0456', -64.1, 'd-chk'], [-1, 4, 10, 0, 'VANGUARD ROTH IRA CONTRIB', -200, 'd-chk'], [-1, 5, 18, 40, 'TST* LOCAL TACO SHOP', -17.8, 'd-cc'],
+    [-1, 6, 14, 5, 'AMZN MKTP US*8H2KD01', -34.99, 'd-cc'], [-1, 7, 9, 10, 'SQ *CORNER COFFEE CO', -5.5, 'd-cc'], [-1, 8, 17, 45, 'SHELL OIL 57444', -36.9, 'd-cc'],
+    [-1, 9, 20, 30, 'KROGER #1488 ANYTOWN', -93.77, 'd-chk'], [-1, 11, 8, 0, 'ANYTOWN POWER CO', -88.4, 'd-chk'], [-1, 12, 11, 20, 'CHICK-FIL-A #01234', -12.9, 'd-cc'],
+    [-1, 13, 19, 15, 'NETFLIX.COM', -15.49, 'd-cc'], [-1, 13, 9, 0, 'SPOTIFY USA', -11.99, 'd-cc'], [-1, 14, 13, 25, 'CVS/PHARMACY #4411', -22.35, 'd-cc'],
+    [-1, 15, 16, 0, 'TARGET 00012345', -48.2, 'd-cc'], [-1, 16, 15, 42, 'SAMPLE CAMERA SHOP', -189.99, 'd-cc'], [-1, 18, 9, 5, 'ADOBE *CREATIVE CLOUD', -59.99, 'd-cc'],
+    [-1, 19, 19, 45, 'REGAL CINEMAS', -28, 'd-cc'], [-1, 20, 12, 15, 'PUBLIX #0456', -72.88, 'd-chk'], [-1, 21, 18, 10, 'KROGER #1488 ANYTOWN', -101.4, 'd-chk'],
+    [-1, 22, 13, 0, 'SHELL OIL 57444', -41.25, 'd-cc'], [-1, 24, 9, 30, 'STARBUCKS STORE 1182', -5.85, 'd-cc'], [-1, 26, 12, 0, 'AMZN MKTP US*2K4XY91', -23.18, 'd-cc'],
+    [-1, 27, 14, 12, 'TST* LOCAL TACO SHOP', -14.2, 'd-cc'],
+    // this month so far: the first paycheck, and a few purchases still to sort
+    [0, 1, 0, 5, 'ACME CORP PAYROLL', 1250, 'd-chk'], [0, 2, 8, 12, 'QUIKTRIP 8071 ANYTOWN', -42.18, 'd-cc', 1], [0, 2, 12, 31, 'CHICK-FIL-A #01234', -11.47, 'd-cc', 1],
+    [0, 3, 9, 0, 'SPOTIFY USA', -11.99, 'd-cc'], [0, 3, 15, 42, 'SAMPLE CAMERA SHOP', -79.99, 'd-cc', 1], [0, 4, 13, 55, 'SQ *CORNER COFFEE CO', -6.75, 'd-cc'],
   ];
-  ingest(rows.map((r, i) => ({ id: 'demo-' + i, accountID: r[5], rawName: r[3], amount: r[4], date: day(r[0], r[1], r[2]) })));
-  logEntry('spending', 1800, 'Demo starting balance', 'budget');
-  S.budgetRuns.push({ monthKey: monthKey(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 15)), earnings: 3750, fixedTotal: 1125, savingsPercent: 10, savingsAmount: 375, leftover: 2250,
-    earningsBreakdown: [{ sourceId: null, name: 'Job', amount: 3750, edited: false }], fixedItems: S.fixedExpenses.map(e => ({ name: e.name, amount: e.amount })), ranAt: new Date().toISOString() });
-  logEntry('savings', 2400, 'Demo starting balance', 'budget');
-  const open = new Set(['demo-0', 'demo-1', 'demo-3']);   // leave a few for Review so there is something to sort
+  ingest(rows.map((r, i) => ({ id: 'demo-' + i, accountID: r[6], rawName: r[4], amount: r[5], date: at(r[0], r[1], r[2], r[3]) })));
+  const open = new Set(rows.map((r, i) => r[7] ? 'demo-' + i : null).filter(Boolean));   // a few left for Review so there is something to sort
   for (const t of S.transactions) if (t.amount < 0 && !t.isIgnored && !open.has(t.id)) assign(t.id, 'spending');
+  S.statementsSeen = []; S.budgetUndo = null;
   save();
 }
 
@@ -892,6 +906,17 @@ function suggestedPercent(pot, earnings) {
   return 5;
 }
 
+/* When a goal would be reached if this much went into it every month: whole months from now, and the month's name. */
+function goalEta(pot, monthly) {
+  const need = Math.max((pot.target || 0) - (pot.balance || 0), 0);
+  if (!(pot.target > 0)) return null;
+  if (!need) return { done: true };
+  if (!(monthly > 0)) return { never: true };
+  const months = Math.ceil(need / monthly - 1e-9), d = new Date();
+  d.setDate(1); d.setMonth(d.getMonth() + months);
+  return { months, label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) };
+}
+
 function applyBudget(breakdown, date) {
   date = date || new Date();
   const key = monthKey(date);
@@ -908,9 +933,10 @@ function applyBudget(breakdown, date) {
     prevLogs: S.potLog.filter(e => e.kind === 'budget' && e.monthKey === key).map(e => Object.assign({}, e)),
   };
   removeLogs(e => e.kind === 'budget' && e.monthKey === key);
-  logEntry('spending', leftover, 'Budget: left for spending', 'budget', { monthKey: key });
-  if (savingsAmount) logEntry('savings', savingsAmount, 'Budget: savings (' + pct + '% of earnings)', 'budget', { monthKey: key });
-  for (const x of shares) if (x.amount) logEntry(x.id, x.amount, 'Budget: ' + x.name + ' (' + x.percent + '% of earnings)', 'budget', { monthKey: key });
+  const ex = { monthKey: key, date: date.toISOString() };
+  logEntry('spending', leftover, 'Budget: left for spending', 'budget', ex);
+  if (savingsAmount) logEntry('savings', savingsAmount, 'Budget: savings (' + pct + '% of earnings)', 'budget', ex);
+  for (const x of shares) if (x.amount) logEntry(x.id, x.amount, 'Budget: ' + x.name + ' (' + x.percent + '% of earnings)', 'budget', ex);
 
   const run = {
     monthKey: key, earnings, fixedTotal: fixed, savingsPercent: pct, savingsAmount, leftover, potShares: shares,
@@ -1397,7 +1423,7 @@ function eraseEverything() {
   save();
 }
 
-if (DEMO && (!S.demoSeeded || S.demoV !== 2)) seedDemo();   // after everything above is defined
+if (DEMO && (!S.demoSeeded || S.demoV !== 3)) seedDemo();   // after everything above is defined
 
 /* On every start: remember each purchase's account name (so it survives an account being removed), and tidy leftovers. */
 /* A name you see over and over is a name the app can trust more: +8% per repeat, up to 92%. Never overrides a category you set. */
@@ -1499,7 +1525,7 @@ function monthStatement(key) {
   const afterMonth = id => round2(S.potLog.filter(e => e.potId === id && new Date(e.date).getTime() > endIso).reduce((a, e) => a + e.amount, 0));
   const pots = S.pots.map(p => {
     const closing = round2(p.balance - afterMonth(p.id));
-    return { id: p.id, name: p.name, icon: p.icon, closing, change: potChange(p.id), target: p.target || null, pct: p.target ? Math.max(0, Math.min(closing / p.target, 1)) : null };
+    return { id: p.id, name: p.name, icon: p.icon, closing, change: potChange(p.id), target: p.target || null, pct: p.target ? Math.max(0, closing / p.target) : null };
   });
 
   return {
