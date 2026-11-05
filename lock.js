@@ -109,12 +109,12 @@ async function lockNow(autoBio) {
   locked = true; root.dataset.locked = '1';
   const c = lockCfg();
   const nm = (typeof S !== 'undefined' && S.settings && S.settings.name || '').trim();
-  const res = await askPass({ title: '~/locked', sub: nm ? 'Welcome back, ' + nm + '.' : 'Enter your passcode.', fields: [{ ph: 'passcode' }], ok: 'unlock', bio: !!c.cred, autoBio: autoBio !== false && !!c.cred, limit: true,
+  const res = await askPass({ title: 'locked', sub: nm ? 'Welcome back, ' + nm + '.' : 'Enter your passcode.', fields: [{ ph: 'passcode' }], ok: 'unlock', bio: !!c.cred, autoBio: autoBio !== false && !!c.cred, limit: true,
     check: async v => (await checkPasscode(v[0])) ? '' : 'That isn\'t it.', forgot: () => forgotFlow() });
   if (res) { locked = false; delete root.dataset.locked; }
 }
 function forgotFlow() {
-  askPass({ title: '~/erase', sub: 'The passcode can\'t be recovered. This erases everything on this device so you can start over (restore a backup afterwards). Type ERASE to confirm.',
+  askPass({ title: 'erase', sub: 'The passcode can\'t be recovered. This erases everything on this device so you can start over (restore a backup afterwards). Type ERASE to confirm.',
     fields: [{ ph: 'ERASE' }], ok: 'erase', cancel: true, check: v => v[0] === 'ERASE' ? '' : 'Type ERASE in capitals.' }).then(res => {
     if (!res) { locked = false; lockNow(false); return; }
     try { localStorage.removeItem('pocketledger.v1'); localStorage.removeItem(LOCK_KEY); } catch (e) { /* ignore */ }
@@ -126,13 +126,13 @@ function forgotFlow() {
 async function authenticate(title) {
   if (!lockOn()) return true;
   const c = lockCfg();
-  const res = await askPass({ title: title || '~/confirm', sub: 'Enter your passcode to continue.', fields: [{ ph: 'passcode' }], ok: 'continue', cancel: true, bio: !!c.cred, limit: true,
+  const res = await askPass({ title: title || 'confirm', sub: 'Enter your passcode to continue.', fields: [{ ph: 'passcode' }], ok: 'continue', cancel: true, bio: !!c.cred, limit: true,
     check: async v => (await checkPasscode(v[0])) ? '' : 'That isn\'t it.' });
   return !!res;
 }
 
 async function lockSetup() {
-  const res = await askPass({ title: '~/passcode', sub: 'Choose a passcode, at least 4 characters. It can\'t be recovered: if you forget it, the only way back in is to erase this device and restore a backup.',
+  const res = await askPass({ title: 'passcode', sub: 'Choose a passcode, at least 4 characters. It can\'t be recovered: if you forget it, the only way back in is to erase this device and restore a backup.',
     fields: [{ ph: 'new passcode' }, { ph: 'type it again' }], ok: 'save', cancel: true,
     check: v => v[0].length < 4 ? 'Use at least 4 characters.' : v[0] !== v[1] ? 'They don\'t match.' : '' });
   if (!res) return;
@@ -140,11 +140,11 @@ async function lockSetup() {
   render();
 }
 async function lockChange() {
-  if (!(await authenticate('~/current passcode'))) return;
+  if (!(await authenticate('current passcode'))) return;
   await lockSetup();
 }
 async function lockOff() {
-  if (!(await authenticate('~/turn off lock'))) return;
+  if (!(await authenticate('turn off lock'))) return;
   saveLockCfg(null); S.settings.lockSensitive = false; save(); delete root.dataset.locked; render();
 }
 async function bioToggle() {

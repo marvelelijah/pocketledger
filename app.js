@@ -628,7 +628,8 @@ function budgetView() {
         <div class="bar">${fill('src-' + s.id, pct * 100)}</div>
         <div class="row"><span class="muted small">of ${usd(s.expectedAmount)}</span>${avgTxt}</div></div>`;
     }).join('') || '<div class="muted">No income sources yet.</div>'}
-    <div class="btn-row"><button class="link" data-action="editSources">Edit sources</button><button class="link" data-action="openHist">Income history</button></div>
+    <div class="btn-row"><button class="btn" data-action="editSources">✎ Edit sources</button></div>
+    <div class="card tappable" style="margin:14px 0 0" data-action="openHist"><div class="row"><span>${emo('📈')} Income history</span><span class="muted">›</span></div></div>
   ${CE}
 
   ${CD('b-earn', 'Earnings this month', true)}
@@ -835,7 +836,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 d';
+const APP_VERSION = '2026-11-05 e';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -933,6 +934,9 @@ function settingsView() {
   ${demoCard}
 
   ${CD('s-phone','This device',false)}
+    <div class="field"><span>Haptics</span></div>
+    ${seg([['on', 'on'], ['off', 'off']], S.settings.haptics === false ? 'off' : 'on', 'setHaptics')}
+    <div class="btn-row"><button class="btn" data-action="showTour">show the tour again</button></div>
     <div class="btn-row"><button class="btn" data-action="reloadApp">reload app</button>${DEMO ? '' : '<button class="btn" data-action="clearTx">clear transactions</button>'}</div>
     ${DEMO ? '' : '<div class="btn-row"><button class="btn danger" data-action="eraseAll">erase all data</button></div>'}
     <div class="muted small" style="margin-top:8px">Version ${APP_VERSION}</div>
@@ -971,7 +975,7 @@ function txModal(id) {
       ${seg([['none', 'Not yet'], ...potOptions()], t.pot || 'none', 'assign', `data-id="${esc(t.id)}"`)}
       ${entry ? `<div class="muted small" style="margin-top:8px">Deducted ${usd(-entry.amount)} from ${esc(potName(t.pot))}${Math.abs(-entry.amount - entry.exact) > 0.004 ? ' (exact ' + usd(entry.exact) + ')' : ''}.</div>` : ''}
       ${t.isIgnored ? '<div class="muted small" style="margin-top:8px">Marked as not a spend.</div>'
-        : `<button class="link" data-action="ignore" data-id="${esc(t.id)}">Not a spend (e.g. moving my own money)</button>`}
+        : `<button class="link nowrap" data-action="ignore" data-id="${esc(t.id)}">Not a spend</button>`}
     </div>`;
   } else {
     const src = sourceName(t.incomeSourceID);
@@ -1497,6 +1501,7 @@ function updateTabbar(active, tabChanged, n) {
   });
 }
 
+let popupShift = false, popupY = 0;
 function render() {
   RB = runningBalances();
   captureSegs();
@@ -1522,7 +1527,14 @@ function render() {
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
 
-  window.scrollTo(0, ui.resetScroll ? 0 : y);
+  // With a pop-up open the page sits 1px down, so a tap on the status bar has somewhere to scroll "up" from (see the scroll listener).
+  const popup = now.length > 0;
+  document.documentElement.classList.toggle('modal', popup);
+  let target = ui.resetScroll ? 0 : y;
+  if (popup && target === 0) { target = 1; popupShift = true; }
+  else if (!popup && popupShift) { if (target <= 1) target = 0; popupShift = false; }
+  if (popup) popupY = target;
+  window.scrollTo(0, target);
   ui.resetScroll = false;
   const newSheet = modalRoot.querySelector('.sheet');
   if (newSheet && oldSheet) newSheet.scrollTop = sheetY;
@@ -1758,7 +1770,9 @@ function openPotEdit(id) {
 }
 
 const ACTIONS = {
-  demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { setDemo(true); location.reload(); }),
+  demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { try { localStorage.removeItem(TOUR_KEY); } catch (e) { /* ignore */ } setDemo(true); location.reload(); }),
+  setHaptics: d => { S.settings.haptics = d.pot === 'on'; save(); if (d.pot === 'on') haptic(); },
+  showTour: () => { tourShow(0); return false; },
   demoOff: () => { setDemo(false); location.reload(); },
   demoReset: () => askConfirm('Reset the demo to its starting made-up data?', 'reset', () => { try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ } location.reload(); }, true),
   tab: d => { ui.tab = d.tab; ui.resetScroll = true; ui.selectMode = false; ui.selected = {}; },
@@ -1947,7 +1961,7 @@ const ACTIONS = {
       : `Add ${usd(c.left)} to Spending and ${usd(c.save)} to Savings${c.shares.filter(x => x.amount).map(x => ', ' + usd(x.amount) + ' to ' + potName(x.id)).join('')} for ${mo}?`;
     askConfirm(msg, run ? 'update' : 'apply', () => {
       applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; ui.tab = 'home';
-      ui.dialog = { title: 'make it rain!', message: 'Your budget is set. Tap the button, then shake your phone.', cancel: false, ok: 'make it rain!', onOk: rainArm };
+      rainArm(); showRainMsg();
       render();
     });
   },
@@ -2134,8 +2148,18 @@ function hueShift(hex, deg) {
   const f = k => { const q = (k + h / 30) % 12; return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(q - 3, 9 - q, 1)); };
   return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
 }
+function showRainMsg() {
+  hideRainMsg();
+  const m = document.createElement('div');
+  m.id = 'rainmsg'; m.textContent = 'make it rain!';
+  m.addEventListener('click', () => rainArm());
+  document.body.appendChild(m);
+  setTimeout(hideRainMsg, 25000);
+}
+function hideRainMsg() { const m = document.getElementById('rainmsg'); if (m) m.remove(); }
 function rainShake() {
   if (motionOff()) return;
+  hideRainMsg();
   rain.last = performance.now();
   if (rain.on) return;
   rain.on = true; rain.prev = 0; rain.hue = 0;
@@ -2173,6 +2197,90 @@ function rainFrame(t) {
   rain.raf = requestAnimationFrame(rainFrame);
 }
 
+/* ---------- haptics ----------
+   Android/Chrome can buzz directly. iPhone has no buzz call for web pages, but flipping a hidden iOS switch control gives the same tap. */
+const hapticLabel = (() => {
+  const l = document.createElement('label');
+  l.setAttribute('aria-hidden', 'true');
+  l.style.cssText = 'position:fixed;left:-99px;top:-99px;width:1px;height:1px;opacity:0;pointer-events:none';
+  l.innerHTML = '<input type="checkbox" switch tabindex="-1">';
+  document.body.appendChild(l);
+  return l;
+})();
+function haptic() {
+  if (S.settings.haptics === false) return;
+  try { if (navigator.vibrate && navigator.vibrate(8)) return; hapticLabel.click(); } catch (e) { /* no haptics here */ }
+}
+document.addEventListener('click', e => {
+  if (e.target.closest && e.target.closest('button, [data-action], summary, .theme, .opt, .tappable')) haptic();
+}, true);
+
+/* ---------- opening title and the first-run tour ---------- */
+const TOUR_KEY = 'pocketledger.tour';
+const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (e) { return true; } };
+const TOUR = [
+  { i: '👋', t: 'Hi, I\'m PocketLedger', p: 'Your pocket-sized money buddy. This quick tour takes about a minute, and I promise there\'s no quiz at the end.' },
+  { i: '📥', t: 'Review', p: 'New purchases from your bank land here, like mail. Tap a pot (Spending, Savings, whatever you\'ve made) to sort each one, or say "not a spend" for things like moving your own money.' },
+  { i: '🧠', t: 'I learn as you go', p: 'Tell me once that QuikTrip is gas and I\'ll remember it. The more you sort, the smarter I get, and the fewer taps you need. Think of it as training a very enthusiastic puppy.' },
+  { i: '🏠', t: 'Dashboard', p: 'Your spending bar and every pot at a glance. Goals show how far along they are, and if you overshoot, they happily say 200%.' },
+  { i: '🧾', t: 'Activity', p: 'Every purchase, searchable. Try words like "gas october" or ">50". Tap any purchase to fix its name, category or pot.' },
+  { i: '📊', t: 'Budget', p: 'Once a month, line up your earnings, your expenses and how much to save, then apply the budget. It also shows when each goal would be reached, so nudging a percent up is satisfying.' },
+  { i: '📄', t: 'Statements', p: 'When a month ends, it gets a statement with the original bank names, ready to save as a PDF. Tax-deductible categories are totaled for you, and you can make your own in Settings.' },
+  { i: '🔒', t: 'Yours alone', p: 'Your numbers live on this phone, not on a server. Turn on Face ID in Settings, and back up now and then, because I can\'t recover what I never had.' },
+  { i: '📳', t: 'One last thing', p: 'When you finish a new budget there\'s a surprise that needs your phone\'s motion sensor. Allow it now and it\'s ready. For the best experience, add me to your Home Screen from the share menu.', last: true },
+];
+let tourStep = 0;
+function tourHTML() {
+  const s = TOUR[tourStep], n = TOUR.length;
+  return `<div class="tour-card">
+    <div class="tour-top"><span class="muted small">${tourStep + 1} / ${n}</span><button class="link small" data-tour="skip">skip tour</button></div>
+    <div class="tour-emoji">${s.i}</div>
+    <h2>${esc(s.t)}</h2>
+    <div class="tour-text">${esc(s.p)}</div>
+    ${s.last ? '<div class="btn-row"><button class="btn" data-tour="motion">allow motion</button></div><div class="muted small" id="tourMotion"></div>' : ''}
+    <div class="tour-dots">${TOUR.map((_, k) => `<i class="${k === tourStep ? 'on' : ''}"></i>`).join('')}</div>
+    <div class="btn-row">${tourStep ? '<button class="btn" data-tour="back">back</button>' : ''}<button class="btn primary" data-tour="next">${s.last ? 'let\'s go' : 'next'}</button></div>
+  </div>`;
+}
+function tourShow(step) {
+  tourStep = step || 0;
+  let el = document.getElementById('tour');
+  if (!el) { el = document.createElement('div'); el.id = 'tour'; document.body.appendChild(el); el.addEventListener('click', tourClick); }
+  el.innerHTML = tourHTML();
+}
+function tourEnd() {
+  try { localStorage.setItem(TOUR_KEY, '1'); } catch (e) { /* ignore */ }
+  const el = document.getElementById('tour'); if (el) el.remove();
+}
+function tourClick(e) {
+  const b = e.target.closest('[data-tour]'); if (!b) return;
+  const k = b.dataset.tour;
+  if (k === 'skip') tourEnd();
+  else if (k === 'back') tourShow(tourStep - 1);
+  else if (k === 'next') { if (tourStep >= TOUR.length - 1) tourEnd(); else tourShow(tourStep + 1); }
+  else if (k === 'motion') {
+    const note = document.getElementById('tourMotion');
+    try {
+      if (window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
+        DeviceMotionEvent.requestPermission().then(r => { if (note) note.textContent = r === 'granted' ? 'Motion allowed. Nice.' : 'No problem. You can still tap "make it rain!" later to allow it.'; }).catch(() => { if (note) note.textContent = 'Couldn\'t ask here. You\'ll be asked later.'; });
+      else if (note) note.textContent = 'This device doesn\'t need a permission for it.';
+    } catch (x) { /* ignore */ }
+  }
+}
+function showSplash() {
+  if (navigator.webdriver) return;   // automated test browsers skip the opening screens
+  let again = false;
+  try { again = !!sessionStorage.getItem('pl.splash'); sessionStorage.setItem('pl.splash', '1'); } catch (e) { /* still show it */ }
+  if (again) { if (!tourSeen() && !document.documentElement.dataset.locked) setTimeout(() => tourShow(0), 300); return; }
+  const el = document.createElement('div');
+  el.id = 'splash';
+  el.innerHTML = '<div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>';
+  document.body.appendChild(el);
+  setTimeout(() => el.classList.add('out'), 1300);
+  setTimeout(() => { el.remove(); if (!tourSeen() && !document.documentElement.dataset.locked) tourShow(0); }, 1800);
+}
+showSplash();
+
 /* The on-screen keyboard shrinks the visible area; pop-ups follow it so what you type stays in view. */
 if (window.visualViewport) {
   const vv = window.visualViewport, rs = document.documentElement.style;
@@ -2184,12 +2292,17 @@ document.addEventListener('focusin', e => {
   setTimeout(() => { try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) { /* ignore */ } }, 350);
 });
 /* Tapping the iPhone status bar scrolls the page to the top. While a pop-up is open that should scroll the pop-up, not the page behind it. */
-let popupY = 0;
 window.addEventListener('scroll', () => {
   if (!(ui.modal || ui.picker || ui.dialog)) { popupY = window.scrollY; return; }
   if (window.scrollY === popupY) return;
   const sheets = modalRoot.querySelectorAll('.sheet'), top = sheets[sheets.length - 1];
   window.scrollTo(0, popupY);
+  if (top) top.scrollTo({ top: 0, behavior: 'smooth' });
+}, { passive: true });
+document.addEventListener('touchend', e => {   // a tap in the very top strip does the same
+  const t = e.changedTouches && e.changedTouches[0];
+  if (!t || t.clientY > 22 || !(ui.modal || ui.picker || ui.dialog)) return;
+  const sheets = modalRoot.querySelectorAll('.sheet'), top = sheets[sheets.length - 1];
   if (top) top.scrollTo({ top: 0, behavior: 'smooth' });
 }, { passive: true });
 window.addEventListener('popstate', () => {

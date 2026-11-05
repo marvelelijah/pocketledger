@@ -349,13 +349,13 @@ function defaultState() {
     useSampleData: true,  // false once you start with your own purchases (nothing fake is added)
     settings: {
       name: '',            // only shown on this phone
-      palette: 'terminal', // terminal | tannhauser | mono | icedancer | vice | unit01
+      palette: 'vice',     // terminal | tannhauser | mono | icedancer | vice | unit01
       mode: 'dark',        // dark only for now
       textSize: 1,
       motion: 'auto',      // auto | off
       backupDays: 7,       // 0 = no reminder
       currency: 'auto',    // 'auto' = the phone's region, or a code like EUR
-      corners: 'sharp',    // sharp | rounded
+      corners: 'rounded',  // sharp | rounded
       defaultPot: 'spending',
       linked: false,       // true once real bank accounts are linked (see server/README.md)
       countFrom: null,     // YYYY-MM-DD: purchases before this day are kept as history, not sent to Review
@@ -501,10 +501,11 @@ function seedDemo() {
   S.pots.find(p => p.id === trip).percent = 5; S.pots.find(p => p.id === lap).percent = 5;
   const src = n => (S.incomeSources.find(x => x.name === n) || {}).id || null;
   const prevD = new Date(Y, M - 1, 28, 9, 0);
-  applyBudget([{ sourceId: src('Full-time job'), name: 'Full-time job', amount: 2500 }, { sourceId: src('Freelance'), name: 'Freelance', amount: 600 }], prevD);
+  applyBudget([{ sourceId: src('Full-time job'), name: 'Full-time job', amount: 3800 }, { sourceId: src('Freelance'), name: 'Freelance', amount: 2050 }], prevD);
+  const job = S.incomeSources.find(x => x.name === 'Full-time job'); if (job) job.expectedAmount = 3800;
   const rows = [
     // last month
-    [-1, 3, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [-1, 17, 7, 0, 'ACME CORP PAYROLL', 1250, 'd-chk'], [-1, 10, 10, 2, 'ACH DEPOSIT FREELANCE CLIENT LLC', 600, 'd-chk'],
+    [-1, 3, 7, 0, 'ACME CORP PAYROLL', 1900, 'd-chk'], [-1, 17, 7, 0, 'ACME CORP PAYROLL', 1900, 'd-chk'], [-1, 10, 10, 2, 'ACH DEPOSIT FREELANCE CLIENT LLC', 1400, 'd-chk'], [-1, 24, 15, 20, 'ACH DEPOSIT FREELANCE CLIENT LLC', 650, 'd-chk'],
     [-1, 1, 8, 0, 'RENT PAYMENT SAMPLE PROPERTIES', -950, 'd-chk'], [-1, 2, 9, 0, 'PHONE BILL SAMPLE WIRELESS', -55, 'd-chk'], [-1, 2, 9, 5, 'INSURANCE SAMPLE MUTUAL', -120, 'd-chk'],
     [-1, 2, 12, 30, 'PUBLIX #0456', -64.1, 'd-chk'], [-1, 4, 10, 0, 'VANGUARD ROTH IRA CONTRIB', -200, 'd-chk'], [-1, 5, 18, 40, 'TST* LOCAL TACO SHOP', -17.8, 'd-cc'],
     [-1, 6, 14, 5, 'AMZN MKTP US*8H2KD01', -34.99, 'd-cc'], [-1, 7, 9, 10, 'SQ *CORNER COFFEE CO', -5.5, 'd-cc'], [-1, 8, 17, 45, 'SHELL OIL 57444', -36.9, 'd-cc'],
@@ -515,7 +516,7 @@ function seedDemo() {
     [-1, 22, 13, 0, 'SHELL OIL 57444', -41.25, 'd-cc'], [-1, 24, 9, 30, 'STARBUCKS STORE 1182', -5.85, 'd-cc'], [-1, 26, 12, 0, 'AMZN MKTP US*2K4XY91', -23.18, 'd-cc'],
     [-1, 27, 14, 12, 'TST* LOCAL TACO SHOP', -14.2, 'd-cc'],
     // this month so far: the first paycheck, and a few purchases still to sort
-    [0, 1, 0, 5, 'ACME CORP PAYROLL', 1250, 'd-chk'], [0, 2, 8, 12, 'QUIKTRIP 8071 ANYTOWN', -42.18, 'd-cc', 1], [0, 2, 12, 31, 'CHICK-FIL-A #01234', -11.47, 'd-cc', 1],
+    [0, 1, 0, 5, 'ACME CORP PAYROLL', 1900, 'd-chk'], [0, 2, 10, 15, 'ACH DEPOSIT FREELANCE CLIENT LLC', 1400, 'd-chk'], [0, 2, 8, 12, 'QUIKTRIP 8071 ANYTOWN', -42.18, 'd-cc', 1], [0, 2, 12, 31, 'CHICK-FIL-A #01234', -11.47, 'd-cc', 1],
     [0, 3, 9, 0, 'SPOTIFY USA', -11.99, 'd-cc'], [0, 3, 15, 42, 'SAMPLE CAMERA SHOP', -79.99, 'd-cc', 1], [0, 4, 13, 55, 'SQ *CORNER COFFEE CO', -6.75, 'd-cc'],
   ];
   ingest(rows.map((r, i) => ({ id: 'demo-' + i, accountID: r[6], rawName: r[4], amount: r[5], date: at(r[0], r[1], r[2], r[3]) })));
