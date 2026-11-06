@@ -346,10 +346,10 @@ function spendMain() {
 function potStrip() {
   const main = spendMain();
   const others = S.pots.filter(x => x.id !== 'spending').map((x, i) => {
-    const g = x.target > 0 ? Math.min(Math.max(x.balance / x.target, 0), 1) : null;
+    const raw = x.target > 0 ? Math.max(x.balance / x.target, 0) : null, g = raw === null ? null : Math.min(raw, 1);
     return `<div class="card spendbar prow" data-action="openPot" data-id="${esc(x.id)}">
-      <div class="row"><span class="muted small">${emo(x.icon, potColorHex(i))} ${esc(x.name)}${g == null ? '' : ' · ' + Math.round(g * 100) + '%'}</span>
-        <b class="${x.balance < 0 ? 'neg' : ''}" ${counted('pot-' + x.id, x.balance)}>${usd(x.balance)}</b></div>
+      <div class="pn">${emo(x.icon, potColorHex(i))}<span class="ptxt">${esc(x.name)}</span></div>
+      <div class="pa"><b class="${x.balance < 0 ? 'neg' : ''}" ${counted('pot-' + x.id, x.balance)}>${usd(x.balance)}</b>${raw == null ? '' : `<span class="muted small">${Math.round(raw * 100)}%</span>`}</div>
       ${g == null ? '' : `<div class="bar">${fill('pot-' + x.id, g * 100, 'background:' + potColor(i))}</div>`}
     </div>`;
   }).join('');
@@ -609,8 +609,7 @@ function budgetView() {
   const run = runFor(now);
   const c = budgetCalc();
   const extra = countedIncome(now).filter(t => t.extraIncomeLabel);
-  const items = countedIncome(now);
-  const total = totalEarnings(now);
+    const total = totalEarnings(now);
   return `<div class="row"><h1>Budget</h1>${refreshBtn('<button class="link plusbtn" data-action="addExtra" aria-label="Add extra income">＋</button>')}</div>
   <div class="card row"><b style="font-size:17px">${monthName(now)}</b>
     <span class="badge ${run ? 'b-hi' : 'b-mid'}">${run ? 'Applied' : 'Not applied yet'}</span></div>
@@ -633,7 +632,7 @@ function budgetView() {
     <div class="card tappable" style="margin:14px 0 0" data-action="openHist"><div class="row"><span>${emo('📈')} Income history</span><span class="muted">›</span></div></div>
   ${CE}
 
-  ${CD('b-earn', 'Earnings this month', true)}
+  ${CD('b-earn', 'Earnings &amp; counted this month', true)}
     ${c.rows.map(r => {
       const note = r.mode === 'expected' ? 'No deposit yet, using your expected amount'
         : r.mode === 'none' ? (S.incomeSources.find(x => x.id === r.sourceId).variable ? 'Nothing received this month' : 'Nothing received yet')
@@ -650,14 +649,6 @@ function budgetView() {
     }).join('') || '<div class="muted">Add an income source above.</div>'}
     ${extra.length ? `<div class="day">Extra income · already in your pots</div>${extra.map(t => txRow(t, incomeTag(t))).join('')}` : ''}
     <div class="field" style="border-top:1px solid var(--line);margin-top:6px"><span><b>Earnings to budget</b></span><b id="earn-total">${usd(c.earn)}</b></div>
-  ${CE}
-
-  ${CD('b-count', 'Counted this month', true)}
-    ${items.length ? items.map(t => txRow(t, incomeTag(t))).join('') : '<div class="muted">Nothing counted yet.</div>'}
-  ${CE}
-
-  ${CD('b-stmt', 'Statements', false)}
-    ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small">${usd(st.income)} in · ${usd(st.spent)} out</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
   ${CE}
 
   ${CD('b-fixed', 'Expenses', true)}
@@ -687,7 +678,11 @@ function budgetView() {
     ${S.budgetUndo && S.budgetUndo.monthKey === monthKey(now) ? '<button class="btn full" style="margin-top:8px" data-action="undoBudget">↩ Undo the last ' + (S.budgetUndo.prevRun ? 'update' : 'apply') + '</button>' : ''}
   ${CE}
 
-  ${historyCard()}`;
+  ${historyCard()}
+
+  ${CD('b-stmt', 'Statements', false)}
+    ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small">${usd(st.income)} in · ${usd(st.spent)} out</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
+  ${CE}`;
 }
 
 function backupCard() {
@@ -841,7 +836,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 f';
+const APP_VERSION = '2026-11-06 h';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1510,7 +1505,6 @@ function updateTabbar(active, tabChanged, n) {
   });
 }
 
-let popupShift = false, popupY = 0;
 function render() {
   RB = runningBalances();
   captureSegs();
@@ -1536,14 +1530,7 @@ function render() {
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
 
-  // With a pop-up open the page sits 1px down, so a tap on the status bar has somewhere to scroll "up" from (see the scroll listener).
-  const popup = now.length > 0;
-  document.documentElement.classList.toggle('modal', popup);
-  let target = ui.resetScroll ? 0 : y;
-  if (popup && target === 0) { target = 1; popupShift = true; }
-  else if (!popup && popupShift) { if (target <= 1) target = 0; popupShift = false; }
-  if (popup) popupY = target;
-  window.scrollTo(0, target);
+  window.scrollTo(0, ui.resetScroll ? 0 : y);
   ui.resetScroll = false;
   const newSheet = modalRoot.querySelector('.sheet');
   if (newSheet && oldSheet) newSheet.scrollTop = sheetY;
@@ -2195,7 +2182,7 @@ function hueShift(hex, deg) {
 function showRainMsg() {
   hideRainMsg();
   const m = document.createElement('div');
-  m.id = 'rainmsg'; m.textContent = 'make it rain!';
+  m.id = 'rainmsg'; m.className = 'card'; m.textContent = 'Make it rain!';
   m.addEventListener('click', () => rainArm());
   document.body.appendChild(m);
   setTimeout(hideRainMsg, 25000);
@@ -2288,7 +2275,7 @@ if (IS_IOS) {
 document.addEventListener('click', e => {
   const trig = e.target.closest && e.target.closest('[data-haptic-trigger]');
   const sum = trig && trig.parentElement;
-  if (!sum || sum.tagName !== 'SUMMARY' || !sum.parentElement || sum.parentElement.classList.contains('coll')) return;
+  if (!sum || sum.tagName !== 'SUMMARY' || !sum.parentElement || sum.parentElement.classList.contains('coll') || sum.parentElement.classList.contains('info')) return;
   sum.parentElement.open = !sum.parentElement.open;
 });
 function haptic() { if (!IS_IOS && S.settings.haptics !== false && navigator.vibrate) navigator.vibrate(8); }
@@ -2352,7 +2339,7 @@ function showSplash() {
   try { again = !!sessionStorage.getItem('pl.splash'); sessionStorage.setItem('pl.splash', '1'); } catch (e) { /* still show it */ }
   if (again) { const sp = document.getElementById('splash'); if (sp) sp.remove(); if (!tourSeen() && !document.documentElement.dataset.locked) setTimeout(() => tourShow(0), 300); return; }
   let el = document.getElementById('splash');
-  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
+  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div class="card splash-card"><img src="icon-180.png" alt="" width="72" height="72"><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
   // the tour is built underneath the title, so the title fades straight into it
   setTimeout(() => { if (!tourSeen() && !document.documentElement.dataset.locked) tourShow(0); }, 1100);
   setTimeout(() => el.classList.add('out'), 1300);
@@ -2370,20 +2357,6 @@ document.addEventListener('focusin', e => {
   if (!e.target.closest || !e.target.closest('.sheet')) return;
   setTimeout(() => { try { e.target.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (x) { /* ignore */ } }, 350);
 });
-/* Tapping the iPhone status bar scrolls the page to the top. While a pop-up is open that should scroll the pop-up, not the page behind it. */
-window.addEventListener('scroll', () => {
-  if (!(ui.modal || ui.picker || ui.dialog)) { popupY = window.scrollY; return; }
-  if (window.scrollY === popupY) return;
-  const sheets = modalRoot.querySelectorAll('.sheet'), top = sheets[sheets.length - 1];
-  window.scrollTo(0, popupY);
-  if (top) top.scrollTo({ top: 0, behavior: 'smooth' });
-}, { passive: true });
-document.addEventListener('touchend', e => {   // a tap in the very top strip does the same
-  const t = e.changedTouches && e.changedTouches[0];
-  if (!t || t.clientY > 22 || !(ui.modal || ui.picker || ui.dialog)) return;
-  const sheets = modalRoot.querySelectorAll('.sheet'), top = sheets[sheets.length - 1];
-  if (top) top.scrollTo({ top: 0, behavior: 'smooth' });
-}, { passive: true });
 window.addEventListener('popstate', () => {
   const hadPopup = !!(ui.modal || ui.picker || ui.dialog);
   if (ui.dialog) ui.dialog = null; else if (ui.picker) ui.picker = null; else if (ui.modal) closeModal();
@@ -2433,8 +2406,8 @@ function depthFrame() {
   }
   depth.cx += (depth.tx - depth.cx) * 0.14; depth.cy += (depth.ty - depth.cy) * 0.14;
   const y = Math.max(window.scrollY || 0, 0), st = root.style;
-  st.setProperty('--p1x', (-depth.cx * 16).toFixed(1) + 'px'); st.setProperty('--p1y', (-45 * Math.tanh(y * 0.05 / 45) - depth.cy * 16).toFixed(1) + 'px');   // drift eases to a stop so the glow never leaves the screen
-  st.setProperty('--p2x', (-depth.cx * 34).toFixed(1) + 'px'); st.setProperty('--p2y', (-60 * Math.tanh(y * 0.14 / 60) - depth.cy * 30).toFixed(1) + 'px');
+  st.setProperty('--p1x', (-depth.cx * 44).toFixed(1) + 'px'); st.setProperty('--p1y', (-120 * Math.tanh(y * 0.11 / 120) - depth.cy * 44).toFixed(1) + 'px');   // drift eases to a stop so the glow never leaves the screen
+  st.setProperty('--p2x', (-depth.cx * 90).toFixed(1) + 'px'); st.setProperty('--p2y', (-170 * Math.tanh(y * 0.28 / 170) - depth.cy * 80).toFixed(1) + 'px');
   const ang = Math.round(depth.cx * 14);
   if (ang !== depth.ang) { depth.ang = ang; st.setProperty('--tilt-a', ang + 'deg'); }
   depth.last = 'on';
@@ -2503,7 +2476,7 @@ document.addEventListener('touchcancel', endDrag);
 
 /* Windows open and close by sliding their height (one CSS transition between two measured heights, nothing re-rendered meanwhile). */
 document.addEventListener('click', e => {
-  const sum = e.target.closest && e.target.closest('details.coll > summary');
+  const sum = e.target.closest && e.target.closest('details.coll > summary, details.info > summary');
   if (!sum) return;
   const d = sum.parentElement;
   e.preventDefault();

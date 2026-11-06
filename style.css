@@ -21,6 +21,7 @@
   --sheet-sh: 0 -18px 50px -14px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.3);
   --tab-bg: color-mix(in srgb, var(--raise) 62%, transparent); --tab-sh: inset 0 1px 0 rgba(255,255,255,.18), 0 -10px 30px -12px rgba(0,0,0,.8);
   --hl: rgba(255,255,255,.08);
+  --tile-sh: 0 8px 16px -10px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.28);
 }
 [data-theme="light"] {
   color-scheme: light;
@@ -41,6 +42,7 @@
   --sheet-sh: 0 -14px 40px -12px color-mix(in srgb, var(--brand) 80%, #000), inset 0 1px 0 rgba(255,255,255,.9);
   --tab-bg: color-mix(in srgb, var(--raise) 88%, transparent); --tab-sh: 0 -8px 24px -10px rgba(15,60,70,.28);
   --hl: rgba(255,255,255,.9);
+  --tile-sh: 0 6px 14px -10px color-mix(in srgb, var(--brand) 70%, #000), inset 0 1px 0 rgba(255,255,255,.9);
 }
 /* palettes (generated) */
 :root, [data-palette="harbor"][data-theme="dark"] {
@@ -226,7 +228,7 @@ textarea { resize: vertical; }
 .note { padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
 .note-prev { white-space: pre-line; max-height: 2.8em; overflow: hidden; }
 
-.stick { position: sticky; top: env(safe-area-inset-top); z-index: 4; margin: 0 -20px; padding: 6px 20px 0; background: var(--bg); }
+.stick { position: sticky; top: env(safe-area-inset-top); z-index: 4; margin: 0 -20px; padding: 6px 20px 2px; will-change: transform; }
 .spendbar { cursor: pointer; margin-bottom: 8px; background: var(--raise); }
 .spendbar .big { margin-top: 0; }
 .earn { padding: 8px 0; border-top: 1px solid var(--line); }
@@ -384,9 +386,14 @@ details.info summary { cursor: pointer; color: var(--fg-dim); font-size: calc(12
 .row > .link, .row .link.small { white-space: nowrap; flex: none; }
 .plusbtn { font-size: 28px; line-height: 1; padding: 0 4px; font-weight: 400; }
 
-.prows { margin-bottom: 6px; }
-.prow { padding: 8px 12px; margin-bottom: 6px; }
-.prow .bar { margin: 6px 0 0; height: 6px; }
+.prows { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px; }
+.prows .prow:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.card.prow { padding: 6px 10px 7px; margin-bottom: 0; min-width: 0; border-radius: 12px; }
+.prow .pn { display: flex; align-items: center; gap: 6px; font-size: calc(12px * var(--ts, 1)); color: var(--fg-dim); min-width: 0; line-height: 1.3; }
+.prow .ptxt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.prow .pa { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; line-height: 1.3; }
+.prow .pa b { font-size: calc(14px * var(--ts, 1)); font-weight: 500; font-variant-numeric: tabular-nums; }
+.prow .bar { margin: 4px 0 0; height: 4px; }
 .linked { border-top: 1px solid var(--line); padding: 10px 0; min-width: 0; }
 .linked-name { font-weight: 600; overflow-wrap: anywhere; }
 .linked-accts { overflow-wrap: anywhere; margin-top: 2px; }
@@ -412,8 +419,12 @@ input, textarea, .profile,
 
 /* ---- home-screen app: solid status-bar strip, no edge bounce, safe areas ---- */
 html, body { overscroll-behavior-x: none; overscroll-behavior-y: auto; }
-body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 4; pointer-events: none; }
-html[data-tone="light"] body::before { background: #0d1b1e; }   /* the clock stays white on iPhone, so the strip stays dark */
+/* the strip behind the status bar fades out instead of ending in a hard edge, so the background glow carries up to the top of the screen */
+body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: calc(env(safe-area-inset-top) + 22px); z-index: 4; pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 85%, transparent) env(safe-area-inset-top), transparent);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 env(safe-area-inset-top), transparent); mask-image: linear-gradient(to bottom, #000 env(safe-area-inset-top), transparent); }
+html[data-tone="light"] body::before { background: linear-gradient(to bottom, #0d1b1e env(safe-area-inset-top), transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }   /* the clock stays white on iPhone, so this strip stays dark */
 html[data-standalone] body { padding-top: calc(env(safe-area-inset-top) + 16px); }
 @media (display-mode: standalone) { body { padding-top: calc(env(safe-area-inset-top) + 16px); } }
 
@@ -442,20 +453,20 @@ html[data-locked] #app, html[data-locked] #tabbar, html[data-locked] #modal-root
 /* ---- roles + deep glass ---- */
 ::selection { background: var(--brand); color: var(--on-brand); }
 /* soft colored light behind everything (dark mode only; transparent in light) gives the glass something to frost */
-html::before, html::after { content: ''; position: fixed; inset: -12%; z-index: -1; pointer-events: none; will-change: transform; }
+html::before, html::after { content: ''; position: fixed; inset: -30%; z-index: -1; pointer-events: none; will-change: transform; }
 html::before { background: radial-gradient(52% 32% at 18% 10%, var(--glow1), transparent 70%), radial-gradient(62% 34% at 24% 76%, var(--glow3), transparent 72%), radial-gradient(44% 26% at 88% 96%, var(--glow1), transparent 70%);
   transform: translate3d(var(--p1x, 0px), var(--p1y, 0px), 0); }
 html::after { background: radial-gradient(40% 26% at 92% 36%, var(--glow2), transparent 70%);
   transform: translate3d(var(--p2x, 0px), var(--p2y, 0px), 0); }
 body { background: transparent; }
-.card { background-color: var(--glass); background-image: var(--card-bg); border-color: transparent; box-shadow: var(--card-sh);
-  -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
+.card { background-color: var(--glass); background-image: var(--card-bg); border-color: transparent; box-shadow: var(--card-sh); }
 /* the colored edge wraps the whole window and fades, like light catching glass */
 .card::before { content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
   background: linear-gradient(calc(145deg + var(--tilt-a, 0deg)), var(--brand-text) 0%, color-mix(in srgb, var(--brand-text) 35%, transparent) 38%, transparent 62%, color-mix(in srgb, var(--brand-text) 40%, transparent) 100%);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
-.card.spendbar, .prow { box-shadow: var(--card-sh); }
+.card.spendbar { box-shadow: var(--card-sh); }
+.card.prow { box-shadow: var(--tile-sh); }
 .btn { border-color: var(--edge); color: var(--fg); background-color: var(--tint); background-image: var(--btn-bg); box-shadow: var(--btn-sh); }
 .btn:active { box-shadow: var(--btn-sh-down); }
 .btn.primary { background-color: var(--cta); background-image: var(--cta-bg); border-color: var(--cta); color: var(--on-cta); box-shadow: var(--cta-sh); }
@@ -492,11 +503,10 @@ details.info summary { color: var(--brand-text); }
 .badge.b-hi { color: var(--green); } .badge.b-mid { color: var(--amber); }
 input[type="checkbox"] { accent-color: var(--brand); }
 .demo-tag { background: var(--cta); color: var(--on-cta); }
-#rainmsg { background: var(--cta); border-color: var(--cta); color: var(--on-cta); }
 .sheet { background-color: var(--glass-hi); box-shadow: var(--sheet-sh); border-top-color: var(--edge); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
 .dialog { background-color: var(--glass-hi); box-shadow: var(--sheet-sh); -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur); }
 .sheet-head, .sheet-foot, .selbar { background: var(--glass-hi); }
-.stick { background: color-mix(in srgb, var(--bg) 72%, transparent); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); }
+.stick .card { background-color: color-mix(in srgb, var(--raise) 92%, transparent); }   /* nearly solid, so nothing scrolling underneath shows through */
 .pill.on { border-color: var(--brand-text); color: var(--brand-text); }
 .tour-dots i.on { background: var(--brand-text); }
 .themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -509,7 +519,8 @@ input[type="checkbox"] { accent-color: var(--brand); }
 
 .field > span.hdr-r { flex: none; }
 .hdr-r button { white-space: nowrap; }
-details.coll.anim { transition: height .24s cubic-bezier(.2, .8, .2, 1); }
+details.coll.anim, details.info.anim { transition: height .24s cubic-bezier(.2, .8, .2, 1); }
+details.info { overflow: clip; }
 
 /* make it rain */
 html.rain #app, html.rain #tabbar, html.rain .scrim { filter: hue-rotate(var(--hue, 0deg)); }
@@ -518,9 +529,12 @@ html.rain #app, html.rain #tabbar, html.rain .scrim { filter: hue-rotate(var(--h
 @keyframes billFall { to { transform: translate3d(var(--dx), 115vh, 0) rotate(var(--rot)); } }
 
 .nowrap, .link.nowrap { white-space: nowrap; overflow-wrap: normal; flex: none; }
-html.modal body { min-height: calc(100dvh + 24px); }
-#rainmsg { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: 70; padding: 10px 18px; font-size: calc(20px * var(--ts, 1)); font-weight: 700; color: var(--sage); border: 1px solid var(--sage); background: var(--bg); animation: rainPulse 1.2s ease-in-out infinite; }
-@keyframes rainPulse { 50% { transform: translateX(-50%) scale(1.06); } }
+#rainmsg { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 70; padding: 16px 28px; font-size: calc(22px * var(--ts, 1)); font-weight: 700; color: var(--on-cta); background-color: var(--cta); background-image: var(--cta-bg); box-shadow: var(--cta-sh); border-color: transparent; border-radius: 16px; white-space: nowrap; animation: rainPulse 1.2s ease-in-out infinite; }
+@keyframes rainPulse { 50% { transform: translate(-50%, -50%) scale(1.06); } }
+#splash, #tour, #lockov { isolation: isolate; }
+#splash::before, #tour::before, #lockov::before { content: ''; position: absolute; inset: -20%; z-index: -1; background: radial-gradient(52% 32% at 18% 10%, var(--glow1), transparent 70%), radial-gradient(62% 34% at 24% 76%, var(--glow3), transparent 72%), radial-gradient(44% 26% at 88% 96%, var(--glow1), transparent 70%), radial-gradient(40% 26% at 92% 36%, var(--glow2), transparent 70%); animation: ambA 16s ease-in-out infinite alternate; }
+.splash-card { display: flex; flex-direction: column; align-items: center; padding: 28px 40px; }
+.splash-card img { border-radius: 18px; margin-bottom: 14px; }
 #splash { position: fixed; inset: 0; z-index: 960; background: var(--bg); display: grid; place-items: center; text-align: center; transition: opacity .5s ease; }
 #splash.out { opacity: 0; }
 #splash h1 { font-size: calc(34px * var(--ts, 1)); margin: 0; }
@@ -540,3 +554,23 @@ html[data-locked] #tour { visibility: hidden; }
 html[data-haptics="off"] [data-haptic-trigger] { display: none !important; }
 
 html.rain::before, html.rain::after { filter: hue-rotate(var(--hue, 0deg)); }
+
+/* ---- every tappable thing reacts the same way when pressed ---- */
+button, summary, [data-action]:not(.scrim):not(.sheet):not(input):not(select):not(textarea):not(label), .tappable, .tx, .chip, .pill, .link {
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1), filter .18s, opacity .18s, background-color .2s, border-color .2s, color .2s, box-shadow .2s; }
+button:active, summary:active, [data-action]:not(.scrim):not(.sheet):not(input):not(select):not(textarea):not(label):active, .tappable:active, .chip:active, .pill:active, .link:active {
+  transform: scale(.965); filter: brightness(1.18); transition-duration: .06s; }
+.card[data-action]:active, .card.tappable:active, .tx:active, details.coll > summary:active, .opt:active, .stmt-row:active, .hist-head:active, .acct-top:active { transform: scale(.985); filter: brightness(1.1); }
+:root[data-theme="light"] button:active, :root[data-theme="light"] [data-action]:active { filter: brightness(.94); }
+/* cards sit on their own layer, so moving them (a window opening above them, scrolling) never repaints their shadows */
+.card { transform: translateZ(0); }
+.btn { position: relative; }
+.grid2 { margin-bottom: 14px; }
+.grid2 + .btn { margin-top: 2px; }
+
+/* ambient drift: the glow layers float slowly on their own, using the separate translate property so scroll/tilt parallax still stacks on top */
+html::before { animation: ambA 17s ease-in-out infinite alternate; }
+html::after { animation: ambB 23s ease-in-out infinite alternate; }
+@keyframes ambA { from { translate: -34px -24px; } to { translate: 40px 30px; } }
+@keyframes ambB { from { translate: 44px 20px; } to { translate: -38px -34px; } }
+.splash-card { width: min(300px, 80vw); box-sizing: border-box; padding: 28px 20px; }
