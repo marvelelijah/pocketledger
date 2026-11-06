@@ -836,7 +836,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 h';
+const APP_VERSION = '2026-11-06 i';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -2339,7 +2339,7 @@ function showSplash() {
   try { again = !!sessionStorage.getItem('pl.splash'); sessionStorage.setItem('pl.splash', '1'); } catch (e) { /* still show it */ }
   if (again) { const sp = document.getElementById('splash'); if (sp) sp.remove(); if (!tourSeen() && !document.documentElement.dataset.locked) setTimeout(() => tourShow(0), 300); return; }
   let el = document.getElementById('splash');
-  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div class="card splash-card"><img src="icon-180.png" alt="" width="72" height="72"><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
+  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
   // the tour is built underneath the title, so the title fades straight into it
   setTimeout(() => { if (!tourSeen() && !document.documentElement.dataset.locked) tourShow(0); }, 1100);
   setTimeout(() => el.classList.add('out'), 1300);

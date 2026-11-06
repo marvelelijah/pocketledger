@@ -533,8 +533,6 @@ html.rain #app, html.rain #tabbar, html.rain .scrim { filter: hue-rotate(var(--h
 @keyframes rainPulse { 50% { transform: translate(-50%, -50%) scale(1.06); } }
 #splash, #tour, #lockov { isolation: isolate; }
 #splash::before, #tour::before, #lockov::before { content: ''; position: absolute; inset: -20%; z-index: -1; background: radial-gradient(52% 32% at 18% 10%, var(--glow1), transparent 70%), radial-gradient(62% 34% at 24% 76%, var(--glow3), transparent 72%), radial-gradient(44% 26% at 88% 96%, var(--glow1), transparent 70%), radial-gradient(40% 26% at 92% 36%, var(--glow2), transparent 70%); animation: ambA 16s ease-in-out infinite alternate; }
-.splash-card { display: flex; flex-direction: column; align-items: center; padding: 28px 40px; }
-.splash-card img { border-radius: 18px; margin-bottom: 14px; }
 #splash { position: fixed; inset: 0; z-index: 960; background: var(--bg); display: grid; place-items: center; text-align: center; transition: opacity .5s ease; }
 #splash.out { opacity: 0; }
 #splash h1 { font-size: calc(34px * var(--ts, 1)); margin: 0; }
@@ -573,4 +571,3 @@ html::before { animation: ambA 17s ease-in-out infinite alternate; }
 html::after { animation: ambB 23s ease-in-out infinite alternate; }
 @keyframes ambA { from { translate: -34px -24px; } to { translate: 40px 30px; } }
 @keyframes ambB { from { translate: 44px 20px; } to { translate: -38px -34px; } }
-.splash-card { width: min(300px, 80vw); box-sizing: border-box; padding: 28px 20px; }
