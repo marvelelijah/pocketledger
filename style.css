@@ -615,3 +615,7 @@ html.rain #hdr { filter: hue-rotate(var(--hue, 0deg)); }
 .emojipick .chip { padding: 6px 9px; font-size: calc(18px * var(--ts, 1)); }
 /* number pad keys react the instant a finger lands */
 #lockov .numpad .key { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
+
+/* the iOS blur reaches below the status bar itself, so the name row sits a little lower, clear of it */
+html[data-standalone] #hdr { padding-top: calc(env(safe-area-inset-top) + 18px); }
+html[data-standalone] #hdr.bare { padding-top: env(safe-area-inset-top); }
