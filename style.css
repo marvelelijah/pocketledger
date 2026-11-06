@@ -227,7 +227,7 @@ textarea { resize: vertical; }
 .note { padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
 .note-prev { white-space: pre-line; max-height: 2.8em; overflow: hidden; }
 
-.stick { position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; z-index: 5; margin: 0 auto; max-width: 640px; box-sizing: border-box; padding: 6px 20px 2px; transform: translateZ(0); }
+.stick { position: fixed; top: var(--hdr-h, env(safe-area-inset-top)); left: 0; right: 0; z-index: 5; margin: 0 auto; max-width: 640px; box-sizing: border-box; padding: 6px 20px 2px; transform: translateZ(0); }
 .stick-ph { height: 0; }
 .spendbar { cursor: pointer; margin-bottom: 8px; background: var(--raise); }
 .spendbar .big { margin-top: 0; }
@@ -599,16 +599,18 @@ details.flipping::before { display: none !important; }
 .sheet.nogscroll { overflow: hidden; overscroll-behavior: none; touch-action: none; }
 .scrim[data-layer="picker"] .nogscroll ~ * { touch-action: none; }
 
-/* iOS draws its own blur under the status bar of a home-screen app. The only known way to get a solid bar is a fixed element near the top with a plain background-color (at least 6px tall and 80% of the screen wide, within 4px of the top); iOS then takes its color and drops the blur. */
-body { padding-top: env(safe-area-inset-top); }
+/* The name/settings bar is a fixed glass block (same as the tab bar) that reaches up behind the status bar, so whatever iOS blurs up there is this block's own color,
+   in light and dark. --hdr-h (set by the script) is its height. */
 html, body { min-height: 100vh; min-height: 100dvh; }
-html[data-standalone] #app { padding-top: 22px; }
-#statusmask { display: none; position: fixed; top: 0; left: 0; width: 100%; height: max(6px, env(safe-area-inset-top)); z-index: 9999; pointer-events: none; background-color: var(--bg); }
-html[data-standalone] #statusmask { display: block; }
-html[data-tone="light"] #statusmask { background-color: #0d1b1e; }   /* the clock stays white, so light mode keeps a dark bar */
-#statusfade { display: none; position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; height: 14px; z-index: 4; pointer-events: none; background: linear-gradient(to bottom, var(--bg), transparent); }
-html[data-standalone] #statusfade { display: block; }
-html[data-tone="light"] #statusfade { background: linear-gradient(to bottom, #0d1b1e, transparent); }
+body { padding-top: var(--hdr-h, env(safe-area-inset-top)); }
+#hdr { position: fixed; top: 0; left: 0; right: 0; z-index: 8; box-sizing: border-box; padding: env(safe-area-inset-top) 20px 0;
+  background: var(--tab-bg); border-bottom: 1px solid var(--edge); box-shadow: 0 8px 24px -12px rgba(0,0,0,.7), inset 0 -1px 0 rgba(255,255,255,.06);
+  -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); transform: translateZ(0); }
+html[data-tone="light"] #hdr { box-shadow: 0 8px 24px -12px rgba(15,60,70,.3); }
+#hdr.bare { border-bottom: 0; box-shadow: none; }
+#hdr .topbar { max-width: 640px; margin: 0 auto; border-bottom: 0; padding: 8px 0; }
+html[data-locked] #hdr { visibility: hidden; }
+html.rain #hdr { filter: hue-rotate(var(--hue, 0deg)); }
 .emojipick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .emojipick .chip { padding: 6px 9px; font-size: calc(18px * var(--ts, 1)); }
 /* number pad keys react the instant a finger lands */

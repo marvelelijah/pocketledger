@@ -352,7 +352,7 @@ function potStrip() {
       ${g == null ? '' : `<div class="bar">${fill('pot-' + x.id, g * 100, 'background:' + potColor(i))}</div>`}
     </div>`;
   }).join('');
-  return `<div class="stick-ph"></div><div class="stick">${topbar()}${main}${others ? `<div class="prows">${others}</div>` : ''}</div>`;
+  return `<div class="stick-ph"></div><div class="stick">${main}${others ? `<div class="prows">${others}</div>` : ''}</div>`;
 }
 
 const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savings', loan: 'loan', investment: 'investment' };
@@ -839,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 n';
+const APP_VERSION = '2026-11-06 o';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1503,6 +1503,15 @@ function updateTabbar(active, tabChanged, n) {
 }
 
 /* The pots at the top of Review are pinned (position: fixed, so scrolling never moves them); a spacer in the page keeps the rest of the content below them. */
+/* The name/settings bar is a fixed block that reaches up behind the status bar (same glass as the tab bar), so iOS's blur sits on that block's own color.
+   Its height is shared as --hdr-h so the page and the pinned pots start just below it. */
+function layoutHdr() {
+  const hdr = document.getElementById('hdr');
+  if (!hdr) return;
+  document.documentElement.style.setProperty('--hdr-h', hdr.offsetHeight + 'px');
+  layoutStick();
+}
+try { const h = document.getElementById('hdr'); if (h && window.ResizeObserver) new ResizeObserver(layoutHdr).observe(h); } catch (e) { /* ignore */ }
 function layoutStick() {
   const st = document.querySelector('.stick'), ph = document.querySelector('.stick-ph');
   if (!st || !ph) return;
@@ -1510,7 +1519,7 @@ function layoutStick() {
   const docTop = ph.getBoundingClientRect().top + window.scrollY;
   ph.style.height = Math.max(0, top + st.offsetHeight - docTop + 6) + 'px';
 }
-window.addEventListener('resize', layoutStick);
+window.addEventListener('resize', layoutHdr);
 function render() {
   RB = runningBalances();
   captureSegs();
@@ -1519,7 +1528,9 @@ function render() {
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
 
-  app.innerHTML = (ui.tab === 'settings' || ui.tab === 'review' ? '' : topbar()) + VIEWS[ui.tab]();
+  const hdr = document.getElementById('hdr');
+  if (hdr) { hdr.innerHTML = ui.tab === 'settings' ? '' : topbar(); hdr.classList.toggle('bare', ui.tab === 'settings'); }
+  app.innerHTML = VIEWS[ui.tab]();
   // remember what the live-patched areas currently show (see setHTMLIfChanged)
   if ($('disc-box')) $('disc-box').__html = discHTML(discrepancy(ui.checkMonth, ui.actual));
   if ($('actList')) $('actList').__html = activityListHTML();
@@ -1534,7 +1545,7 @@ function render() {
   modalRoot.innerHTML = (ui.modal ? modalHTML() : '') + (ui.picker ? pickerHTML() : '') + (ui.dialog ? dialogHTML() : '');
   [...modalRoot.children].forEach(el => { if (!beforeNames.includes(el.dataset.layer)) el.classList.add('in'); });
   document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file])').forEach(i => i.setAttribute('enterkeyhint', 'done'));
-  layoutStick();
+  layoutHdr();
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
 
