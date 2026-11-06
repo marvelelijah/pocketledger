@@ -68,7 +68,6 @@ function txRow(t, tag, opts) {
     <div class="ic" style="color:${c.color};border-color:${c.color}55;background:${c.color}14">${emo(c.icon, c.color)}</div>
     <div class="mid">
       <div class="t1">${esc(t.simpleName)}</div>
-      <div class="raw">${esc(t.rawName)}</div>
       <div class="when">${fmtShort(t.date)}</div>
     </div>
     <div class="right">
@@ -840,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 a';
+const APP_VERSION = '2026-11-06 b';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
