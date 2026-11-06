@@ -1398,7 +1398,7 @@ function ingestLinked(res) {
   save();
 }
 
-let syncInfo = '', bankProblems = [];
+let syncInfo = '', syncDetail = '', bankProblems = [];
 async function syncLinked() {
   try {
     let res, guard = 0, got = 0, accts = 0, older = 0;
@@ -1411,9 +1411,14 @@ async function syncLinked() {
     S.lastSync = new Date().toISOString();
     bankProblems = (res.problems || []).slice();
     syncError = (res.problems && res.problems.length) ? res.problems.join(' ') : null;
+    const newest = S.transactions.filter(t => String(t.id).startsWith('plaid-')).reduce((m, t) => (t.date > m ? t.date : m), '');
+    const ups = (res.updates || []).filter(u => u.ok);
+    const when = iso => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    syncDetail = (newest ? 'Newest purchase from the bank: ' + new Date(newest).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + '. ' : '')
+      + (ups.length ? 'Your bank last sent Plaid new data: ' + ups.map(u => (ups.length > 1 ? u.institution + ' ' : '') + when(u.ok)).join('; ') + '. Purchases made after that appear once the bank sends its next update.' : '');
     syncInfo = accts + ' account' + (accts === 1 ? '' : 's') + ', ' + got + ' new purchase' + (got === 1 ? '' : 's') + ' from the bank'
       + (older ? ' (' + older + ' older than ' + S.settings.countFrom + ', kept in Activity as history only)' : '')
-      + (got === 0 ? '. Banks often take a few minutes to send history after linking, so tap sync now again shortly.' : '.');
+      + (got === 0 ? '. Banks often take a few minutes to send history after linking, so tap sync now again shortly.' : '.') + (syncDetail ? ' ' + syncDetail : '');
   } catch (e) { syncError = e.message || String(e); }
   save();
 }

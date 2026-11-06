@@ -13,7 +13,7 @@
 const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 
 /* Shown in the app (Settings > check connection) so you can tell which version of this file is running. */
-const WORKER_VERSION = '2026-11-05 a';
+const WORKER_VERSION = '2026-11-05 b';
 
 export default {
   async fetch(req, env) {
@@ -156,7 +156,7 @@ const mapAccount = (a, institution, itemId) => {
 /* Pulls what's new since last time. If a bank has a lot of history, `more` is true and the app asks again. */
 async function sync(env) {
   const items = await getItems(env);
-  const out = { accounts: [], added: [], modified: [], removed: [], more: false, problems: [], failed: [] };
+  const out = { accounts: [], added: [], modified: [], removed: [], more: false, problems: [], failed: [], updates: [] };
   for (const item of items) {
     for (let attempt = 0; attempt < 2; attempt++) {
       let cursor = item.cursor || undefined, pages = 0, more = false;
@@ -179,6 +179,8 @@ async function sync(env) {
         break;
       }
       item.cursor = cursor;
+      // When did Plaid last actually hear from this bank? (A purchase made today can't show up until that moves past it.)
+      try { const g = await plaid(env, '/item/get', { access_token: item.access_token }); const t = (g.status && g.status.transactions) || {}; out.updates.push({ institution: item.institution, ok: t.last_successful_update || null, failed: t.last_failed_update || null }); } catch (e) { /* optional */ }
       // The sync only lists accounts that had news. Ask for the full list so savings, car loans and the like never drop out.
       try { const all = await plaid(env, '/accounts/get', { access_token: item.access_token }); if (all.accounts && all.accounts.length) accounts = all.accounts; } catch (e) { /* keep what the sync sent */ }
       out.added.push(...added); out.modified.push(...modified); out.removed.push(...removed);

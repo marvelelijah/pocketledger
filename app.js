@@ -840,7 +840,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 g';
+const APP_VERSION = '2026-11-05 h';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -864,7 +864,7 @@ function settingsView() {
   const bank = DEMO ? '' : `
   ${CD('s-bank','Bank accounts',false)}
     <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
-    ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : ''}
+    ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : (syncDetail ? `<div class="muted small" style="margin-top:8px">${esc(syncDetail)}</div>` : '')}
     <div class="stack" style="margin-top:8px">
       <input id="linkUrl" placeholder="Link server address" value="${esc(link.url || '')}" data-change="linkUrl" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
       <input id="linkPass" type="password" placeholder="passphrase" value="${esc(link.passphrase || '')}" data-change="linkPass" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
