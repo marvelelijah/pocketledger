@@ -751,10 +751,11 @@ function renderWhenIdle(tries) {
   render();
 }
 
+const simpleOn = () => typeof Simple !== 'undefined' && Simple.active();
 function topbar() {
   const nm = (S.settings.name || '').trim();
   const handle = DEMO ? 'demo@ledgend' : (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@ledgend';
-  return `<div class="topbar"><span class="prompt">${esc(handle)}${DEMO ? '<span class="demo-tag">DEMO</span>' : ''}${syncLabel() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
+  return `<div class="topbar"><span class="prompt">${esc(handle)}${DEMO ? '<span class="demo-tag">DEMO</span>' : ''}${syncLabel() && !simpleOn() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
     <button class="profile" data-action="openSettings" aria-label="Settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}</button></div>`;
 }
 
@@ -791,7 +792,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 s';
+const APP_VERSION = '2026-11-06 t';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -807,12 +808,13 @@ function settingsView() {
   const st = S.settings, link = getLink();
   const [statusText, statusCls] = linkStatus();
   const standalone = window.navigator.standalone === true;
-  const demoCard = DEMO
+  const SM = simpleOn();
+  const demoCard = SM ? '' : DEMO
     ? `${CD('s-demo','Demo mode is on',true,'','demo-card')}<div class="muted small">Everything here is made up. Your real data is safe and hidden.</div>
         <div class="btn-row"><button class="btn primary" data-action="demoOff">exit demo</button><button class="btn" data-action="demoReset">reset demo</button></div>${CE}`
     : `${CD('s-demo','Demo mode',false)}<div class="muted small">Show the app with made-up numbers.</div>
         <div class="btn-row"><button class="btn" data-action="demoOn">start demo</button></div>${CE}`;
-  const bank = DEMO ? '' : `
+  const bank = DEMO || SM ? '' : `
   ${CD('s-bank','Bank accounts',false)}
     <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
     ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : (syncDetail ? `<div class="muted small" style="margin-top:8px">${esc(syncDetail)}</div>` : '')}
@@ -836,7 +838,7 @@ function settingsView() {
       • Setup steps: <b>server/README.md</b>.
       </div></details>
   ${CE}`;
-  return `<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>
+  return `<div class="row"><button class="link" data-action="closeSettings">‹ back${SM ? ' to simple mode' : ''}</button></div>
   <h1>Settings</h1>
   ${DEMO ? '' : ''}
   ${CD('s-you','You',false)}
@@ -862,7 +864,7 @@ function settingsView() {
       • Backups never include the passcode.</div></details>
   ${CE}
 
-  ${CD('s-cats','Categories',false)}
+  ${SM ? '' : `  ${CD('s-cats','Categories',false)}
     <div class="muted small" style="margin-bottom:8px">Add your own categories. Mark one tax deductible and its purchases count toward the Deductible total.</div>
     ${(S.customCats || []).map(c => `<div class="field"><span>${emo(c.icon, (CATS[c.id] || {}).color)} ${esc(c.title)}</span><span class="hdr-r"><button class="chip ${c.deduct ? 'on' : ''}" data-action="catDed" data-id="${esc(c.id)}">${c.deduct ? 'deductible' : 'not deductible'}</button><button class="link danger small" data-action="catDel" data-id="${esc(c.id)}">delete</button></span></div>`).join('') || '<div class="muted small">None yet.</div>'}
     <div class="muted small" style="margin:12px 0 6px">New category</div>
@@ -870,7 +872,7 @@ function settingsView() {
     <div class="field"><span>Emoji</span>${selBtn('catIcon', '', '', 'width:90px')}</div>
     ${seg([['yes', 'Tax deductible'], ['no', 'Not deductible']], ui.newCat.deduct ? 'yes' : 'no', 'catNewDed')}
     <div class="btn-row"><button class="btn primary" data-action="catAdd">add category</button></div>
-  ${CE}
+  ${CE}`}
 
   ${CD('s-look','Appearance',false)}
     <div class="muted small" style="margin:0 0 6px">Mode</div>
@@ -895,8 +897,11 @@ function settingsView() {
   ${CE}
 
   ${backupCard()}
-  <button class="btn primary full" style="margin-top:6px" data-action="simpleOn">simple mode</button>
-  <div class="muted small" style="text-align:center;margin-top:6px">A bare-bones budget that runs on its own and never changes anything above.</div>`;
+  ${SM
+    ? `<button class="btn primary full" style="margin-top:6px" data-action="simpleOff">exit simple mode</button>
+  <div class="muted small" style="text-align:center;margin-top:6px">Back to the full Ledgend.</div>`
+    : `<button class="btn primary full" style="margin-top:6px" data-action="simpleOn">simple mode</button>
+  <div class="muted small" style="text-align:center;margin-top:6px">A bare-bones budget that simplifies the experience of Ledgend</div>`}`;
 }
 
 const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, budget: budgetView };
@@ -1473,6 +1478,7 @@ function render() {
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
 
+  document.documentElement.dataset.tab = ui.tab;
   const hdr = document.getElementById('hdr');
   if (hdr) { hdr.innerHTML = ui.tab === 'settings' ? '' : topbar(); hdr.classList.toggle('bare', ui.tab === 'settings'); }
   app.innerHTML = VIEWS[ui.tab]();
@@ -1947,6 +1953,7 @@ const ACTIONS = {
   restoreCode: () => { restoreCode(); return false; },
   copyConn: () => { copyConn(); return false; },
   simpleOn: () => { Simple.open(); return false; },
+  simpleOff: () => { Simple.close(); return false; },
   useConn: () => { useConn(); return false; },
 };
 
@@ -2207,35 +2214,51 @@ const TOUR = [
   { i: '🔒', t: 'Yours alone', p: 'Your numbers live on this phone, not on a server. Turn on the app lock in Settings, and back up now and then, because I can\'t recover what I never had.' },
   { i: '📳', t: 'One last thing', p: 'When you finish a new budget there\'s a surprise that needs your phone\'s motion sensor. Allow it now and it\'s ready. For the best experience, add me to your Home Screen from the share menu.', last: true },
 ];
-let tourStep = 0;
+let tourStep = 0, tourMode = null;   // tourMode: null until the choice slide is answered, then 'simple' or 'full'
+const TOUR_CHOOSE = { i: '🧭', t: 'How do you want to start?', p: 'Simple mode is just a number pad: type what you spend, see what\'s left, and plan each month. Full Ledgend adds bank linking, sorting, goals and statements. I\'d start with Simple. You can switch any time in Settings.', choose: true };
+const TOUR_SIMPLE = [
+  { i: '💸', t: 'Spend with a number pad', p: 'Tap Spending, type what you spent and tap subtract. Your balance goes down and the bar shows how much of the month\'s spending money is left.' },
+  { i: '🏦', t: 'Savings and extra pots', p: 'Tap Savings to add money you\'ve put away, or take some out. Make more pots for anything you\'re saving toward. Each one has its own bar.' },
+  { i: '🧾', t: 'Plan your month', p: 'On the Budget tab, enter what you earned and the bills you pay every month. I\'ll show how much to save and how much you can spend, then add it to your pots for you.' },
+  { i: '📜', t: 'History and settings', p: 'Every entry shows under Spending, and you can tap one to name it. Settings is the round button at the top right, and that\'s also where you leave Simple mode.', last: true, startSimple: true },
+];
+const tourList = () => tourMode === 'simple' ? [TOUR[0], TOUR_CHOOSE, ...TOUR_SIMPLE] : tourMode === 'full' ? [TOUR[0], TOUR_CHOOSE, ...TOUR.slice(1)] : [TOUR[0], TOUR_CHOOSE];
 function tourHTML() {
-  const s = TOUR[tourStep], n = TOUR.length;
+  const L = tourList(), s = L[tourStep], n = L.length;
   return `<div class="tour-card">
-    <div class="tour-top"><span class="muted small">${tourStep + 1} / ${n}</span><button class="link small" data-tour="skip">skip tour</button></div>
+    <div class="tour-top"><span class="muted small">${s.choose ? '' : (tourStep + 1) + ' / ' + n}</span><button class="link small" data-tour="skip">skip tour</button></div>
     <div class="tour-emoji">${s.i}</div>
     <h2>${esc(s.t)}</h2>
     <div class="tour-text">${esc(s.p)}</div>
-    ${s.last ? '<div class="btn-row"><button class="btn" data-tour="motion">allow motion</button></div><div class="muted small" id="tourMotion"></div>' : ''}
-    <div class="tour-dots">${TOUR.map((_, k) => `<i class="${k === tourStep ? 'on' : ''}"></i>`).join('')}</div>
-    <div class="btn-row">${tourStep ? '<button class="btn" data-tour="back">back</button>' : ''}<button class="btn primary" data-tour="next">${s.last ? 'let\'s go' : 'next'}</button></div>
+    ${s.choose ? `<div class="tour-choice"><button class="btn primary" data-tour="pick" data-mode="simple">simple mode (recommended)</button><button class="btn" data-tour="pick" data-mode="full">full Ledgend</button></div>` : ''}
+    ${s.last && !s.startSimple ? '<div class="btn-row"><button class="btn" data-tour="motion">allow motion</button></div><div class="muted small" id="tourMotion"></div>' : ''}
+    ${s.choose ? '' : `<div class="tour-dots">${L.map((_, k) => `<i class="${k === tourStep ? 'on' : ''}"></i>`).join('')}</div>`}
+    <div class="btn-row">${tourStep ? '<button class="btn" data-tour="back">back</button>' : ''}${s.choose ? '' : `<button class="btn primary" data-tour="next">${s.last ? 'let\'s go' : 'next'}</button>`}</div>
   </div>`;
 }
 function tourShow(step) {
   tourStep = step || 0;
+  if (tourStep < 2) tourMode = null;                 // coming back to the choice (or the start) asks again
   let el = document.getElementById('tour');
-  if (!el) { el = document.createElement('div'); el.id = 'tour'; document.body.appendChild(el); el.addEventListener('click', tourClick); }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'tour'; document.body.appendChild(el); el.addEventListener('click', tourClick);
+    el.addEventListener('touchmove', e => { if (el.scrollHeight <= el.clientHeight + 1) e.preventDefault(); }, { passive: false });   // nothing to scroll: don't let the page behind move
+  }
+  document.documentElement.dataset.tour = '1';
   el.innerHTML = tourHTML();
 }
 function tourEnd() {
   try { localStorage.setItem(TOUR_KEY, '1'); } catch (e) { /* ignore */ }
   const el = document.getElementById('tour'); if (el) el.remove();
+  delete document.documentElement.dataset.tour;
 }
 function tourClick(e) {
   const b = e.target.closest('[data-tour]'); if (!b) return;
   const k = b.dataset.tour;
   if (k === 'skip') tourEnd();
   else if (k === 'back') tourShow(tourStep - 1);
-  else if (k === 'next') { if (tourStep >= TOUR.length - 1) tourEnd(); else tourShow(tourStep + 1); }
+  else if (k === 'pick') { tourMode = b.dataset.mode; tourShow(2); }
+  else if (k === 'next') { const L = tourList(); if (tourStep >= L.length - 1) { const sm = L[tourStep].startSimple; tourEnd(); if (sm) Simple.open(); } else tourShow(tourStep + 1); }
   else if (k === 'motion') {
     const note = document.getElementById('tourMotion');
     try {

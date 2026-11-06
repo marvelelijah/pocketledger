@@ -612,14 +612,12 @@ html[data-standalone] #hdr.bare { padding-top: env(safe-area-inset-top); }
 .emojisheet .day { position: sticky; top: 38px; background: var(--glass-hi); z-index: 1; margin: 10px 0 4px; padding: 2px 0; }
 
 /* ---------- simple mode: a separate mini-budget that sits over the app ---------- */
-html[data-simple] #app, html[data-simple] #tabbar, html[data-simple] #hdr, html[data-simple] #modal-root { visibility: hidden; }
-html[data-simple] body { overflow: hidden !important; }
+html[data-simple] #tabbar { display: none; }
+html[data-simple]:not([data-tab="settings"]) #app, html[data-simple]:not([data-tab="settings"]) #modal-root { visibility: hidden; }
+html[data-simple]:not([data-tab="settings"]) body { overflow: hidden !important; }
+html[data-simple][data-tab="settings"] #simple { display: none; }
 html[data-locked] #simple { visibility: hidden; }
-#simple { position: fixed; inset: 0; z-index: 500; display: flex; flex-direction: column; color: var(--fg); }
-#simple .sm-top { flex: none; padding: env(safe-area-inset-top) 20px 0; background: var(--tab-bg); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); border-bottom: 1px solid var(--edge); }
-html[data-standalone] #simple .sm-top { padding-top: calc(env(safe-area-inset-top) + 18px); }
-#simple .sm-bar { max-width: 640px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 8px 0; }
-#simple .sm-bar b { font-weight: 500; text-transform: lowercase; letter-spacing: .02em; }
+#simple { position: fixed; left: 0; right: 0; bottom: 0; top: var(--hdr-h, env(safe-area-inset-top)); z-index: 9; display: flex; flex-direction: column; color: var(--fg); }
 #simple .sm-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 16px 16px 24px; }
 #simple .sm-wrap { max-width: 640px; margin: 0 auto; }
 #simple .sm-tabs { flex: none; display: flex; background: var(--tab-bg); border-top: 1px solid var(--edge); box-shadow: var(--tab-sh); -webkit-backdrop-filter: blur(22px) saturate(1.5); backdrop-filter: blur(22px) saturate(1.5); padding: 8px 0 max(8px, calc(env(safe-area-inset-bottom) - 12px)); }
@@ -654,3 +652,11 @@ html[data-standalone] #simple .sm-top { padding-top: calc(env(safe-area-inset-to
 #simple .smpad .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0; }
 #simple .smpad .numpad .key { padding: 0; height: 56px; font-size: calc(24px * var(--ts, 1)); font-weight: 600; border-radius: 16px; touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 #simple .smpad .btn-row .btn { flex: 1 1 40%; }
+#simple .sm-why { margin: 10px 0 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); line-height: 1.5; color: var(--fg-dim); }
+#simple .sm-why.bad { border-color: color-mix(in srgb, var(--red) 60%, transparent); color: var(--fg); }
+#simple .sm-why b { color: var(--fg); }
+
+/* the opening tour and the lock screen stay put: nothing behind them scrolls or rubber-bands */
+html[data-tour] body, html[data-locked] body { overflow: hidden !important; }
+#tour, #lockov { overscroll-behavior: none; touch-action: pan-y; }
+.tour-choice { display: flex; flex-direction: column; gap: 10px; }

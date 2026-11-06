@@ -46,12 +46,12 @@
   function plan() {
     const earned = Math.max(num(D.budget.earned), 0);
     const exp = r2(D.budget.expenses.reduce((a, e) => a + Math.max(num(e.amount), 0), 0));
-    const left = Math.max(r2(earned - exp), 0);
+    const diff = r2(earned - exp), left = Math.max(diff, 0);
     const others = D.pots.filter(p => p.id !== 'spend');
     const shares = others.map(p => ({ id: p.id, pct: Math.max(num(p.percent), 0), amt: r2(left * Math.max(num(p.percent), 0) / 100) }));
     const totalPct = shares.reduce((a, s) => a + s.pct, 0);
     const spend = r2(left - shares.reduce((a, s) => a + s.amt, 0));
-    return { earned, exp, left, over: earned - exp < 0, shares, totalPct, spend, spendPct: Math.max(100 - totalPct, 0), bad: totalPct > 100 };
+    return { earned, exp, diff, left, over: diff < 0, shares, totalPct, spend, spendPct: Math.max(100 - totalPct, 0), bad: totalPct > 100 };
   }
   function applyPlan() {
     const p = plan();
@@ -73,7 +73,7 @@
   }
 
   /* ---------- screen ---------- */
-  const ui = { layer: null };   // layer: { type: 'pad'|'entry'|'pot', ... }
+  const V = { layer: null };   // layer: { type: 'pad'|'entry'|'pot', ... }
   let el = null;
   const barPrev = {};
   const money = n => usd(n);
@@ -113,15 +113,21 @@
       ${rows ? `<div class="card sm-hist">${rows}</div><div class="muted small sm-hint">Tap an entry to name it.</div>` : `<div class="empty"><b>Nothing yet</b>Tap Spending and type what you spent.</div>`}`;
   }
 
+  function whyHTML(p) {
+    if (p.earned <= 0) return '<div class="sm-why">Start with what you earned this month, then add the bills you pay every month. I\'ll show you how much to save and how much you can spend.</div>';
+    if (p.over) return `<div class="sm-why bad"><b>Your expenses are more than you earned.</b> You earned ${money(p.earned)} but your expenses add up to ${money(p.exp)}, so you're ${money(Math.abs(p.diff))} short and nothing is left to save or spend. Check that your earnings are right, or look for an expense you can lower or drop.</div>`;
+    if (p.bad) return `<div class="sm-why bad"><b>Those percentages add up to ${r2(p.totalPct)}%.</b> Only 100% of what's left can be shared out, so lower one of them. Spending gets whatever isn't given to a pot.</div>`;
+    return '';
+  }
   function outHTML() {
     const p = plan();
     const row = (l, v, cls) => `<div class="row sm-line ${cls || ''}"><span>${l}</span><b>${v}</b></div>`;
-    return `${row('Earned', money(p.earned))}${row('Expenses', '−' + money(p.exp))}${row('Left after expenses', money(p.left), p.over ? 'neg' : '')}
-      <div class="day">Where it goes</div>
+    const why = whyHTML(p);
+    return `${row('Earned', money(p.earned))}${row('Expenses', '−' + money(p.exp))}${row(p.over ? 'Short by' : 'Left after expenses', p.over ? '−' + money(Math.abs(p.diff)) : money(p.left), p.over ? 'neg' : '')}
+      ${why}
+      ${p.earned > 0 && !p.over && !p.bad ? `<div class="day">Where it goes</div>
       ${p.shares.map(s => { const pt = pot(s.id); return row(`${emoS(pt.icon)} ${esc(pt.name)} · ${r2(s.pct)}%`, '+' + money(s.amt)); }).join('')}
-      ${row(`${emoS(pot('spend').icon)} Spending · ${r2(p.spendPct)}%`, '+' + money(p.spend))}
-      ${p.over ? '<div class="small neg sm-note">Expenses are more than you earned.</div>' : ''}
-      ${p.bad ? '<div class="small neg sm-note">The percentages add up to more than 100.</div>' : ''}`;
+      ${row(`${emoS(pot('spend').icon)} Spending · ${r2(p.spendPct)}%`, '+' + money(p.spend))}` : ''}`;
   }
   function budgetHTML() {
     const b = D.budget;
@@ -143,22 +149,21 @@
 
   /* sheets */
   function layerHTML() {
-    const L = ui.layer;
+    const L = V.layer;
     if (!L) return '';
     if (L.type === 'pad') {
       const p = pot(L.id);
       return `<div class="scrim in" data-sm="scrim"><div class="sheet small smpad"><div class="grab"></div>
-        <div class="sheet-head"><b>${emoS(p.icon)} ${esc(p.name)} · ${money(p.balance)}</b><span><button class="link" data-sm="editpot">edit</button> <button class="link" data-sm="close">Cancel</button></span></div>
+        <div class="sheet-head"><b>${emoS(p.icon)} ${esc(p.name)} · ${money(p.balance)}</b><button class="link" data-sm="editpot">edit</button></div>
         <div class="sm-amt" id="sm-amt">${amtText(L.str)}</div>
         <div class="numpad">${'123456789'.split('').map(n => `<button type="button" class="btn key" data-key="${n}">${n}</button>`).join('')}<button type="button" class="btn key" data-key=".">.</button><button type="button" class="btn key" data-key="0">0</button><button type="button" class="btn key del" data-key="del">⌫</button></div>
-        <div class="btn-row"><button class="btn primary" data-sm="sub">− subtract</button><button class="btn" data-sm="plus">+ add</button></div>
-        <div class="btn-row" style="margin-top:2px"><button class="link" data-sm="setbal">set balance to this amount</button></div></div></div>`;
+        <div class="btn-row"><button class="btn" data-sm="plus">+ add</button><button class="btn primary" data-sm="sub">− subtract</button></div></div></div>`;
     }
     if (L.type === 'entry') {
       const e = D.log.find(x => x.id === L.id), p = e && pot(e.potId);
       if (!e) return '';
       return `<div class="scrim in" data-sm="scrim"><div class="sheet small"><div class="grab"></div>
-        <div class="sheet-head"><b>Entry</b><button class="link" data-sm="close">Cancel</button></div>
+        <div class="sheet-head"><b>Entry</b></div>
         <div class="row"><span>${p ? emoS(p.icon) + ' ' + esc(p.name) : ''}</span><b class="${e.amount < 0 ? '' : 'pos'}">${e.amount < 0 ? '−' : '+'}${money(Math.abs(e.amount))}</b></div>
         <div class="muted small" style="margin:2px 0 10px">${when(e.date)}</div>
         <input id="sm-name" placeholder="Name this (e.g. Lunch)" value="${esc(e.name)}" maxlength="60" autocapitalize="sentences" enterkeyhint="done">
@@ -167,7 +172,7 @@
     if (L.type === 'pot') {
       const core = L.id && pot(L.id) && pot(L.id).core;
       return `<div class="scrim in" data-sm="scrim"><div class="sheet small"><div class="grab"></div>
-        <div class="sheet-head"><b>${L.id ? 'Edit pot' : 'New pot'}</b><button class="link" data-sm="${L.id ? 'padback' : 'close'}">Cancel</button></div>
+        <div class="sheet-head"><b>${L.id ? 'Edit pot' : 'New pot'}</b></div>
         <div class="stack">
           <div class="field"><span class="muted">Name</span><input id="sm-pname" value="${esc(L.name)}" placeholder="Name" maxlength="24" data-sin="pname" autocapitalize="words"></div>
           <div class="field"><span class="muted">Icon</span><button class="btn" data-sm="pickicon" style="width:90px">${emoS(L.icon)}</button></div>
@@ -177,7 +182,7 @@
     }
     if (L.type === 'emoji') {
       return `<div class="scrim in" data-sm="scrim"><div class="sheet small emojisheet"><div class="grab"></div>
-        <div class="sheet-head"><b>Icon</b><button class="link" data-sm="emojiback">Cancel</button></div>
+        <div class="sheet-head"><b>Icon</b></div>
         ${EMOJI_GROUPS.map(([name, list]) => `<div class="day">${esc(name)}</div><div class="optgrid emojigrid" style="filter:${tint()}">${list.split(' ').map(e => `<button class="opt nohap ${e === L.pick.icon ? 'on' : ''}" data-sm="emoji" data-v="${e}">${e}</button>`).join('')}</div>`).join('')}
         </div></div>`;
     }
@@ -206,20 +211,19 @@
   function paintLayer() {
     const lay = el.querySelector('.sm-layer');
     lay.innerHTML = layerHTML();
-    if (ui.layer && ui.layer.type === 'entry') { const i = $('sm-name'); if (i) setTimeout(() => i.focus(), 60); }
+    if (V.layer && V.layer.type === 'entry') { const i = $('sm-name'); if (i) setTimeout(() => i.focus(), 60); }
   }
 
   function build() {
     el = document.createElement('div');
     el.id = 'simple';
-    el.innerHTML = `<div class="sm-top"><div class="sm-bar"><b>simple mode</b><button class="link" data-sm="exit">exit</button></div></div>
-      <div class="sm-main"></div>
+    el.innerHTML = `<div class="sm-main"></div>
       <nav class="sm-tabs"><button data-sm="tab" data-tab="pots"><span class="i">${emoS('💸')}</span>spending</button><button data-sm="tab" data-tab="budget"><span class="i">${emoS('🧾')}</span>budget</button></nav>
       <div class="sm-layer"></div>`;
     document.body.appendChild(el);
     el.addEventListener('pointerdown', e => {
       const k = e.target.closest && e.target.closest('[data-key]');
-      if (!k || !ui.layer || ui.layer.type !== 'pad') return;
+      if (!k || !V.layer || V.layer.type !== 'pad') return;
       e.preventDefault();
       key(k.dataset.key);
     });
@@ -228,12 +232,12 @@
     el.addEventListener('keydown', e => {
       if (e.key !== 'Enter' || !e.target.matches('input')) return;
       e.preventDefault();
-      if (ui.layer && ui.layer.type === 'entry') act('savename'); else e.target.blur();
+      if (V.layer && V.layer.type === 'entry') act('savename'); else e.target.blur();
     });
   }
 
   function key(k) {
-    const L = ui.layer; let s = L.str || '';
+    const L = V.layer; let s = L.str || '';
     if (k === 'del') s = s.slice(0, -1);
     else if (k === '.') { if (!s.includes('.')) s = (s || '0') + '.'; }
     else { const d = s.split('.')[1]; if ((s.includes('.') && d.length >= 2) || s.replace('.', '').length >= 9) return; s = s === '0' ? k : s + k; }
@@ -249,64 +253,58 @@
     else if (f === 'ename') { const x = D.budget.expenses.find(q => q.id === id); if (x) x.name = t.value; }
     else if (f === 'eamt') { const x = D.budget.expenses.find(q => q.id === id); if (x) x.amount = t.value; }
     else if (f === 'pct') { const x = pot(id); if (x) x.percent = t.value === '' ? 0 : num(t.value); }
-    else if (f === 'pname') ui.layer.name = t.value;
-    else if (f === 'pgoal') ui.layer.goal = t.value;
+    else if (f === 'pname') V.layer.name = t.value;
+    else if (f === 'pgoal') V.layer.goal = t.value;
     if (['earned', 'ename', 'eamt', 'pct'].includes(f)) { const o = $('sm-out'); if (o) o.innerHTML = outHTML(); }
     save();
   }
 
   function act(a, t) {
-    const L = ui.layer, id = t && t.dataset.id;
+    const L = V.layer, id = t && t.dataset.id;
     switch (a) {
-      case 'exit': close(); return;
       case 'tab': D.tab = t.dataset.tab; save(); paintMain(); return;
-      case 'pad': ui.layer = { type: 'pad', id, str: '' }; paintLayer(); return;
-      case 'close': case 'scrim': ui.layer = null; paintLayer(); return;
+      case 'pad': V.layer = { type: 'pad', id, str: '' }; paintLayer(); return;
+      case 'close': case 'scrim':
+        if (L && L.type === 'emoji') V.layer = L.pick; else if (L && L.type === 'pot' && L.id) V.layer = { type: 'pad', id: L.id, str: '' }; else V.layer = null;
+        paintLayer(); return;
       case 'sub': case 'plus': {
         const v = r2(num(L.str)); if (!(v > 0)) return;
         const p = pot(L.id), sign = a === 'sub' ? -1 : 1;
         p.balance = r2(p.balance + sign * v);
         addLog(p.id, sign * v, sign < 0 ? 'spend' : 'add');
-        save(); ui.layer = null; paintLayer(); paintMain(true); return;
+        save(); V.layer = null; paintLayer(); paintMain(true); return;
       }
-      case 'setbal': {
-        if (!L.str) return;
-        const v = r2(num(L.str)), p = pot(L.id), diff = r2(v - p.balance);
-        if (diff === 0) { ui.layer = null; paintLayer(); return; }
-        p.balance = v; addLog(p.id, diff, 'set');
-        save(); ui.layer = null; paintLayer(); paintMain(true); return;
-      }
-      case 'editpot': { const p = pot(L.id); ui.layer = { type: 'pot', id: p.id, name: p.name, icon: p.icon, goal: p.goal || '' }; paintLayer(); return; }
-      case 'padback': ui.layer = { type: 'pad', id: L.id, str: '' }; paintLayer(); return;
-      case 'addpot': ui.layer = { type: 'pot', id: null, name: '', icon: '🎯', goal: '' }; paintLayer(); return;
-      case 'pickicon': ui.layer = { type: 'emoji', pick: L }; paintLayer(); return;
-      case 'emoji': { const back = L.pick; back.icon = t.dataset.v; ui.layer = back; paintLayer(); return; }
-      case 'emojiback': ui.layer = L.pick; paintLayer(); return;
+      case 'editpot': { const p = pot(L.id); V.layer = { type: 'pot', id: p.id, name: p.name, icon: p.icon, goal: p.goal || '' }; paintLayer(); return; }
+      case 'padback': V.layer = { type: 'pad', id: L.id, str: '' }; paintLayer(); return;
+      case 'addpot': V.layer = { type: 'pot', id: null, name: '', icon: '🎯', goal: '' }; paintLayer(); return;
+      case 'pickicon': V.layer = { type: 'emoji', pick: L }; paintLayer(); return;
+      case 'emoji': { const back = L.pick; back.icon = t.dataset.v; V.layer = back; paintLayer(); return; }
+      case 'emojiback': V.layer = L.pick; paintLayer(); return;
       case 'savepot': {
         const name = (L.name || '').trim() || 'New pot', goal = Math.max(r2(num(L.goal)), 0);
         if (L.id) { const p = pot(L.id); p.name = name; p.icon = L.icon; p.goal = goal; }
         else D.pots.push({ id: uid(), name, icon: L.icon, balance: 0, goal, percent: 0, core: false });
-        save(); ui.layer = null; paintLayer(); paintMain(true); return;
+        save(); V.layer = null; paintLayer(); paintMain(true); return;
       }
       case 'delpot': {
         if (!L.confirm) { L.confirm = true; paintLayer(); return; }
         D.pots = D.pots.filter(p => p.id !== L.id); D.log = D.log.filter(e => e.potId !== L.id);
-        save(); ui.layer = null; paintLayer(); paintMain(true); return;
+        save(); V.layer = null; paintLayer(); paintMain(true); return;
       }
-      case 'entry': ui.layer = { type: 'entry', id }; paintLayer(); return;
+      case 'entry': V.layer = { type: 'entry', id }; paintLayer(); return;
       case 'savename': {
         const e = D.log.find(x => x.id === L.id), i = $('sm-name');
         if (e && i) { e.name = i.value.trim(); save(); }
-        ui.layer = null; paintLayer(); paintMain(true); return;
+        V.layer = null; paintLayer(); paintMain(true); return;
       }
       case 'undo': {
         const e = D.log.find(x => x.id === L.id);
         if (e) { const p = pot(e.potId); if (p) p.balance = r2(p.balance - e.amount); D.log = D.log.filter(x => x !== e); save(); }
-        ui.layer = null; paintLayer(); paintMain(true); return;
+        V.layer = null; paintLayer(); paintMain(true); return;
       }
       case 'addexp': { const x = { id: uid(), name: '', amount: '' }; D.budget.expenses.push(x); save(); paintMain(true); const i = el.querySelector(`[data-sin="ename"][data-id="${x.id}"]`); if (i) i.focus(); return; }
       case 'delexp': D.budget.expenses = D.budget.expenses.filter(x => x.id !== id); save(); paintMain(true); return;
-      case 'applyplan': if (applyPlan()) { D.tab = 'pots'; save(); paintMain(); } else { const o = $('sm-out'); if (o) { o.classList.remove('shake'); void o.offsetWidth; o.classList.add('shake'); } } return;
+      case 'applyplan': if (applyPlan()) { D.tab = 'pots'; save(); paintMain(); } else { const o = $('sm-out'); if (o) { o.classList.remove('shake'); void o.offsetWidth; o.classList.add('shake'); o.scrollIntoView({ block: 'center', behavior: 'smooth' }); } } return;
       case 'reset': {
         if (t.dataset.sure) { const tab = D.tab; D = fresh(); D.active = true; D.tab = tab; save(); paintMain(); return; }
         t.dataset.sure = '1'; t.textContent = 'tap again to erase simple mode'; setTimeout(() => { if (t.isConnected) { delete t.dataset.sure; t.textContent = 'reset simple mode'; } }, 3500); return;
@@ -325,16 +323,17 @@
     if (!el) build();
     D.active = true; save();
     root.dataset.simple = '1';
-    ui.layer = null;
+    V.layer = null;
+    try { if (ui.tab === 'settings') ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; render(); } catch (e) { /* the app redraws itself next time */ }
     paintMain(); paintLayer();
   }
   function close() {
     D.active = false; save();
     delete root.dataset.simple;
-    ui.layer = null;
+    V.layer = null;
     if (el) { el.remove(); el = null; }
     try { render(); } catch (e) { /* the app redraws itself next time */ }
   }
-  window.Simple = { open, close };
+  window.Simple = { open, close, active: () => !!D.active };
   if (D.active) open();
 })();
