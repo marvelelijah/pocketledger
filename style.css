@@ -586,9 +586,7 @@ html::after { animation: ambB 23s ease-in-out infinite alternate; }
 details.flipping { background: none !important; box-shadow: none !important; border-color: transparent !important; transition: none !important; }
 details.flipping::before { display: none !important; }
 
-/* the icon picker is a short fixed grid: nothing in it scrolls */
-.sheet.nogscroll { overflow: hidden; overscroll-behavior: none; touch-action: none; }
-.scrim[data-layer="picker"] .nogscroll ~ * { touch-action: none; }
+/* emoji picker: every emoji in one color, six to a row; the page behind stays put */
 
 /* The name/settings bar is a fixed glass block (same as the tab bar) that reaches up behind the status bar, so whatever iOS blurs up there is this block's own color,
    in light and dark. --hdr-h (set by the script) is its height. */
@@ -602,11 +600,13 @@ html[data-tone="light"] #hdr { box-shadow: 0 8px 24px -12px rgba(15,60,70,.3); }
 #hdr .topbar { max-width: 640px; margin: 0 auto; border-bottom: 0; padding: 8px 0; }
 html[data-locked] #hdr { visibility: hidden; }
 html.rain #hdr { filter: hue-rotate(var(--hue, 0deg)); }
-.emojipick { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
-.emojipick .chip { padding: 6px 9px; font-size: calc(18px * var(--ts, 1)); }
 /* number pad keys react the instant a finger lands */
 #lockov .numpad .key { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
 
 /* the iOS blur reaches below the status bar itself, so the name row sits a little lower, clear of it */
 html[data-standalone] #hdr { padding-top: calc(env(safe-area-inset-top) + 18px); }
 html[data-standalone] #hdr.bare { padding-top: env(safe-area-inset-top); }
+.sheet.emojisheet { max-height: 80vh; overscroll-behavior: contain; }
+.emojigrid { grid-template-columns: repeat(6, 1fr); gap: 4px; margin-bottom: 6px; }
+.emojigrid .opt { padding: 10px 0; font-size: calc(22px * var(--ts, 1)); line-height: 1.1; justify-content: center; }
+.emojisheet .day { position: sticky; top: 38px; background: var(--glass-hi); z-index: 1; margin: 10px 0 4px; padding: 2px 0; }

@@ -791,7 +791,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 p';
+const APP_VERSION = '2026-11-06 q';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -867,8 +867,7 @@ function settingsView() {
     ${(S.customCats || []).map(c => `<div class="field"><span>${emo(c.icon, (CATS[c.id] || {}).color)} ${esc(c.title)}</span><span class="hdr-r"><button class="chip ${c.deduct ? 'on' : ''}" data-action="catDed" data-id="${esc(c.id)}">${c.deduct ? 'deductible' : 'not deductible'}</button><button class="link danger small" data-action="catDel" data-id="${esc(c.id)}">delete</button></span></div>`).join('') || '<div class="muted small">None yet.</div>'}
     <div class="muted small" style="margin:12px 0 6px">New category</div>
     <div class="field"><span>Name</span><input class="wide" placeholder="e.g. Equipment" value="${esc(ui.newCat.title)}" data-change="newCatTitle" data-live="1" autocomplete="off" style="text-align:right"></div>
-    <div class="field"><span>Emoji</span><input class="wide" placeholder="🏷️" value="${esc(ui.newCat.icon)}" data-change="newCatIcon" data-live="1" autocomplete="off" style="text-align:right"></div>
-    <div class="emojipick">${CAT_EMOJIS.map(e => `<button class="chip ${ui.newCat.icon === e ? 'on' : ''}" data-action="catPickEmoji" data-pot="${e}">${e}</button>`).join('')}</div>
+    <div class="field"><span>Emoji</span>${selBtn('catIcon', '', '', 'width:90px')}</div>
     ${seg([['yes', 'Tax deductible'], ['no', 'Not deductible']], ui.newCat.deduct ? 'yes' : 'no', 'catNewDed')}
     <div class="btn-row"><button class="btn primary" data-action="catAdd">add category</button></div>
   ${CE}
@@ -1042,7 +1041,7 @@ function moveModal() {
 /* In-app replacements for the phone's own pop-up menus and alerts. */
 function selBtn(field, id, style, w) {
   const d = pickDef(field, id);
-  const cur = d && d.options.find(o => o[0] === d.current);
+  const cur = d && (d.emoji ? [d.current, emo(d.current || '🏷️')] : d.options.find(o => o[0] === d.current));
   return `<button class="sel" data-action="openSel" data-field="${field}" data-id="${esc(id)}" style="${[style, w].filter(Boolean).join(';')}">${cur ? cur[1] : '—'} <span class="muted">▾</span></button>`;
 }
 
@@ -1057,7 +1056,8 @@ function pickDef(field, id) {
     case 'adjTarget': return { title: 'Put it in', options: [...pots(), ['all', 'Split across all pots']], current: ui.adjTarget };
     case 'setcat': { const t = txById(id); return { title: 'Category', options: Object.entries(CATS).map(([k, v]) => [k, emo(v.icon, v.color) + ' ' + v.title]), current: t && t.category }; }
     case 'extraLabel': return { title: 'What was it?', options: ['Tips', 'Gift', 'Refund', 'Side gig', 'Other'].map(l => [l, l]), current: m && m.label };
-    case 'potIcon': return { title: 'Icon', grid: true, options: POT_ICONS.map(i => [i, emo(i)]), current: m && m.fields && m.fields.icon };
+    case 'potIcon': return { title: 'Icon', emoji: true, current: m && m.fields && m.fields.icon };
+    case 'catIcon': return { title: 'Emoji', emoji: true, current: ui.newCat.icon };
     case 'moveFrom': return { title: 'Move from', options: pots(), current: m && m.from };
     case 'moveTo': return { title: 'Move to', options: pots(), current: m && m.to };
     case 'startTab': return { title: 'Open on', options: TABS.map(t => [t[0], t[2]]), current: TAB_KEYS.includes(S.settings.startTab) ? S.settings.startTab : 'review' };
@@ -1075,7 +1075,16 @@ function pickDef(field, id) {
 function pickerHTML() {
   const p = ui.picker, d = pickDef(p.field, p.id);
   if (!d) return '';
-  return `<div class="scrim" data-layer="picker"><div class="sheet small ${d.grid ? 'nogscroll' : ''}">
+  if (d.emoji) {   // every emoji, in groups, all drawn in the theme's one color
+    const tint = tintFilter(SAGE);
+    return `<div class="scrim" data-layer="picker"><div class="sheet small emojisheet">
+    <div class="grab"></div>
+    <div class="sheet-head"><b>${d.title}</b><button class="link" data-action="closePick">Cancel</button></div>
+    ${EMOJI_GROUPS.map(([name, list]) => `<div class="day">${esc(name)}</div>
+      <div class="optgrid emojigrid" style="filter:${tint}">${list.split(' ').map(e => `<button class="opt nohap ${e === d.current ? 'on' : ''}" data-action="choose" data-v="${e}">${e}</button>`).join('')}</div>`).join('')}
+  </div></div>`;
+  }
+  return `<div class="scrim" data-layer="picker"><div class="sheet small">
     <div class="grab"></div>
     <div class="sheet-head"><b>${d.title}</b><button class="link" data-action="closePick">Cancel</button></div>
     <div class="${d.grid ? 'optgrid' : 'optlist'}">${d.options.map(([v, l]) =>
@@ -1750,7 +1759,6 @@ const ACTIONS = {
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
   setPalette: d => { S.settings.palette = d.pot; save(); themeFade(); return false; },
   setMode: d => { S.settings.mode = d.pot; save(); themeFade(); return false; },
-  catPickEmoji: d => { ui.newCat.icon = d.pot; },
   catNewDed: d => { ui.newCat.deduct = d.pot === 'yes'; },
   catAdd: () => {
     const n = ui.newCat;
@@ -1956,11 +1964,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|file)$/.test(e.target.type)) { e.preventDefault(); e.target.blur(); return; }   // Enter finishes whatever is being typed
 });
 
-/* Keeps only emoji (the first two), dropping letters, numbers and symbols. */
-function emojiOnly(s) {
-  const m = String(s || '').match(/\p{Extended_Pictographic}(?:\uFE0F|\u20E3|[\u{1F3FB}-\u{1F3FF}]|\u200D\p{Extended_Pictographic})*/gu) || [];
-  return m.slice(0, 2).join('');
-}
 function handleField(el, final) {
   const d = el.dataset;
   const v = el.type === 'checkbox' ? el.checked : el.value;
@@ -1994,7 +1997,7 @@ function handleField(el, final) {
     case 'defaultPot': S.settings.defaultPot = v; save(); return;
     case 'backupDays': S.settings.backupDays = +v; save(); return;
     case 'newCatTitle': ui.newCat.title = v; return;
-    case 'newCatIcon': { const e = emojiOnly(v); if (el.value !== e) el.value = e; ui.newCat.icon = e; return; }
+    case 'catIcon': ui.newCat.icon = v; return;
     case 'profileName': S.settings.name = v.trim().slice(0, 30); save(); if (final) render(); return;
     case 'countFrom': S.settings.countFrom = v || null; save(); return;
     case 'linkUrl': setLink(Object.assign(getLink(), { url: v.trim() })); return;
@@ -2161,7 +2164,7 @@ function hapticTrigger(el) {
   if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
   el.insertAdjacentElement('beforeend', label);
 }
-const HAPTIC_SEL = 'button, summary, [data-action]:not(input):not(select):not(textarea):not(label)';
+const HAPTIC_SEL = 'button:not(.nohap), summary, [data-action]:not(input):not(select):not(textarea):not(label):not(.nohap)';
 let hapticQueued = false;
 function hapticSweep() {
   hapticQueued = false;

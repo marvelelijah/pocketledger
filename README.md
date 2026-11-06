@@ -28,7 +28,7 @@ Nothing is sent anywhere to learn: the rules live in the app's storage on your p
 - **Dashboard:** your pots (Spending, Savings, and any you add), accounts grouped by bank, and totals for Earned, Spent and Deductible. Tap a pot for its balance, goal progress and every transaction in and out.
 - **Activity:** every transaction by day, searchable. Entries you add by hand can be edited or deleted.
 - **Budget:** income sources and this month's deposits, earnings, constant expenses, savings and goal percentages, and the result. *Apply* asks first and can be undone; updating a month replaces its numbers so nothing double counts. *Paste a list* reads expenses from text. Budget history lists each past month, and **Statements** shows a monthly report (income, spending habits, categories vs last month, top places, budget vs actual, goals, accounts and every transaction) you can save as a PDF, share or export as CSV. Statements are built on the device.
-- **Categories:** built-in plus your own (pick an emoji, mark it tax deductible).
+- **Categories:** built-in plus your own. Pot, goal and category icons come from one popup with every emoji in groups, drawn in the theme's single color.
 - **Make it rain:** applying a new budget ends with a "Make it rain!" button; shake the phone and dollar bills fall.
 
 ## Look and feel
@@ -49,6 +49,7 @@ Everything you enter lives in the browser on your phone. The web address serves 
 | File | What it is |
 | --- | --- |
 | `index.html`, `style.css` | The page and all styling (palettes, glass, motion) |
+| `emoji.js` | Every emoji, in groups, for the icon pickers |
 | `data.js` | Logic with no screen code: categories, name simplifier, learning, pots, income, budget, statements |
 | `app.js` | The screens and interactions |
 | `lock.js` | The optional app lock and number pad |
