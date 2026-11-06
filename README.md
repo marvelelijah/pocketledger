@@ -73,7 +73,7 @@ The profile button (top right) opens Settings: appearance (light, dark, auto and
 ## Latest changes
 - Four tabs (Review, Dashboard, Activity, Budget). Income sources and this month's deposits live in Budget. Windows in Budget and Settings can be collapsed and stay that way.
 - **Monthly statements:** when a month ends, Home shows a notification; Budget > Statements lists every month. Each has income, spending habits (per-day average, no-spend days, priciest day, weekday), categories vs last month, top places, budget vs actual, goal progress, pot balances, accounts and every transaction. Save as PDF, share, or CSV. Built on the device, sent nowhere. The demo has one ready.
-- **Security:** optional app lock (passcode, plus Face ID / Touch ID through the device's passkey check), auto-lock delay, passcode before backup/restore/erase/statement export, and hide-amounts. The passcode is stored only as a salted hash and is not in backups. The lock keeps people out of the app; it does not encrypt the stored data.
+- **Security:** optional app lock (passcode on an on-screen number pad), auto-lock delay, passcode before backup/restore/erase/statement export. The passcode is stored only as a salted hash and is not in backups. The lock keeps people out of the app; it does not encrypt the stored data.
 - **Currency:** follows the phone's region unless you pick one in Settings. Rounding is "Nearest $" (or your currency's symbol) or exact cents.
 - **Home-screen app:** solid status-bar strip, safe-area padding, edge swipe-back disabled. Icon: a teal pocket with an amber coin.
 - A **Finance** category covers Roth IRA, 401(k) and brokerage transfers.

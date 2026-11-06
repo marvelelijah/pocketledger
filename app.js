@@ -352,7 +352,7 @@ function potStrip() {
       ${g == null ? '' : `<div class="bar">${fill('pot-' + x.id, g * 100, 'background:' + potColor(i))}</div>`}
     </div>`;
   }).join('');
-  return `<div class="stick">${main}${others ? `<div class="prows">${others}</div>` : ''}</div>`;
+  return `<div class="stick-ph"></div><div class="stick">${topbar()}${main}${others ? `<div class="prows">${others}</div>` : ''}</div>`;
 }
 
 const KIND_LABEL = { checking: 'checking', credit: 'credit card', savings: 'savings', loan: 'loan', investment: 'investment' };
@@ -692,9 +692,7 @@ function backupCard() {
     <div class="btn-row"><button class="btn" data-action="copyCode">Copy code</button><button class="btn" data-action="export">Save file</button></div>
     <div class="day">Restore</div>
     <textarea id="restoreText" rows="3" placeholder="Paste your backup code (or the whole email) here"></textarea>
-    <div class="btn-row"><button class="btn" data-action="restoreCode">Restore from code</button><button class="btn" data-action="import">Import file</button></div>
-    <button class="btn full" style="margin-top:8px" data-action="restoreNotes">Bring back only my notes &amp; to-dos from this code</button>
-    <input type="file" id="importFile" accept="application/json,.json" hidden data-change="import">
+    <div class="btn-row"><button class="btn" data-action="restoreCode">Restore from code</button></div>
     <div class="muted small" style="margin-top:8px">Restoring replaces everything on this device. The code contains your financial data, so keep that email private and never post it online.</div>
   ${CE}`;
 }
@@ -841,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 j';
+const APP_VERSION = '2026-11-06 k';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -900,19 +898,14 @@ function settingsView() {
   ${CD('s-sec','Security',false)}
     ${lockOn() ? `
     <div class="field"><span>Passcode</span><button class="link" data-action="lockChange">change</button></div>
-    ${ui.bioAvail ? `<div class="muted small" style="margin:12px 0 6px">Face ID / Touch ID</div>
-    ${seg([['on', 'On'], ['off', 'Off']], lockCfg().cred ? 'on' : 'off', 'bioToggleSeg')}` : ''}
     <div class="field"><span>Lock after leaving</span>${selBtn('lockDelay', '')}</div>
     <div class="muted small" style="margin:12px 0 6px">Passcode for backup, restore, erase &amp; statements</div>
     ${seg([['on', 'On'], ['off', 'Off']], st.lockSensitive ? 'on' : 'off', 'setSens')}
     <div class="btn-row"><button class="btn" data-action="lockNow">lock now</button><button class="btn danger" data-action="lockOff">turn off lock</button></div>`
-    : `<div class="muted small" style="margin-bottom:8px">Ask for a passcode${ui.bioAvail ? ' or Face ID' : ''} each time the app opens.</div>
+    : `<div class="muted small" style="margin-bottom:8px">Ask for a passcode each time the app opens.</div>
     <div class="btn-row"><button class="btn primary" data-action="lockSetup">set up app lock</button></div>`}
-    <div class="muted small" style="margin:12px 0 6px">Hide amounts</div>
-    ${seg([['on', 'On'], ['off', 'Off']], st.hideAmounts ? 'on' : 'off', 'setHide')}
     <details class="info"><summary>Good to know</summary><div class="muted small">
       • The lock keeps people out of the app. Your data is not encrypted on the phone, so keep your phone's own passcode on too.<br>
-      • Face ID uses your phone's built-in check; the passcode always works as a backup.<br>
       • Forgot the passcode? It can't be recovered: erase this device and restore a backup.<br>
       • Backups never include the passcode.</div></details>
   ${CE}
@@ -1142,7 +1135,7 @@ function pickDef(field, id) {
 function pickerHTML() {
   const p = ui.picker, d = pickDef(p.field, p.id);
   if (!d) return '';
-  return `<div class="scrim" data-layer="picker"><div class="sheet small">
+  return `<div class="scrim" data-layer="picker"><div class="sheet small ${d.grid ? 'nogscroll' : ''}">
     <div class="grab"></div>
     <div class="sheet-head"><b>${d.title}</b><button class="link" data-action="closePick">Cancel</button></div>
     <div class="${d.grid ? 'optgrid' : 'optlist'}">${d.options.map(([v, l]) =>
@@ -1510,6 +1503,15 @@ function updateTabbar(active, tabChanged, n) {
   });
 }
 
+/* The pots at the top of Review are pinned (position: fixed, so scrolling never moves them); a spacer in the page keeps the rest of the content below them. */
+function layoutStick() {
+  const st = document.querySelector('.stick'), ph = document.querySelector('.stick-ph');
+  if (!st || !ph) return;
+  const top = parseFloat(getComputedStyle(st).top) || 0;
+  const docTop = ph.getBoundingClientRect().top + window.scrollY;
+  ph.style.height = Math.max(0, top + st.offsetHeight - docTop + 6) + 'px';
+}
+window.addEventListener('resize', layoutStick);
 function render() {
   RB = runningBalances();
   captureSegs();
@@ -1518,7 +1520,7 @@ function render() {
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
 
-  app.innerHTML = (ui.tab === 'settings' ? '' : topbar()) + VIEWS[ui.tab]();
+  app.innerHTML = (ui.tab === 'settings' || ui.tab === 'review' ? '' : topbar()) + VIEWS[ui.tab]();
   // remember what the live-patched areas currently show (see setHTMLIfChanged)
   if ($('disc-box')) $('disc-box').__html = discHTML(discrepancy(ui.checkMonth, ui.actual));
   if ($('actList')) $('actList').__html = activityListHTML();
@@ -1532,6 +1534,7 @@ function render() {
   ui.skipGhost = {};
   modalRoot.innerHTML = (ui.modal ? modalHTML() : '') + (ui.picker ? pickerHTML() : '') + (ui.dialog ? dialogHTML() : '');
   [...modalRoot.children].forEach(el => { if (!beforeNames.includes(el.dataset.layer)) el.classList.add('in'); });
+  layoutStick();
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
 
@@ -2297,7 +2300,7 @@ const TOUR = [
   { i: '🧾', t: 'Activity', p: 'Every purchase, searchable. Try words like "gas october" or ">50". Tap any purchase to fix its name, category or pot.' },
   { i: '📊', t: 'Budget', p: 'Once a month, line up your earnings, your expenses and how much to save, then apply the budget. It also shows when each goal would be reached, so nudging a percent up is satisfying.' },
   { i: '📄', t: 'Statements', p: 'When a month ends, it gets a statement with the original bank names, ready to save as a PDF. Tax-deductible categories are totaled for you, and you can make your own in Settings.' },
-  { i: '🔒', t: 'Yours alone', p: 'Your numbers live on this phone, not on a server. Turn on Face ID in Settings, and back up now and then, because I can\'t recover what I never had.' },
+  { i: '🔒', t: 'Yours alone', p: 'Your numbers live on this phone, not on a server. Turn on the app lock in Settings, and back up now and then, because I can\'t recover what I never had.' },
   { i: '📳', t: 'One last thing', p: 'When you finish a new budget there\'s a surprise that needs your phone\'s motion sensor. Allow it now and it\'s ready. For the best experience, add me to your Home Screen from the share menu.', last: true },
 ];
 let tourStep = 0;
@@ -2373,7 +2376,6 @@ function applySettings() {
   const st = S.settings, root = document.documentElement;
   const theme = themeKey();
   if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
-  HIDE_AMOUNTS = !!st.hideAmounts;
   root.dataset.theme = theme; root.dataset.palette = PALETTES.some(p => p[0] === st.palette) ? st.palette : 'harbor'; root.dataset.motion = st.motion; root.dataset.haptics = st.haptics === false ? 'off' : 'on';
   root.style.setProperty('--ts', st.textSize);
   depthSchedule();
@@ -2510,25 +2512,47 @@ document.addEventListener('click', e => {
   const before = d.offsetHeight;
   const follow = [];
   for (let n = d; n && n.id !== 'app' && n !== document.body; n = n.parentElement) for (let m = n.nextElementSibling; m; m = m.nextElementSibling) follow.push(m);
+  const cs = getComputedStyle(d);
+  const bw = parseFloat(cs.borderTopWidth) || 0, padB = parseFloat(cs.paddingBottom) || 0;
+  const closedH = sum.offsetHeight + parseFloat(cs.paddingTop) + padB + 2 * bw;
   let delta;
-  if (opening) { d.open = true; delta = d.offsetHeight - before; }
-  else {
-    const cs = getComputedStyle(d);
-    delta = before - (sum.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth));
-  }
+  if (opening) { d.open = true; delta = d.offsetHeight - before; } else delta = before - closedH;
   if (delta < 2) { d.open = opening; return; }
   d._busy = true;
-  const full = d.offsetHeight, keep = full - delta;   // height of the visible part at its smallest
+  const full = closedH + delta;
   const opt = { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' };
   const sign = opening ? -1 : 0, to = opening ? 0 : -1;
   const anims = follow.map(m => m.animate([{ transform: `translateY(${sign * delta}px)` }, { transform: `translateY(${to * delta}px)` }], opt));
-  const hide = `inset(-40px -40px ${delta}px -40px)`, show = 'inset(-40px -40px 0px -40px)';
-  anims.push(d.animate([{ clipPath: opening ? hide : show }, { clipPath: opening ? show : hide }], opt));
+  /* the window's own glass (background, edge, shadow) is drawn by a stand-in that grows or shrinks, so its rounded corners and shadow stay right the whole way */
+  const shell = document.createElement('div');
+  const hasChrome = d.classList.contains('coll');
+  if (hasChrome) {
+    shell.className = 'card flipshell';
+    shell.style.cssText = `top:${-bw}px;left:${-bw}px;right:${-bw}px;`;
+    d.insertBefore(shell, d.firstChild);
+    d.classList.add('flipping');
+    anims.push(shell.animate([{ height: (opening ? closedH : full) + 'px' }, { height: (opening ? full : closedH) + 'px' }], opt));
+  }
+  const body = d.querySelector(':scope > .coll-body') || sum.nextElementSibling;
+  const cut = Math.max(0, delta - padB - bw), hide = `inset(-12px -12px ${cut}px -12px)`, show = 'inset(-12px -12px 0px -12px)';
+  if (body) anims.push(body.animate([{ clipPath: opening ? hide : show }, { clipPath: opening ? show : hide }], opt));
+  // closing a window that was keeping the page long: glide the scroll up instead of letting the page snap at the end
+  let scrollAnim = 0;
+  if (!opening) {
+    const maxNow = document.documentElement.scrollHeight - window.innerHeight, maxNew = Math.max(0, maxNow - delta), y0 = window.scrollY;
+    if (y0 > maxNew + 1) {
+      const t0 = performance.now(), ease = t => 1 - Math.pow(1 - t, 4);
+      const step = now => { const t = Math.min(1, (now - t0) / 260); window.scrollTo(0, y0 + (maxNew - y0) * ease(t)); if (t < 1) scrollAnim = requestAnimationFrame(step); };
+      scrollAnim = requestAnimationFrame(step);
+    }
+  }
   let timer = 0;
   const finish = () => {
     clearTimeout(timer);
     if (!d._busy || d._anims !== anims) return; d._busy = false;
+    cancelAnimationFrame(scrollAnim);
     if (!opening) d.open = false;
+    d.classList.remove('flipping'); shell.remove();
     anims.forEach(x => x.cancel());
   };
   d._anims = anims;

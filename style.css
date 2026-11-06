@@ -228,7 +228,8 @@ textarea { resize: vertical; }
 .note { padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
 .note-prev { white-space: pre-line; max-height: 2.8em; overflow: hidden; }
 
-.stick { position: sticky; top: env(safe-area-inset-top); z-index: 4; margin: 0 -20px; padding: 6px 20px 2px; will-change: transform; }
+.stick { position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; z-index: 5; margin: 0 auto; max-width: 640px; box-sizing: border-box; padding: 6px 20px 2px; transform: translateZ(0); }
+.stick-ph { height: 0; }
 .spendbar { cursor: pointer; margin-bottom: 8px; background: var(--raise); }
 .spendbar .big { margin-top: 0; }
 .earn { padding: 8px 0; border-top: 1px solid var(--line); }
@@ -593,3 +594,20 @@ html::after { animation: ambB 23s ease-in-out infinite alternate; }
 html[data-standalone] body { padding-top: calc(env(safe-area-inset-top) + 6px); }
 @media (display-mode: standalone) { body { padding-top: calc(env(safe-area-inset-top) + 6px); } }
 html, body { min-height: 100vh; min-height: 100dvh; }
+
+/* passcode number pad */
+#lockov .lock-box { align-items: stretch; }
+#lockov .pin-field { padding: 10px 14px; border-radius: var(--r); border: 1px solid var(--line); background-color: var(--glass); }
+#lockov .pin-field.on { border-color: var(--edge); box-shadow: 0 0 0 1px var(--edge) inset; }
+#lockov .pin-dots { min-height: 26px; font-size: 18px; letter-spacing: .1em; color: var(--brand-text); line-height: 26px; }
+#lockov .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0; }
+#lockov .numpad .key { padding: 0; height: 58px; font-size: calc(24px * var(--ts, 1)); font-weight: 600; border-radius: 16px; }
+
+/* open/close stand-in for the window's glass */
+.flipshell { position: absolute !important; margin: 0 !important; padding: 0 !important; z-index: -1; pointer-events: none; overflow: visible; }
+details.flipping { background: none !important; box-shadow: none !important; border-color: transparent !important; }
+details.flipping::before { display: none !important; }
+
+/* the icon picker is a short fixed grid: nothing in it scrolls */
+.sheet.nogscroll { overflow: hidden; overscroll-behavior: none; touch-action: none; }
+.scrim[data-layer="picker"] .nogscroll ~ * { touch-action: none; }
