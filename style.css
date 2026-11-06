@@ -338,7 +338,7 @@ body { min-height: 100vh; min-height: 100dvh; overscroll-behavior-x: none; }
 html { scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; width: 0; height: 0; }
 body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
-input, textarea, .mono, .sheet, .dialog { -webkit-user-select: text; user-select: text; }
+input, textarea { -webkit-user-select: text; user-select: text; }
 .sheet button, .dialog button, .seg button, .chip { -webkit-user-select: none; user-select: none; }
 .sheet { overscroll-behavior: contain; }
 @media (hover: none) { .btn:hover { border-color: var(--line); color: var(--fg-dim); } .btn.primary:hover { border-color: var(--fg); color: var(--bg); } }
@@ -515,12 +515,11 @@ input[type="checkbox"] { accent-color: var(--brand); }
 .theme.on { border-color: var(--cta-text); box-shadow: 0 0 0 1px var(--cta-text); }
 @media (hover: none) { .btn:hover { border-color: var(--edge); color: var(--fg); } .btn.primary:hover { border-color: var(--cta); color: var(--on-cta); } }
 /* theme changes also glide on the tab bar, which is never rebuilt */
-#tabbar, #tabbar button, #tabbar .emo { transition: background-color .5s, border-color .5s, color .5s, filter .5s, transform .22s cubic-bezier(.2, .8, .2, 1); }
+#tabbar, #tabbar button { transition: background-color .5s, border-color .5s, color .5s, transform .22s cubic-bezier(.2, .8, .2, 1); }
+#tabbar .emo { transition: none; }
 
 .field > span.hdr-r { flex: none; }
 .hdr-r button { white-space: nowrap; }
-details.coll.anim, details.info.anim { transition: height .24s cubic-bezier(.2, .8, .2, 1); }
-details.info { overflow: clip; }
 
 /* make it rain */
 html.rain #app, html.rain #tabbar, html.rain .scrim { filter: hue-rotate(var(--hue, 0deg)); }
@@ -571,3 +570,26 @@ html::before { animation: ambA 17s ease-in-out infinite alternate; }
 html::after { animation: ambB 23s ease-in-out infinite alternate; }
 @keyframes ambA { from { translate: -34px -24px; } to { translate: 40px 30px; } }
 @keyframes ambB { from { translate: 44px 20px; } to { translate: -38px -34px; } }
+
+/* emoji: a little padding so the glyph is never clipped by its own box while its tint filter repaints (tab switches) */
+.emo { padding: .14em; margin: -.14em; }
+/* statements: keep the month and "so far" on one line */
+.stmt-row > span:first-child { white-space: nowrap; }
+/* add-pot tile lives in the pot grid: fills the empty square, or takes its own row */
+.grid2 .addtile { margin: 0; min-height: 52px; height: auto; align-self: stretch; }
+.grid2 .addtile:nth-child(odd) { grid-column: 1 / -1; }
+.grid2 + .btn { margin-top: 0; }
+/* only bank descriptions, dates and simplified names can be copied: tap them */
+.mono { -webkit-user-select: none; user-select: none; }
+.cp { cursor: pointer; -webkit-tap-highlight-color: transparent; border-radius: 6px; transition: background-color .2s; }
+.cp:active, .cp.flash { background-color: color-mix(in srgb, var(--brand) 22%, transparent); }
+#copied { position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translate(-50%, 10px); z-index: 80; padding: 8px 18px; border-radius: 999px; font-weight: 700; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; margin: 0; }
+#copied.on { opacity: 1; transform: translate(-50%, 0); }
+/* theme cross-fade */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: .45s; animation-timing-function: ease-in-out; }
+/* iPhone 16 / home-screen app: the home indicator needs far less room than the full safe-area inset, and the Dynamic Island strip needs less padding */
+#tabbar { padding-bottom: max(8px, calc(env(safe-area-inset-bottom) - 12px)); }
+#app { padding-bottom: calc(76px + max(8px, calc(env(safe-area-inset-bottom) - 12px))); }
+html[data-standalone] body { padding-top: calc(env(safe-area-inset-top) + 6px); }
+@media (display-mode: standalone) { body { padding-top: calc(env(safe-area-inset-top) + 6px); } }
+html, body { min-height: 100vh; min-height: 100dvh; }

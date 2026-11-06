@@ -114,8 +114,7 @@ function homeView() {
 
   ${(() => { const nk = newStatementKey(); return nk ? `<div class="card tappable notice" data-action="openStatement" data-id="${nk}"><div class="row"><b>${emo('📄')} ${esc(monthLabel(nk))} statement is ready</b><button class="link" data-action="dismissStatement" data-id="${nk}" aria-label="Dismiss">✕</button></div><div class="muted small">Spending habits, goal progress and every transaction. Tap to open, then save as PDF or share.</div></div>` : ''; })()}
   ${spendMain()}
-  <div class="grid2">${S.pots.filter(p => p.id !== 'spending').map(potCard).join('')}</div>
-  <button class="btn full dashed" data-action="addPot">＋ Add pot or goal</button>
+  <div class="grid2">${S.pots.filter(p => p.id !== 'spending').map(potCard).join('')}<button class="btn dashed addtile" data-action="addPot">＋ Add pot or goal</button></div>
 
   <div class="grid3" style="margin-top:12px">
     <div class="card tappable" data-action="tab" data-tab="budget"><div class="muted small">Earned</div><div class="stat pos" ${counted('earned', totalEarnings(now))}>${usd(totalEarnings(now))}</div></div>
@@ -614,7 +613,7 @@ function budgetView() {
   <div class="card row"><b style="font-size:17px">${monthName(now)}</b>
     <span class="badge ${run ? 'b-hi' : 'b-mid'}">${run ? 'Applied' : 'Not applied yet'}</span></div>
 
-  ${CD('i-src', 'Income sources', true)}
+  ${CD('i-src', 'Income', true)}
     ${S.incomeSources.map(s => {
       const got = receivedFrom(s, now), avg = sourceMonthlyAverage(s);
       const avgTxt = avg ? `<span class="muted small">avg ${usd(avg)}/mo</span>` : '';
@@ -632,7 +631,7 @@ function budgetView() {
     <div class="card tappable" style="margin:14px 0 0" data-action="openHist"><div class="row"><span>${emo('📈')} Income history</span><span class="muted">›</span></div></div>
   ${CE}
 
-  ${CD('b-earn', 'Earnings &amp; counted this month', true)}
+  ${CD('b-earn', 'Earnings', true)}
     ${c.rows.map(r => {
       const note = r.mode === 'expected' ? 'No deposit yet, using your expected amount'
         : r.mode === 'none' ? (S.incomeSources.find(x => x.id === r.sourceId).variable ? 'Nothing received this month' : 'Nothing received yet')
@@ -681,7 +680,7 @@ function budgetView() {
   ${historyCard()}
 
   ${CD('b-stmt', 'Statements', false)}
-    ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small">${usd(st.income)} in · ${usd(st.spent)} out</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
+    ${statementKeys().map(k => { const st = monthStatement(k); return `<button class="link full stmt-row" data-action="openStatement" data-id="${k}"><span>${esc(st.label)}${st.partial ? ' · so far' : ''}</span><span class="muted small nowrap">›</span></button>`; }).join('') || '<div class="muted">Statements appear once you have a month of purchases.</div>'}
   ${CE}`;
 }
 
@@ -828,7 +827,13 @@ function readableOn(hex, bgs, dark) {
 const PALETTES = [['harbor', 'Harbor', '#7fccd7', '#ffb347'], ['dune', 'Dune', '#dc9e7a', '#5cceeb'], ['graphite', 'Graphite', '#97a5bf', '#ffbc47'], ['plum', 'Plum', '#c888d7', '#ff997a']];
 const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 const themeKey = () => { const m = S.settings.mode; return m === 'light' ? 'light' : m === 'auto' ? (darkQuery && !darkQuery.matches ? 'light' : 'dark') : 'dark'; };
-if (darkQuery) darkQuery.addEventListener('change', () => { if (S.settings.mode === 'auto') applySettings(); });
+/* Theme and light/dark changes cross-fade the whole screen (View Transitions) instead of snapping. */
+function themeFade() {
+  const go = () => { applySettings(); render(); };
+  if (document.startViewTransition && !motionOff()) { try { document.startViewTransition(go); return; } catch (e) { /* fall through */ } }
+  go();
+}
+if (darkQuery) darkQuery.addEventListener('change', () => { if (S.settings.mode === 'auto') themeFade(); });
 
 function linkStatus() {
   if (S.settings.linked) return ['linked', 'b-hi'];
@@ -836,7 +841,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 i';
+const APP_VERSION = '2026-11-06 j';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -994,17 +999,17 @@ function txModal(id) {
   return sheet('Transaction', `
     <div class="card hero">
       <div class="amt-big ${t.amount > 0 ? 'pos' : ''}" ${counted('hero-' + t.id, t.amount)}>${usd(t.amount)}</div>
-      <div style="font-weight:700;margin-top:4px">${esc(t.simpleName)}</div>
+      <div class="cp" data-copy="${esc(t.simpleName)}" style="font-weight:700;margin-top:4px">${esc(t.simpleName)}</div>
       <span class="pill" style="color:${c.color};border-color:${c.color}">${emo(c.icon, c.color)} ${c.title}</span>
     </div>
     <div class="card"><h2>Original</h2>
-      <div class="field"><span class="muted">Bank description</span><div class="mono" style="max-width:62%">${esc(t.rawName)}</div></div>
-      <div class="field"><span class="muted">Date &amp; time</span><div style="text-align:right">${fmtFull(t.date)}</div></div>
+      <div class="field"><span class="muted">Bank description</span><div class="mono cp" data-copy="${esc(t.rawName)}" style="max-width:62%">${esc(t.rawName)}</div></div>
+      <div class="field"><span class="muted">Date &amp; time</span><div class="cp" data-copy="${esc(fmtFull(t.date))}" style="text-align:right">${fmtFull(t.date)}</div></div>
       <div class="field"><span class="muted">Account</span><div>${esc(accountName(t.accountID))}</div></div>
       ${String(t.id).startsWith('man-') ? `<button class="btn full" style="margin-top:8px" data-action="editTx" data-id="${esc(t.id)}">Edit</button>` : ''}
     </div>
     <div class="card"><h2>How it was read</h2>
-      <div class="field"><span class="muted">Simplified as</span><div style="text-align:right">${esc(t.simpleName)}</div></div>
+      <div class="field"><span class="muted">Simplified as</span><div class="cp" data-copy="${esc(t.simpleName)}" style="text-align:right">${esc(t.simpleName)}</div></div>
       <div class="row"><span class="muted">Confidence</span>${badge(t)}</div>
       <div class="bar">${fill('conf-' + t.id, t.userConfirmed ? 100 : bar)}</div>
       ${t.why ? `<div class="muted small" style="margin-bottom:6px">${esc(t.why)}.</div>` : ''}
@@ -1813,8 +1818,8 @@ const ACTIONS = {
     if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
   },
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
-  setPalette: d => { S.settings.palette = d.pot; save(); applySettings(); },
-  setMode: d => { S.settings.mode = d.pot; save(); applySettings(); },
+  setPalette: d => { S.settings.palette = d.pot; save(); themeFade(); return false; },
+  setMode: d => { S.settings.mode = d.pot; save(); themeFade(); return false; },
   catNewDed: d => { ui.newCat.deduct = d.pot === 'yes'; },
   catAdd: () => {
     const n = ui.newCat;
@@ -2474,34 +2479,61 @@ function endDrag() {
 document.addEventListener('touchend', endDrag);
 document.addEventListener('touchcancel', endDrag);
 
-/* Windows open and close by sliding their height (one CSS transition between two measured heights, nothing re-rendered meanwhile). */
+/* Tap a bank description, date or simplified name to copy it (for searching in the app). Nothing else in the app is selectable. */
+let copiedTimer = 0;
+document.addEventListener('click', async e => {
+  const el = e.target.closest && e.target.closest('.cp[data-copy]');
+  if (!el) return;
+  const text = el.dataset.copy;
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (err) {
+    try { const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(ta); ta.select(); ok = document.execCommand('copy'); ta.remove(); } catch (e2) { /* nothing to do */ }
+  }
+  let t = document.getElementById('copied');
+  if (!t) { t = document.createElement('div'); t.id = 'copied'; t.className = 'card'; document.body.appendChild(t); }
+  t.textContent = ok ? 'Copied' : 'Couldn\u2019t copy';
+  t.classList.add('on'); el.classList.add('flash');
+  clearTimeout(copiedTimer);
+  copiedTimer = setTimeout(() => { t.classList.remove('on'); el.classList.remove('flash'); }, 1100);
+});
+
+/* Windows open and close without re-laying-out every frame: the page snaps to its final layout and everything below is slid
+   into place with a transform (FLIP), while the window itself is revealed or hidden with a clip. Nothing is re-measured mid-animation. */
 document.addEventListener('click', e => {
   const sum = e.target.closest && e.target.closest('details.coll > summary, details.info > summary');
   if (!sum) return;
   const d = sum.parentElement;
   e.preventDefault();
   if (d._busy) return;
-  if (motionOff()) { d.open = !d.open; return; }
-  const cs = getComputedStyle(d);
-  const closedH = sum.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  if (motionOff() || !d.animate) { d.open = !d.open; return; }
   const opening = !d.open;
-  let from, to;
-  if (opening) { from = d.offsetHeight; d.open = true; to = d.offsetHeight; }
-  else { from = d.offsetHeight; to = closedH; }
-  if (Math.abs(from - to) < 2) { d.open = opening; return; }
+  const before = d.offsetHeight;
+  const follow = [];
+  for (let n = d; n && n.id !== 'app' && n !== document.body; n = n.parentElement) for (let m = n.nextElementSibling; m; m = m.nextElementSibling) follow.push(m);
+  let delta;
+  if (opening) { d.open = true; delta = d.offsetHeight - before; }
+  else {
+    const cs = getComputedStyle(d);
+    delta = before - (sum.offsetHeight + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom) + parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth));
+  }
+  if (delta < 2) { d.open = opening; return; }
   d._busy = true;
-  d.style.height = from + 'px'; d.style.overflow = 'hidden';
-  void d.offsetHeight;
-  d.classList.add('anim');
-  d.style.height = to + 'px';
-  let done = false;
-  const end = () => {
-    if (done) return; done = true;
-    d.classList.remove('anim'); d.style.height = ''; d.style.overflow = ''; d._busy = false;
+  const full = d.offsetHeight, keep = full - delta;   // height of the visible part at its smallest
+  const opt = { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' };
+  const sign = opening ? -1 : 0, to = opening ? 0 : -1;
+  const anims = follow.map(m => m.animate([{ transform: `translateY(${sign * delta}px)` }, { transform: `translateY(${to * delta}px)` }], opt));
+  const hide = `inset(-40px -40px ${delta}px -40px)`, show = 'inset(-40px -40px 0px -40px)';
+  anims.push(d.animate([{ clipPath: opening ? hide : show }, { clipPath: opening ? show : hide }], opt));
+  let timer = 0;
+  const finish = () => {
+    clearTimeout(timer);
+    if (!d._busy || d._anims !== anims) return; d._busy = false;
     if (!opening) d.open = false;
+    anims.forEach(x => x.cancel());
   };
-  d.addEventListener('transitionend', ev => { if (ev.target === d && ev.propertyName === 'height') end(); });
-  setTimeout(end, 400);
+  d._anims = anims;
+  anims[anims.length - 1].onfinish = finish;
+  timer = setTimeout(finish, 600);
 });
 document.addEventListener('toggle', e => {
   const d = e.target;
