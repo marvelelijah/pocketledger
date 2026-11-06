@@ -113,7 +113,7 @@ function forgotFlow() {
   askPass({ title: 'erase', sub: 'The passcode can\'t be recovered. This erases everything on this device so you can start over (restore a backup afterwards). Tap erase to confirm.',
     fields: [], ok: 'erase', cancel: true }).then(res => {
     if (!res) { locked = false; lockNow(); return; }
-    try { localStorage.removeItem('pocketledger.v1'); localStorage.removeItem(LOCK_KEY); } catch (e) { /* ignore */ }
+    try { localStorage.removeItem('pocketledger.v1'); localStorage.removeItem('pocketledger.simple.v1'); localStorage.removeItem(LOCK_KEY); } catch (e) { /* ignore */ }
     location.reload();
   });
 }

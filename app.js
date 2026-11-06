@@ -792,7 +792,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 u';
+const APP_VERSION = '2026-11-06 v';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1565,7 +1565,7 @@ function closeModal() {
 }
 
 async function exportData() {
-  const json = JSON.stringify(S, null, 2);
+  const json = JSON.stringify(withSimple(S), null, 2);
   const name = 'ledgend-backup-' + new Date().toISOString().slice(0, 10) + '.json';
   try {
     const file = new File([json], name, { type: 'application/json' });
@@ -1624,7 +1624,7 @@ async function copyConn() {
   render();
 }
 function useConn() {
-  const box = $('connText'), m = /PLC1:([A-Za-z0-9+\/=]+)/.exec(box ? box.value : '');
+  const box = $('connText'), m = /PLC1:([A-Za-z0-9+\/=]+)/i.exec(box ? box.value : '');
   try {
     const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
     if (!/^https:\/\//i.test(o.u || '') || !o.p) throw new Error('bad');
@@ -1641,6 +1641,8 @@ async function restoreCode() {
   try {
     const obj = await decodeBackup(box ? box.value : '');
     askType('Replace everything on this device with this backup?', 'RESTORE', 'restore backup', () => {
+      if (obj.simpleMode && typeof Simple !== 'undefined') Simple.restore(obj.simpleMode);
+      delete obj.simpleMode;
       replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null;
       askAlert('Backup restored.');
     });
@@ -1785,7 +1787,7 @@ const ACTIONS = {
     startFresh(); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.linkMsg = 'Transactions cleared.';
   }),
   eraseAll: () => askType('Erase everything stored on this device? This cannot be undone. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'ERASE', 'erase everything', () => {
-    eraseEverything(); setLink({}); ui.linkItems = null; ui.linkMsg = ''; ui.tab = 'review'; applySettings(); doSync();
+    eraseEverything(); if (typeof Simple !== 'undefined') Simple.erase(); setLink({}); ui.linkItems = null; ui.linkMsg = ''; ui.tab = 'review'; applySettings(); doSync();
   }),
   checkLink: () => { checkLink(); return false; },
   linkBank: () => {

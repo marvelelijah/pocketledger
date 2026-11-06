@@ -1237,8 +1237,10 @@ async function pipeBytes(bytes, stream) {
   return new Uint8Array(buf);
 }
 
+/* Simple mode keeps its own data; a backup carries it along so restoring brings both back. */
+const withSimple = st => (typeof Simple !== 'undefined' && Simple.snapshot) ? Object.assign({}, st, { simpleMode: Simple.snapshot() }) : st;
 async function encodeBackup(state) {
-  const raw = new TextEncoder().encode(JSON.stringify(state || S));
+  const raw = new TextEncoder().encode(JSON.stringify(withSimple(state || S)));
   if (typeof CompressionStream !== 'undefined') {
     try { return 'PL1:' + bytesToB64(await pipeBytes(raw, new CompressionStream('gzip'))) + '~'; } catch (e) { /* fall through */ }
   }
@@ -1247,11 +1249,11 @@ async function encodeBackup(state) {
 
 /* Accepts a whole email: finds the code inside it, ignoring line breaks. Returns the parsed state or throws. */
 async function decodeBackup(text) {
-  const m = /(PL[01]):([A-Za-z0-9+\/=\s]+)~/.exec(String(text));
+  const m = /(PL[01]):([A-Za-z0-9+\/=\s]+)~/i.exec(String(text));
   if (!m) throw new Error('No backup code found');
   const bytes = b64ToBytes(m[2].replace(/\s+/g, ''));
   let raw = bytes;
-  if (m[1] === 'PL1') {
+  if (m[1].toUpperCase() === 'PL1') {
     if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot read compressed codes');
     raw = await pipeBytes(bytes, new DecompressionStream('gzip'));
   }

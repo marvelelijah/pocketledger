@@ -20,18 +20,18 @@
     log: [],                                                    // { id, potId, amount (+ in, - out), name, date, kind: spend | add | set | budget }
     budget: { earned: '', expenses: [], applied: null },        // applied: { key, entries: [log ids] }
   });
-  function load() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(KEY));
-      if (raw && Array.isArray(raw.pots)) {
-        const s = Object.assign(fresh(), raw);
-        s.budget = Object.assign(fresh().budget, raw.budget || {});
-        if (!s.pots.some(p => p.id === 'spend')) s.pots.unshift(fresh().pots[0]);
-        if (!s.pots.some(p => p.id === 'save')) s.pots.splice(1, 0, fresh().pots[1]);
-        return s;
-      }
-    } catch (e) { /* first run, or storage unavailable */ }
+  function norm(raw) {
+    if (raw && Array.isArray(raw.pots)) {
+      const s = Object.assign(fresh(), raw);
+      s.budget = Object.assign(fresh().budget, raw.budget || {});
+      if (!s.pots.some(p => p.id === 'spend')) s.pots.unshift(fresh().pots[0]);
+      if (!s.pots.some(p => p.id === 'save')) s.pots.splice(1, 0, fresh().pots[1]);
+      return s;
+    }
     return fresh();
+  }
+  function load() {
+    try { return norm(JSON.parse(localStorage.getItem(KEY))); } catch (e) { return fresh(); }   // first run, or storage unavailable
   }
   let D = load();
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { /* private mode: it just won't persist */ } };
@@ -337,6 +337,10 @@
     if (el) { el.remove(); el = null; }
     try { render(); } catch (e) { /* the app redraws itself next time */ }
   }
-  window.Simple = { open, close, active: () => !!D.active };
+  /* for backups: everything Simple mode holds, and putting it back (staying in or out of simple mode as you are now) */
+  function snapshot() { return JSON.parse(JSON.stringify(D)); }
+  function restore(data) { const was = D.active; D = norm(data); D.active = was; save(); if (el) { V.layer = null; paintMain(); paintLayer(); } }
+  function erase() { D = fresh(); try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } delete root.dataset.simple; if (el) { el.remove(); el = null; } }
+  window.Simple = { open, close, active: () => !!D.active, snapshot, restore, erase };
   if (D.active) open();
 })();
