@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
-<meta name="theme-color" content="#1c1a2e">
+<meta name="theme-color" content="#0d1b1e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PocketLedger">
-<script>try{var d=document.documentElement;if(localStorage.getItem("pocketledger.lock"))d.dataset.locked="1";var dm=localStorage.getItem("pocketledger.demo")==="1",s=(JSON.parse(localStorage.getItem(dm?"pocketledger.demo.v1":"pocketledger.v1"))||{}).settings||{};d.dataset.theme=(s.palette||"vice")+"-dark";d.dataset.corners=s.corners||"rounded"}catch(e){}</script>
+<script>try{var d=document.documentElement;if(localStorage.getItem("pocketledger.lock"))d.dataset.locked="1";var dm=localStorage.getItem("pocketledger.demo")==="1",s=(JSON.parse(localStorage.getItem(dm?"pocketledger.demo.v1":"pocketledger.v1"))||{}).settings||{};var m=s.mode||"dark";d.dataset.palette=s.palette||"harbor";d.dataset.theme=m==="light"||(m==="auto"&&window.matchMedia&&!matchMedia("(prefers-color-scheme: dark)").matches)?"light":"dark"}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" href="icon-180.png">

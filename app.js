@@ -22,7 +22,7 @@ const monthName = d => d.toLocaleString('en-US', { month: 'long', year: 'numeric
 const monthLabel = key => { const [y, m] = key.split('-').map(Number); return monthName(new Date(y, m - 1, 1)); };
 
 /* Emoji, tinted to a color so they sit in the palette instead of shouting. */
-let SAGE = '#f2a488', DIM = '#a29fc0';
+let SAGE = '#62bcc6', DIM = '#9ab8bc';
 let ACC = {};   // the theme's accent colors as hex
 const tintCache = {};
 function tintFilter(hex) {
@@ -814,7 +814,6 @@ function topbar() {
     <button class="profile" data-action="openSettings" aria-label="Settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}</button></div>`;
 }
 
-const PALETTES = [["terminal", "Terminal", ["#18201c", "#2a362e", "#84a68e", "#cce5c6", "#e5e0d6"]], ["tannhauser", "Tannhauser", ["#a30502", "#f78b04", "#2b1718", "#153a42", "#027f93"]], ["mono", "Mono", ["#ffffff", "#999999", "#666666", "#333333", "#000000"]], ["icedancer", "Icedancer", ["#f2f2f3", "#8ec2f7", "#1149bc", "#fcd7fa", "#fc7288"]], ["vice", "Vice", ["#feda84", "#ff9b83", "#976393", "#685489", "#43457f"]], ["unit01", "Unit-01", ["#c7fba5", "#adf182", "#916cad", "#523874", "#dc7d68"]]];
 /* WCAG 2.x contrast: nudge a colour lighter or darker until it reads on the current background. */
 const lumOf = hex => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const ratio = (a, b) => { const x = lumOf(a), y = lumOf(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
@@ -831,7 +830,10 @@ function readableOn(hex, bgs, dark) {
   }
   return '#' + [r, g, b].map(v => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('');
 }
-const themeKey = () => (PALETTES.some(p => p[0] === S.settings.palette) ? S.settings.palette : 'terminal') + '-dark';
+const PALETTES = [['harbor', 'Harbor', '#7fccd7', '#ffb347'], ['dune', 'Dune', '#dc9e7a', '#5cceeb'], ['graphite', 'Graphite', '#97a5bf', '#ffbc47'], ['plum', 'Plum', '#c888d7', '#ff997a']];
+const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+const themeKey = () => { const m = S.settings.mode; return m === 'light' ? 'light' : m === 'auto' ? (darkQuery && !darkQuery.matches ? 'light' : 'dark') : 'dark'; };
+if (darkQuery) darkQuery.addEventListener('change', () => { if (S.settings.mode === 'auto') applySettings(); });
 
 function linkStatus() {
   if (S.settings.linked) return ['linked', 'b-hi'];
@@ -839,7 +841,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 c';
+const APP_VERSION = '2026-11-06 f';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -865,7 +867,7 @@ function settingsView() {
     <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
     ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : (syncDetail ? `<div class="muted small" style="margin-top:8px">${esc(syncDetail)}</div>` : '')}
     ${linkConfigured() ? `<div class="btn-row" style="margin-top:8px"><button class="btn" data-action="copyConn">copy connection code</button></div>` : `<div class="stack" style="margin-top:8px"><textarea id="connText" rows="2" placeholder="Paste a connection code here (starts with PLC1:)"></textarea><button class="btn primary" data-action="useConn">use connection code</button></div>`}
-    <details class="info"><summary>${linkConfigured() ? 'Show address and passphrase' : 'Or type the address and passphrase'}</summary><div class="stack" style="margin-top:8px">
+    <details class="info" data-k="linkedit" ${!linkConfigured() || ui.linkEdit ? 'open' : ''}><summary>${linkConfigured() ? 'Show address and passphrase' : 'Or type the address and passphrase'}</summary><div class="stack" style="margin-top:8px">
       <input id="linkUrl" placeholder="Link server address" value="${esc(link.url || '')}" data-change="linkUrl" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
       <input id="linkPass" type="password" placeholder="passphrase" value="${esc(link.passphrase || '')}" data-change="linkPass" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
     </div></details>
@@ -925,16 +927,15 @@ function settingsView() {
     <div class="btn-row"><button class="btn primary" data-action="catAdd">add category</button></div>
   ${CE}
 
-  ${CD('s-look','Theme',false)}
-    <div class="themes">${PALETTES.map(([k, n, dots]) => `<button class="theme ${st.palette === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots">${dots.map(c => `<i style="background-color:${c}"></i>`).join('')}</span>${n}</button>`).join('')}</div>
-    <div class="muted small" style="margin:12px 0 6px">Corners</div>
-    ${seg([['sharp', 'Sharp'], ['rounded', 'Rounded']], st.corners || 'sharp', 'setCorners')}
-    <div class="muted small" style="margin:12px 0 6px">App icon</div>
-    <div class="igrid">${ICONS.map(([k, n]) => `<button class="iprev ${(st.appIcon || 'classic') === k ? 'on' : ''}" data-action="setIcon" data-pot="${k}"><img src="${iconURL(k, 120)}" alt="" width="60" height="60"><span class="small">${n}</span></button>`).join('')}</div>
-    <div class="muted small" style="margin-top:8px">The Home Screen picks up its icon when the app is added. To switch: pick one here, delete PocketLedger from your Home Screen, open this page in Safari, then Share → Add to Home Screen. Or save the image and use it with a Shortcut.</div>
-    <div class="btn-row"><button class="btn" data-action="saveIcon">save icon image</button></div>
+  ${CD('s-look','Appearance',false)}
+    <div class="muted small" style="margin:0 0 6px">Mode</div>
+    ${seg([['light', 'Light'], ['dark', 'Dark'], ['auto', 'Auto']], st.mode || 'dark', 'setMode')}
+    <div class="muted small" style="margin:12px 0 6px">Colors</div>
+    <div class="themes">${PALETTES.map(([k, n, c1, c2]) => `<button class="theme ${(st.palette || 'harbor') === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots"><i style="background:${c1}"></i><i style="background:${c2}"></i></span>${n}</button>`).join('')}</div>
     <div class="muted small" style="margin:12px 0 6px">Text size</div>
     ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
+    <div class="muted small" style="margin:12px 0 6px">Depth motion <span class="muted">(background drifts as you scroll and tilt)</span></div>
+    ${seg([['on', 'on'], ['off', 'off']], st.parallax === false ? 'off' : 'on', 'setParallax')}
     <div class="muted small" style="margin:12px 0 6px">Animations</div>
     ${seg([['auto', 'on'], ['off', 'off']], st.motion, 'setMotion')}
   ${CE}
@@ -1658,6 +1659,7 @@ async function copyCode() {
 
 /* A separate, tiny code that holds only the server address and passphrase, for keeping in a password manager. Never part of a backup. */
 const connCode = () => { const l = getLink(); return 'PLC1:' + btoa(unescape(encodeURIComponent(JSON.stringify({ u: l.url || '', p: l.passphrase || '' })))) + '~'; };
+document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.k === 'linkedit') ui.linkEdit = d.open; }, true);
 async function copyConn() {
   const code = connCode();
   try { await navigator.clipboard.writeText(code); askAlert('Connection code copied. Keep it in your password manager, not in the same email as a backup.'); }
@@ -1802,8 +1804,6 @@ function openPotEdit(id) {
 
 const ACTIONS = {
   demoOn: () => askConfirm('Start the demo? It shows made-up numbers. Your real data stays safe and comes back when you exit.', 'start demo', () => { try { localStorage.removeItem(TOUR_KEY); } catch (e) { /* ignore */ } setDemo(true); location.reload(); }),
-  setIcon: d => { S.settings.appIcon = d.pot; save(); applyIcon(); },
-  saveIcon: () => { iconBlob(S.settings.appIcon || 'classic', 512).then(b => b && shareFile('pocketledger-icon.png', 'image/png', b, 'PocketLedger icon')); return false; },
   setHaptics: d => { S.settings.haptics = d.pot === 'on'; save(); applySettings(); if (d.pot === 'on') haptic(); },
   showTour: () => { tourShow(0); return false; },
   demoOff: () => { setDemo(false); location.reload(); },
@@ -1827,7 +1827,7 @@ const ACTIONS = {
   },
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
   setPalette: d => { S.settings.palette = d.pot; save(); applySettings(); },
-  setCorners: d => { S.settings.corners = d.pot; save(); applySettings(); },
+  setMode: d => { S.settings.mode = d.pot; save(); applySettings(); },
   catNewDed: d => { ui.newCat.deduct = d.pot === 'yes'; },
   catAdd: () => {
     const n = ui.newCat;
@@ -1840,6 +1840,7 @@ const ACTIONS = {
     const n = S.transactions.filter(t => t.category === d.id).length;
     askConfirm('Delete ' + c.title + '?' + (n ? ' Its ' + n + ' purchase' + (n === 1 ? '' : 's') + ' will move to Other.' : ''), 'delete', () => { removeCategory(d.id); applySettings(); render(); }, true); },
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
+  setParallax: d => { S.settings.parallax = d.pot === 'on'; save(); applySettings(); if (d.pot === 'on') rainPermission(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
   clearTx: () => askType('Remove all transactions and pot history, and set every pot to $0? Settings, income sources, expenses and notes stay. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'CLEAR', 'clear transactions', () => {
@@ -2248,37 +2249,6 @@ function rainFrame(t) {
   rain.raf = requestAnimationFrame(rainFrame);
 }
 
-/* ---------- app icon looks ----------
-   The Home Screen icon is read when the app is added, so these are drawn on the fly in the current theme's colors and
-   put into the page's apple-touch-icon link; the picker also lets you save the image. */
-const ICONS = [['classic', 'Classic'], ['theme', 'Theme'], ['inverse', 'Inverted'], ['prompt', 'Prompt'], ['light', 'Light'], ['night', 'Night']];
-const iconCache = {};
-function iconCanvas(k, size) {
-  const rs = getComputedStyle(document.documentElement);
-  const bg = rs.getPropertyValue('--bg').trim() || '#1c1a2e', ac = rs.getPropertyValue('--acc-sage').trim() || '#84a68e', fg = rs.getPropertyValue('--fg').trim() || '#eeeeee';
-  const look = { theme: [bg, ac, '$'], inverse: [ac, bg, '$'], prompt: [bg, ac, '~/'], light: ['#f4f1ea', '#1f3d2e', '$'], night: ['#050505', fg, '$'] }[k] || [bg, ac, '$'];
-  const c = document.createElement('canvas'); c.width = c.height = size;
-  const x = c.getContext('2d');
-  x.fillStyle = look[0]; x.fillRect(0, 0, size, size);
-  x.fillStyle = look[1]; x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.font = `700 ${Math.round(size * (look[2] === '$' ? 0.66 : 0.5))}px ui-monospace, Menlo, Consolas, monospace`;
-  x.fillText(look[2], size / 2, size * 0.53);
-  return c;
-}
-function iconURL(k, size) {
-  if (k === 'classic') return size > 180 ? 'icon-512.png' : 'icon-180.png';
-  const key = k + size + document.documentElement.dataset.theme;
-  return iconCache[key] || (iconCache[key] = iconCanvas(k, size).toDataURL('image/png'));
-}
-function iconBlob(k, size) {
-  if (k === 'classic') return fetch('icon-512.png').then(r => r.blob()).then(b => b.arrayBuffer()).then(b => new Uint8Array(b)).catch(() => null);
-  return new Promise(res => iconCanvas(k, size).toBlob(b => b ? b.arrayBuffer().then(ab => res(new Uint8Array(ab))) : res(null), 'image/png'));
-}
-function applyIcon() {
-  const k = S.settings.appIcon || 'classic';
-  document.querySelectorAll('link[rel="apple-touch-icon"]').forEach(l => { l.href = iconURL(k, 180); });
-}
-
 /* ---------- haptics ----------
    iPhone (iOS 17.4+) plays a tap when a real finger toggles an <input type="checkbox" switch>. So, as in the ios-haptics library
    (github.com/tijnjh/ios-haptics, MIT, by tijn), every button gets an invisible label with a hidden switch laid over it.
@@ -2426,13 +2396,13 @@ function applySettings() {
   const theme = themeKey();
   if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
   HIDE_AMOUNTS = !!st.hideAmounts;
-  root.dataset.theme = theme; root.dataset.accent = 'sage'; root.dataset.motion = st.motion; root.dataset.corners = st.corners || 'sharp'; root.dataset.haptics = st.haptics === false ? 'off' : 'on';
+  root.dataset.theme = theme; root.dataset.palette = PALETTES.some(p => p[0] === st.palette) ? st.palette : 'harbor'; root.dataset.motion = st.motion; root.dataset.haptics = st.haptics === false ? 'off' : 'on';
   root.style.setProperty('--ts', st.textSize);
-  try { applyIcon(); } catch (e) { /* icon is optional */ }
+  depthSchedule();
   const cs = getComputedStyle(root);
   const read = (n, f) => { const v = cs.getPropertyValue(n).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : f; };
   SAGE = read('--sage', SAGE); DIM = read('--fg-dim', DIM);
-  const bgHex = read('--bg', '#1c1a2e'), raiseHex = read('--raise', bgHex), dark = lumOf(bgHex) < 0.4;
+  const bgHex = read('--bg', '#0d1b1e'), raiseHex = read('--raise', bgHex), dark = lumOf(bgHex) < 0.4;
   ACC = { sage: SAGE, terra: read('--acc-terra', SAGE), amber: read('--acc-amber', SAGE), sky: read('--acc-sky', SAGE), rose: read('--acc-rose', SAGE), green: read('--green', SAGE), red: read('--red', SAGE), fg: read('--fg', '#ffffff'), dim: DIM };
   // Category colors are built from the theme's own accents (and blends of them), so every theme looks like itself.
   const CAT_MIX = { food: ['terra'], groceries: ['green'], gas: ['amber'], bills: ['sage'], shopping: ['rose'], entertainment: ['sky', 'rose'],
@@ -2446,8 +2416,41 @@ function applySettings() {
   Object.keys(tintCache).forEach(k => delete tintCache[k]);
   root.dataset.tone = dark ? 'dark' : 'light';
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = read('--bg', '#1c1a2e');
+  if (meta) meta.content = read('--bg', '#0d1b1e');
 }
+
+/* ---------- depth motion ----------
+   The colored glow behind the cards is two layers that drift at different speeds as you scroll (parallax), and shift a little as you
+   tilt the phone (or move the mouse); the light on each card's edge turns with the tilt. Off with Animations off or Depth motion off. */
+const depth = { tx: 0, ty: 0, cx: 0, cy: 0, base: null, raf: 0, ang: 0, last: '' };
+const depthAllowed = () => S.settings.parallax !== false && !motionOff();
+function depthFrame() {
+  depth.raf = 0;
+  const root = document.documentElement;
+  if (!depthAllowed()) {
+    if (depth.last !== 'off') { ['--p1x', '--p1y', '--p2x', '--p2y', '--tilt-a'].forEach(k => root.style.removeProperty(k)); depth.last = 'off'; depth.ang = 0; }
+    return;
+  }
+  depth.cx += (depth.tx - depth.cx) * 0.14; depth.cy += (depth.ty - depth.cy) * 0.14;
+  const y = Math.max(window.scrollY || 0, 0), st = root.style;
+  st.setProperty('--p1x', (-depth.cx * 16).toFixed(1) + 'px'); st.setProperty('--p1y', (-45 * Math.tanh(y * 0.05 / 45) - depth.cy * 16).toFixed(1) + 'px');   // drift eases to a stop so the glow never leaves the screen
+  st.setProperty('--p2x', (-depth.cx * 34).toFixed(1) + 'px'); st.setProperty('--p2y', (-60 * Math.tanh(y * 0.14 / 60) - depth.cy * 30).toFixed(1) + 'px');
+  const ang = Math.round(depth.cx * 14);
+  if (ang !== depth.ang) { depth.ang = ang; st.setProperty('--tilt-a', ang + 'deg'); }
+  depth.last = 'on';
+  if (Math.abs(depth.tx - depth.cx) > 0.002 || Math.abs(depth.ty - depth.cy) > 0.002) depthSchedule();
+}
+function depthSchedule() { if (!depth.raf) depth.raf = requestAnimationFrame(depthFrame); }
+window.addEventListener('scroll', depthSchedule, { passive: true });
+window.addEventListener('deviceorientation', e => {
+  if (e.beta == null || e.gamma == null) return;
+  if (!depth.base) depth.base = { b: e.beta, g: e.gamma };
+  depth.base.b += (e.beta - depth.base.b) * 0.02; depth.base.g += (e.gamma - depth.base.g) * 0.02;   // re-centres slowly, so however you hold it becomes "level"
+  depth.tx = Math.max(-1, Math.min(1, (e.gamma - depth.base.g) / 20)); depth.ty = Math.max(-1, Math.min(1, (e.beta - depth.base.b) / 20));
+  depthSchedule();
+}, { passive: true });
+if (window.matchMedia && matchMedia('(hover: hover) and (pointer: fine)').matches)
+  window.addEventListener('pointermove', e => { depth.tx = (e.clientX / innerWidth - 0.5) * 2; depth.ty = (e.clientY / innerHeight - 0.5) * 2; depthSchedule(); }, { passive: true });
 
 /* Drag a pop-up down to close it. Starts from the handle/header, or from anywhere when scrolled to the top. */
 let drag = null;
