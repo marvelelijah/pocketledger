@@ -615,7 +615,11 @@ html[data-standalone] #hdr.bare { padding-top: env(safe-area-inset-top); }
 html[data-simple] #tabbar { display: none; }
 html[data-simple]:not([data-tab="settings"]) #app, html[data-simple]:not([data-tab="settings"]) #modal-root { visibility: hidden; }
 html[data-simple]:not([data-tab="settings"]) body { overflow: hidden !important; }
-html[data-simple][data-tab="settings"] #simple { display: none; }
+html[data-simple][data-tab="settings"] #simple { top: auto; pointer-events: none; }
+html[data-simple][data-tab="settings"] #simple .sm-main, html[data-simple][data-tab="settings"] #simple .sm-layer { display: none; }
+html[data-simple][data-tab="settings"] #simple .sm-tabs { pointer-events: auto; }
+html[data-simple][data-tab="settings"] #simple .sm-tabs button.on { color: var(--fg-dim); }
+html[data-simple][data-tab="settings"] #simple .sm-tabs button.on::before { display: none; }
 html[data-locked] #simple { visibility: hidden; }
 #simple { position: fixed; left: 0; right: 0; bottom: 0; top: var(--hdr-h, env(safe-area-inset-top)); z-index: 9; display: flex; flex-direction: column; color: var(--fg); }
 #simple .sm-main { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 16px 16px 24px; }

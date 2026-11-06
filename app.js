@@ -792,7 +792,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 t';
+const APP_VERSION = '2026-11-06 u';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -838,7 +838,7 @@ function settingsView() {
       • Setup steps: <b>server/README.md</b>.
       </div></details>
   ${CE}`;
-  return `<div class="row"><button class="link" data-action="closeSettings">‹ back${SM ? ' to simple mode' : ''}</button></div>
+  return `${SM ? '' : '<div class="row"><button class="link" data-action="closeSettings">‹ back</button></div>'}
   <h1>Settings</h1>
   ${DEMO ? '' : ''}
   ${CD('s-you','You',false)}

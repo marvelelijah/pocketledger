@@ -262,7 +262,10 @@
   function act(a, t) {
     const L = V.layer, id = t && t.dataset.id;
     switch (a) {
-      case 'tab': D.tab = t.dataset.tab; save(); paintMain(); return;
+      case 'tab':
+        D.tab = t.dataset.tab; save();
+        if (ui.tab === 'settings') { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; render(); }
+        paintMain(); return;
       case 'pad': V.layer = { type: 'pad', id, str: '' }; paintLayer(); return;
       case 'close': case 'scrim':
         if (L && L.type === 'emoji') V.layer = L.pick; else if (L && L.type === 'pot' && L.id) V.layer = { type: 'pad', id: L.id, str: '' }; else V.layer = null;
