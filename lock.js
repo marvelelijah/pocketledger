@@ -65,7 +65,7 @@ function askPass(opts) {
     };
     if (fields.length) {
       const pad = mk('div', 'numpad');
-      const key = (label, fn, cls) => { const k = mk('button', 'btn key' + (cls ? ' ' + cls : ''), label); k.type = 'button'; k.onclick = () => { err.textContent = ''; fn(); paint(); }; return k; };
+      const key = (label, fn, cls) => { const k = mk('button', 'btn key' + (cls ? ' ' + cls : ''), label); k.type = 'button'; k.addEventListener('pointerdown', ev => { ev.preventDefault(); err.textContent = ''; fn(); paint(); }); k.addEventListener('click', ev => ev.preventDefault()); return k; };
       '123456789'.split('').forEach(n => pad.appendChild(key(n, () => { if (vals[cur].length < 12) vals[cur] += n; })));
       pad.appendChild(mk('span'));
       pad.appendChild(key('0', () => { if (vals[cur].length < 12) vals[cur] += '0'; }));

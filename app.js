@@ -839,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 k';
+const APP_VERSION = '2026-11-06 l';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -927,8 +927,6 @@ function settingsView() {
     <div class="themes">${PALETTES.map(([k, n, c1, c2]) => `<button class="theme ${(st.palette || 'harbor') === k ? 'on' : ''}" data-action="setPalette" data-pot="${k}"><span class="dots"><i style="background:${c1}"></i><i style="background:${c2}"></i></span>${n}</button>`).join('')}</div>
     <div class="muted small" style="margin:12px 0 6px">Text size</div>
     ${seg([['1', 'A'], ['1.12', 'A+'], ['1.25', 'A++']], String(st.textSize), 'setSize')}
-    <div class="muted small" style="margin:12px 0 6px">Depth motion <span class="muted">(background drifts as you scroll and tilt)</span></div>
-    ${seg([['on', 'on'], ['off', 'off']], st.parallax === false ? 'off' : 'on', 'setParallax')}
     <div class="muted small" style="margin:12px 0 6px">Animations</div>
     ${seg([['auto', 'on'], ['off', 'off']], st.motion, 'setMotion')}
   ${CE}
@@ -1508,14 +1506,14 @@ function layoutStick() {
   const st = document.querySelector('.stick'), ph = document.querySelector('.stick-ph');
   if (!st || !ph) return;
   const top = parseFloat(getComputedStyle(st).top) || 0;
-  const docTop = ph.getBoundingClientRect().top + window.scrollY;
+  const docTop = ph.getBoundingClientRect().top + document.body.scrollTop;
   ph.style.height = Math.max(0, top + st.offsetHeight - docTop + 6) + 'px';
 }
 window.addEventListener('resize', layoutStick);
 function render() {
   RB = runningBalances();
   captureSegs();
-  const y = window.scrollY;
+  const y = document.body.scrollTop;
   const oldSheet = modalRoot.querySelector('.sheet');
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
@@ -1538,7 +1536,7 @@ function render() {
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
 
-  window.scrollTo(0, ui.resetScroll ? 0 : y);
+  document.body.scrollTop = ui.resetScroll ? 0 : y;
   ui.resetScroll = false;
   const newSheet = modalRoot.querySelector('.sheet');
   if (newSheet && oldSheet) newSheet.scrollTop = sheetY;
@@ -1835,7 +1833,6 @@ const ACTIONS = {
     const n = S.transactions.filter(t => t.category === d.id).length;
     askConfirm('Delete ' + c.title + '?' + (n ? ' Its ' + n + ' purchase' + (n === 1 ? '' : 's') + ' will move to Other.' : ''), 'delete', () => { removeCategory(d.id); applySettings(); render(); }, true); },
   setSize: d => { S.settings.textSize = +d.pot; save(); applySettings(); },
-  setParallax: d => { S.settings.parallax = d.pot === 'on'; save(); applySettings(); if (d.pot === 'on') rainPermission(); },
   setMotion: d => { S.settings.motion = d.pot; save(); applySettings(); },
   reloadApp: () => { location.reload(); return false; },
   clearTx: () => askType('Remove all transactions and pot history, and set every pot to $0? Settings, income sources, expenses and notes stay. ' + (S.lastExport ? 'Last backup: ' + fmtShort(S.lastExport) + '.' : 'You have no backup yet.'), 'CLEAR', 'clear transactions', () => {
@@ -1991,7 +1988,7 @@ const ACTIONS = {
     askConfirm(msg, run ? 'update' : 'apply', () => {
       applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; ui.tab = 'home';
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      render(); window.scrollTo(0, 0);
+      render(); document.body.scrollTop = 0;
       if (navigator.webdriver) { rainArm(); showRainMsg(); return; }
       /* iOS keeps an "Undo Typing" history for everything typed on the page, and a shake would offer it. A fresh page has none, so the app reloads
          (the budget is already saved) and then waits for the shake. */
@@ -2201,7 +2198,7 @@ function shakeReset() {
   const ae = document.activeElement;
   if (ae && ae !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) ae.blur();
   if (ui.modal || ui.picker || ui.dialog || ui.tab !== 'home') { ui.modal = null; ui.picker = null; ui.dialog = null; ui.tab = 'home'; render(); }
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.body.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function rainShake() {
   shakeReset();
@@ -2358,7 +2355,7 @@ showSplash();
 /* The on-screen keyboard shrinks the visible area; pop-ups follow it so what you type stays in view. */
 if (window.visualViewport) {
   const vv = window.visualViewport, rs = document.documentElement.style;
-  const fit = () => { rs.setProperty('--vvh', vv.height + 'px'); rs.setProperty('--vvt', vv.offsetTop + 'px'); };
+  const fit = () => { rs.setProperty('--vvh', vv.height + 'px'); rs.setProperty('--vvt', vv.offsetTop + 'px'); rs.setProperty('--vvb', Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + 'px'); };
   vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
 }
 document.addEventListener('focusin', e => {
@@ -2399,11 +2396,16 @@ function applySettings() {
   if (meta) meta.content = read('--bg', '#0d1b1e');
 }
 
+/* Tilt needs the phone's motion permission once; ask on the first tap (iOS only shows the question after a tap). */
+try {
+  if (!localStorage.getItem('pl.motionAsked') && window.DeviceMotionEvent && typeof DeviceMotionEvent.requestPermission === 'function')
+    document.addEventListener('pointerup', () => { try { localStorage.setItem('pl.motionAsked', '1'); } catch (e) { /* ignore */ } rainPermission(); }, { once: true });
+} catch (e) { /* ignore */ }
 /* ---------- depth motion ----------
    The colored glow behind the cards is two layers that drift at different speeds as you scroll (parallax), and shift a little as you
-   tilt the phone (or move the mouse); the light on each card's edge turns with the tilt. Off with Animations off or Depth motion off. */
+   tilt the phone (or move the mouse); the light on each card's edge turns with the tilt. Off with Animations off. */
 const depth = { tx: 0, ty: 0, cx: 0, cy: 0, base: null, raf: 0, ang: 0, last: '' };
-const depthAllowed = () => S.settings.parallax !== false && !motionOff();
+const depthAllowed = () => !motionOff();
 function depthFrame() {
   depth.raf = 0;
   const root = document.documentElement;
@@ -2412,7 +2414,7 @@ function depthFrame() {
     return;
   }
   depth.cx += (depth.tx - depth.cx) * 0.14; depth.cy += (depth.ty - depth.cy) * 0.14;
-  const y = Math.max(window.scrollY || 0, 0), st = root.style;
+  const y = Math.max(document.body.scrollTop || 0, 0), st = root.style;
   st.setProperty('--p1x', (-depth.cx * 44).toFixed(1) + 'px'); st.setProperty('--p1y', (-120 * Math.tanh(y * 0.11 / 120) - depth.cy * 44).toFixed(1) + 'px');   // drift eases to a stop so the glow never leaves the screen
   st.setProperty('--p2x', (-depth.cx * 90).toFixed(1) + 'px'); st.setProperty('--p2y', (-170 * Math.tanh(y * 0.28 / 170) - depth.cy * 80).toFixed(1) + 'px');
   const ang = Math.round(depth.cx * 14);
@@ -2421,7 +2423,7 @@ function depthFrame() {
   if (Math.abs(depth.tx - depth.cx) > 0.002 || Math.abs(depth.ty - depth.cy) > 0.002) depthSchedule();
 }
 function depthSchedule() { if (!depth.raf) depth.raf = requestAnimationFrame(depthFrame); }
-window.addEventListener('scroll', depthSchedule, { passive: true });
+document.body.addEventListener('scroll', depthSchedule, { passive: true });
 window.addEventListener('deviceorientation', e => {
   if (e.beta == null || e.gamma == null) return;
   if (!depth.base) depth.base = { b: e.beta, g: e.gamma };
@@ -2509,14 +2511,14 @@ document.addEventListener('click', e => {
   if (d._busy) return;
   if (motionOff() || !d.animate) { d.open = !d.open; return; }
   const opening = !d.open;
-  const before = d.offsetHeight;
+  const before = d.getBoundingClientRect().height;
   const follow = [];
   for (let n = d; n && n.id !== 'app' && n !== document.body; n = n.parentElement) for (let m = n.nextElementSibling; m; m = m.nextElementSibling) follow.push(m);
   const cs = getComputedStyle(d);
   const bw = parseFloat(cs.borderTopWidth) || 0, padB = parseFloat(cs.paddingBottom) || 0;
-  const closedH = sum.offsetHeight + parseFloat(cs.paddingTop) + padB + 2 * bw;
-  let delta;
-  if (opening) { d.open = true; delta = d.offsetHeight - before; } else delta = before - closedH;
+  let closedH, delta;
+  if (opening) { closedH = before; d.open = true; delta = d.getBoundingClientRect().height - before; }
+  else { const sy = document.body.scrollTop; d.open = false; closedH = d.getBoundingClientRect().height; d.open = true; document.body.scrollTop = sy; delta = before - closedH; }   // measure the real closed height, no guessing (and keep the scroll the browser would otherwise clamp)
   if (delta < 2) { d.open = opening; return; }
   d._busy = true;
   const full = closedH + delta;
@@ -2539,10 +2541,10 @@ document.addEventListener('click', e => {
   // closing a window that was keeping the page long: glide the scroll up instead of letting the page snap at the end
   let scrollAnim = 0;
   if (!opening) {
-    const maxNow = document.documentElement.scrollHeight - window.innerHeight, maxNew = Math.max(0, maxNow - delta), y0 = window.scrollY;
+    const sc = document.body, maxNow = sc.scrollHeight - sc.clientHeight, maxNew = Math.max(0, maxNow - delta), y0 = sc.scrollTop;
     if (y0 > maxNew + 1) {
       const t0 = performance.now(), ease = t => 1 - Math.pow(1 - t, 4);
-      const step = now => { const t = Math.min(1, (now - t0) / 260); window.scrollTo(0, y0 + (maxNew - y0) * ease(t)); if (t < 1) scrollAnim = requestAnimationFrame(step); };
+      const step = now => { const t = Math.min(1, (now - t0) / 260); sc.scrollTop = y0 + (maxNew - y0) * ease(t); if (t < 1) scrollAnim = requestAnimationFrame(step); };
       scrollAnim = requestAnimationFrame(step);
     }
   }

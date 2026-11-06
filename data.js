@@ -353,7 +353,6 @@ function defaultState() {
       mode: 'dark',        // light | dark | auto (follows the phone)
       textSize: 1,
       motion: 'auto',      // auto | off
-      parallax: true,      // depth motion: background drifts with scroll and tilt
       backupDays: 7,       // 0 = no reminder
       currency: 'auto',    // 'auto' = the phone's region, or a code like EUR
       defaultPot: 'spending',
@@ -397,7 +396,7 @@ function migrate(old) {
   if (!Array.isArray(old.customCats)) s.customCats = [{ id: 'videoCamera', title: 'Video & Camera', icon: '📷', deduct: true, color: '#a855f7' }];   // was a built-in; now yours
   s.settings = Object.assign({}, defaultState().settings, old.settings || {});
   if (!['harbor', 'dune', 'graphite', 'plum'].includes(s.settings.palette)) s.settings.palette = 'harbor';   // the old themes are gone
-  delete s.settings.corners; delete s.settings.appIcon; delete s.settings.hideAmounts;
+  delete s.settings.corners; delete s.settings.appIcon; delete s.settings.hideAmounts; delete s.settings.parallax;
   s.settings.currency = 'auto';   // the currency follows the phone's region
   if (s.roundMode === 'up') s.roundMode = 'nearest';
   if (s.settings.startTab === 'income') s.settings.startTab = 'budget';

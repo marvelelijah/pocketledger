@@ -95,7 +95,6 @@
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; border-radius: 0; touch-action: manipulation; }
 html, body { margin: 0; background: var(--bg); color: var(--fg);
   font: calc(15px * var(--ts, 1))/1.65 'IBM Plex Mono', ui-monospace, monospace; -webkit-font-smoothing: antialiased; }
-body { padding-top: env(safe-area-inset-top); }
 ::selection { background: var(--fg); color: var(--bg); }
 :focus-visible { outline: 1px solid var(--fg); outline-offset: 2px; }
 #app { padding: 10px 20px calc(88px + env(safe-area-inset-bottom)); max-width: 640px; margin: 0 auto; }
@@ -332,7 +331,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 .small-in { font-size: calc(13px * var(--ts, 1)); padding: 6px 10px; margin: -2px 0 8px; }
 
 html { overscroll-behavior-x: none; touch-action: pan-y; }
-body { min-height: 100vh; min-height: 100dvh; overscroll-behavior-x: none; }
+body { overscroll-behavior-x: none; }
 #tabbar { position: fixed; bottom: 0; transform: translateZ(0); -webkit-transform: translateZ(0); }
 
 /* ---- app feel ---- */
@@ -420,15 +419,6 @@ input, textarea, .profile,
 
 /* ---- home-screen app: solid status-bar strip, no edge bounce, safe areas ---- */
 html, body { overscroll-behavior-x: none; overscroll-behavior-y: auto; }
-/* the strip behind the status bar fades out instead of ending in a hard edge, so the background glow carries up to the top of the screen */
-body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: calc(env(safe-area-inset-top) + 22px); z-index: 4; pointer-events: none;
-  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 85%, transparent) env(safe-area-inset-top), transparent);
-  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-  -webkit-mask-image: linear-gradient(to bottom, #000 env(safe-area-inset-top), transparent); mask-image: linear-gradient(to bottom, #000 env(safe-area-inset-top), transparent); }
-html[data-tone="light"] body::before { background: linear-gradient(to bottom, #0d1b1e env(safe-area-inset-top), transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }   /* the clock stays white on iPhone, so this strip stays dark */
-html[data-standalone] body { padding-top: calc(env(safe-area-inset-top) + 16px); }
-@media (display-mode: standalone) { body { padding-top: calc(env(safe-area-inset-top) + 16px); } }
-
 /* ---- theme / screen cross-fades ---- */
 
 .stmt-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; width: 100%; text-align: left; border-top: 1px solid var(--line); }
@@ -591,9 +581,6 @@ html::after { animation: ambB 23s ease-in-out infinite alternate; }
 /* iPhone 16 / home-screen app: the home indicator needs far less room than the full safe-area inset, and the Dynamic Island strip needs less padding */
 #tabbar { padding-bottom: max(8px, calc(env(safe-area-inset-bottom) - 12px)); }
 #app { padding-bottom: calc(76px + max(8px, calc(env(safe-area-inset-bottom) - 12px))); }
-html[data-standalone] body { padding-top: calc(env(safe-area-inset-top) + 6px); }
-@media (display-mode: standalone) { body { padding-top: calc(env(safe-area-inset-top) + 6px); } }
-html, body { min-height: 100vh; min-height: 100dvh; }
 
 /* passcode number pad */
 #lockov .lock-box { align-items: stretch; }
@@ -611,3 +598,13 @@ details.flipping::before { display: none !important; }
 /* the icon picker is a short fixed grid: nothing in it scrolls */
 .sheet.nogscroll { overflow: hidden; overscroll-behavior: none; touch-action: none; }
 .scrim[data-layer="picker"] .nogscroll ~ * { touch-action: none; }
+
+/* The page scrolls inside the body, which starts just below the status bar. Content is simply cut off there, so the background glow carries
+   all the way up behind the clock with no blur, no strip and no colour change to hide. (Light mode puts a dark plate behind the white clock.) */
+html { height: 100%; overflow: hidden; }
+body { position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; bottom: var(--vvb, 0px); overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; min-height: 0; }
+html[data-standalone] #app { padding-top: 16px; }
+#statusmask { display: none; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: #0d1b1e; z-index: 7; pointer-events: none; }
+html[data-tone="light"][data-standalone] #statusmask { display: block; }
+/* number pad keys react the instant a finger lands */
+#lockov .numpad .key { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
