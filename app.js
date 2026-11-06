@@ -681,6 +681,9 @@ function backupCard() {
     <button class="btn primary full" data-action="shareCode">Email myself a backup code</button>
     <div class="muted small" style="margin:6px 0 10px">Opens the share sheet. Choose Mail and send it to yourself. It can't send by itself; a web page has no way to email on its own.</div>
     <div class="btn-row"><button class="btn" data-action="copyCode">Copy code</button><button class="btn" data-action="export">Save file</button></div>
+    <div class="day">Automatic backups</div>
+    <div class="muted small" style="margin-bottom:6px">A backup is saved on this phone every day you open the app, and the last 7 days are kept. They stay on this phone only, so they cover a mistake, not a lost phone.</div>
+    ${(ui.autoBackups || []).length ? ui.autoBackups.map(b => `<div class="field"><span>${esc(new Date(b.at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span><span class="hdr-r"><button class="link" data-action="abCopy" data-day="${esc(b.day)}">copy</button><button class="link" data-action="abRestore" data-day="${esc(b.day)}">restore</button></span></div>`).join('') : `<div class="muted small">${ui.autoBackups ? 'None yet. The first one is made a few seconds after you open the app.' : 'Loading…'}</div>`}
     <div class="day">Restore</div>
     <textarea id="restoreText" rows="3" placeholder="Paste your backup code (or the whole email) here"></textarea>
     <div class="btn-row"><button class="btn" data-action="restoreCode">Restore from code</button></div>
@@ -792,7 +795,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 v';
+const APP_VERSION = '2026-11-06 w';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1614,6 +1617,29 @@ async function copyCode() {
   render();
 }
 
+/* Automatic daily backups: once a day (and whenever you leave the app) a backup code is kept inside the phone's own storage, the last 7 days.
+   They never leave the phone, so they protect against a slip, not a lost phone: keep emailing yourself a code for that. */
+const AB_DB = 'pocketledger.autobackup', AB_KEEP = 7;
+const abOpen = () => new Promise((res, rej) => { const r = indexedDB.open(AB_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore('b', { keyPath: 'day' }); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+async function abAll() {
+  const db = await abOpen();
+  return new Promise((res, rej) => { const q = db.transaction('b').objectStore('b').getAll(); q.onsuccess = () => res(q.result.sort((a, b) => b.day.localeCompare(a.day))); q.onerror = () => rej(q.error); });
+}
+async function abSave(force) {
+  try {
+    if (DEMO || !window.indexedDB || (S.useSampleData && !(typeof Simple !== 'undefined' && Simple.active()))) return;
+    const day = localDay(new Date()), now = Date.now(), list = await abAll(), cur = list.find(x => x.day === day);
+    if (cur && !force && now - cur.at < 3600e3) return;       // at most once an hour
+    const code = await encodeBackup(), db = await abOpen(), st = db.transaction('b', 'readwrite').objectStore('b');
+    st.put({ day, at: now, code });
+    list.filter(x => x.day !== day).slice(AB_KEEP - 1).forEach(x => st.delete(x.day));
+    abLoad();
+  } catch (e) { /* storage unavailable: nothing to do */ }
+}
+const abLoad = () => abAll().then(l => { ui.autoBackups = l; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => { ui.autoBackups = []; });
+setTimeout(abSave, 4000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abSave(); });
+
 /* A separate, tiny code that holds only the server address and passphrase, for keeping in a password manager. Never part of a backup. */
 const connCode = () => { const l = getLink(); return 'PLC1:' + btoa(unescape(encodeURIComponent(JSON.stringify({ u: l.url || '', p: l.passphrase || '' })))) + '~'; };
 document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.k === 'linkedit') ui.linkEdit = d.open; }, true);
@@ -1639,17 +1665,21 @@ function useConn() {
 async function restoreCode() {
   const box = $('restoreText');
   try {
-    const obj = await decodeBackup(box ? box.value : '');
+    await restoreObj(await decodeBackup(box ? box.value : ''));
+  } catch (e) {
+    askAlert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.');
+  }
+  render();
+}
+function restoreObj(obj) {
+  {
     askType('Replace everything on this device with this backup?', 'RESTORE', 'restore backup', () => {
       if (obj.simpleMode && typeof Simple !== 'undefined') Simple.restore(obj.simpleMode);
       delete obj.simpleMode;
       replaceState(obj); ui.budgetInputs = {}; ui.editEarn = {}; ui.resetEarn = {}; ui.actual = null;
       askAlert('Backup restored.');
     });
-  } catch (e) {
-    askAlert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.');
   }
-  render();
 }
 
 
@@ -1762,7 +1792,10 @@ const ACTIONS = {
   refresh: () => { doSync(); return false; },
 
   // settings
+  abCopy: async d => { const b = (ui.autoBackups || []).find(x => x.day === d.day); if (!b) return false; try { await navigator.clipboard.writeText(b.code); askAlert('Backup code copied. Paste it into a note or email to yourself.'); } catch (e) { ui.dialog = { title: 'Copy this backup code', message: 'Press and hold in the box, choose Select All, then Copy.', code: b.code, cancel: false, ok: 'done' }; } render(); return false; },
+  abRestore: async d => { const b = (ui.autoBackups || []).find(x => x.day === d.day); if (!b) return false; try { restoreObj(await decodeBackup(b.code)); } catch (e) { askAlert('That backup could not be read.'); } render(); return false; },
   openSettings: () => {
+    abLoad();
     if (ui.tab !== 'settings') ui.prevTab = ui.tab; ui.tab = 'settings'; ui.resetScroll = true;
     if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
   },

@@ -155,7 +155,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* Sensitive steps (backup, restore, erase) ask for the passcode first when you turned that on. */
-['export', 'shareCode', 'copyCode', 'restoreCode', 'eraseAll', 'clearTx', 'stmtPrint', 'stmtShare', 'stmtCsv'].forEach(n => {
+['export', 'shareCode', 'copyCode', 'restoreCode', 'abCopy', 'abRestore', 'eraseAll', 'clearTx', 'stmtPrint', 'stmtShare', 'stmtCsv'].forEach(n => {
   const orig = ACTIONS[n];
   if (!orig) return;
   ACTIONS[n] = (d, el) => {

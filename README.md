@@ -37,7 +37,7 @@ Four palettes (Harbor, Dune, Graphite, Plum), each in light, dark or auto, with 
 
 ## Your data and privacy
 Everything you enter lives in the browser on your phone. The web address serves only the app's code, and this repository contains no real financial data, only made-up samples.
-- **Backup:** (includes Simple mode) *Settings → Backup & restore* can email you a backup code (opens the share sheet), copy it, or save a file. A reminder appears after 7 days. To restore, paste the whole code under "Restore from code".
+- **Backup:** (includes Simple mode) a backup is also saved on the phone automatically every day (the last 7 days, under *Automatic backups*); those stay on the phone only, so they cover a mistake, not a lost phone. *Settings → Backup & restore* can email you a backup code (opens the share sheet), copy it, or save a file. A reminder appears after 7 days. To restore, paste the whole code under "Restore from code".
 - **App lock (optional):** a numeric passcode on an on-screen number pad, auto-lock delay, and an option to ask for the passcode before backup, restore, erase and statement export. The passcode is stored only as a salted hash and is never in backups. The lock keeps people out of the app; it does not encrypt stored data, so keep your phone's own passcode on.
 - **Demo mode:** shows the app with entirely made-up data; your real data and bank link are never read in demo mode.
 - **Never commit** a backup file or code, an API key or a connection code. `.gitignore` blocks the usual backup names. Don't paste a backup code anywhere public: it contains your financial data.
