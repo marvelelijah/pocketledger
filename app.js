@@ -791,7 +791,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 r';
+const APP_VERSION = '2026-11-06 s';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -894,7 +894,9 @@ function settingsView() {
     <div class="muted small" style="margin-top:8px">Version ${APP_VERSION}</div>
   ${CE}
 
-  ${backupCard()}`;
+  ${backupCard()}
+  <button class="btn primary full" style="margin-top:6px" data-action="simpleOn">simple mode</button>
+  <div class="muted small" style="text-align:center;margin-top:6px">A bare-bones budget that runs on its own and never changes anything above.</div>`;
 }
 
 const VIEWS = { ihist: incomeHistoryView, settings: settingsView, home: homeView, pot: potView, activity: activityView, review: reviewView, budget: budgetView };
@@ -1944,6 +1946,7 @@ const ACTIONS = {
   copyCode: () => { copyCode(); return false; },
   restoreCode: () => { restoreCode(); return false; },
   copyConn: () => { copyConn(); return false; },
+  simpleOn: () => { Simple.open(); return false; },
   useConn: () => { useConn(); return false; },
 };
 

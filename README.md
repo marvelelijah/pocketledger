@@ -29,6 +29,7 @@ Nothing is sent anywhere to learn: the rules live in the app's storage on your p
 - **Activity:** every transaction by day, searchable. Entries you add by hand can be edited or deleted.
 - **Budget:** income sources and this month's deposits, earnings, constant expenses, savings and goal percentages, and the result. *Apply* asks first and can be undone; updating a month replaces its numbers so nothing double counts. *Paste a list* reads expenses from text. Budget history lists each past month, and **Statements** shows a monthly report (income, spending habits, categories vs last month, top places, budget vs actual, goals, accounts and every transaction) you can save as a PDF, share or export as CSV. Statements are built on the device.
 - **Categories:** built-in plus your own. Pot, goal and category icons come from one popup of finance-relevant emojis in groups (money, bills, food, travel, shopping and more), drawn in the theme's single color.
+- **Simple mode:** the colored button at the bottom of Settings opens a bare-bones budget that runs beside the full app and never changes it (its own storage, its own pots). Tap a pot to open a number pad and subtract what you spent or add to it; Savings and any extra pots you add work the same way, each with its own percentage bar. A budget tab takes the month's earnings and a list of expenses and shows what goes to savings and spending. History lists every entry; tap one to name it.
 - **Make it rain:** applying a new budget ends with a "Make it rain!" button; shake the phone and dollar bills fall.
 
 ## Look and feel
@@ -52,6 +53,7 @@ Everything you enter lives in the browser on your phone. The web address serves 
 | `emoji.js` | The finance-relevant emoji, in groups, for the icon pickers |
 | `data.js` | Logic with no screen code: categories, name simplifier, learning, pots, income, budget, statements |
 | `app.js` | The screens and interactions |
+| `simple.js` | Simple mode: the separate mini-budget |
 | `lock.js` | The optional app lock and number pad |
 | `sw.js`, `manifest.webmanifest`, `ledgend-icon-*.png` | Offline support and home-screen install |
 | `server/` | The optional bank-link Worker and its setup guide |

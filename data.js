@@ -349,7 +349,7 @@ function defaultState() {
     },
     savingsPercent: 10,   // % of the month's earnings set aside for the Savings pot
     pots: [
-      { id: 'spending', name: 'Spending', icon: '💳', balance: 0, target: null, core: true },
+      { id: 'spending', name: 'Spending', icon: '💸', balance: 0, target: null, core: true },
       { id: 'savings', name: 'Savings', icon: '🏦', balance: 0, target: 5000, core: true },
     ],
     potLog: [],           // every movement in or out of a pot
@@ -389,6 +389,7 @@ function migrate(old) {
   if (s.settings.startTab === 'income') s.settings.startTab = 'budget';
   if (!['light', 'dark', 'auto'].includes(s.settings.mode)) s.settings.mode = 'dark';
   for (const p of s.pots || []) if (ICON_UPGRADE[p.icon]) p.icon = ICON_UPGRADE[p.icon];
+  const spp = (s.pots || []).find(p => p.id === 'spending'); if (spp && spp.icon === '💳') spp.icon = '💸';   // spending's default icon is the flying money
   if (old.namesV !== 2) {                                   // older transactions get the newer, verb-free names and cross-checked confidence
     for (const t of s.transactions || []) {
       if (t.userConfirmed) continue;
