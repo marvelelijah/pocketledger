@@ -839,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 b';
+const APP_VERSION = '2026-11-06 c';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -864,10 +864,11 @@ function settingsView() {
   ${CD('s-bank','Bank accounts',false)}
     <div class="row"><span>Status</span><span class="badge ${statusCls}">${statusText}</span></div>
     ${ui.linkMsg ? `<div class="small" style="margin-top:8px">${esc(ui.linkMsg)}</div>` : (syncDetail ? `<div class="muted small" style="margin-top:8px">${esc(syncDetail)}</div>` : '')}
-    <div class="stack" style="margin-top:8px">
+    ${linkConfigured() ? `<div class="btn-row" style="margin-top:8px"><button class="btn" data-action="copyConn">copy connection code</button></div>` : `<div class="stack" style="margin-top:8px"><textarea id="connText" rows="2" placeholder="Paste a connection code here (starts with PLC1:)"></textarea><button class="btn primary" data-action="useConn">use connection code</button></div>`}
+    <details class="info"><summary>${linkConfigured() ? 'Show address and passphrase' : 'Or type the address and passphrase'}</summary><div class="stack" style="margin-top:8px">
       <input id="linkUrl" placeholder="Link server address" value="${esc(link.url || '')}" data-change="linkUrl" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="url">
       <input id="linkPass" type="password" placeholder="passphrase" value="${esc(link.passphrase || '')}" data-change="linkPass" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="off">
-    </div>
+    </div></details>
     <div class="btn-row">
       <button class="btn" data-action="checkLink">check connection</button>
       <button class="btn primary" data-action="linkBank">link a bank</button>
@@ -1655,6 +1656,27 @@ async function copyCode() {
   render();
 }
 
+/* A separate, tiny code that holds only the server address and passphrase, for keeping in a password manager. Never part of a backup. */
+const connCode = () => { const l = getLink(); return 'PLC1:' + btoa(unescape(encodeURIComponent(JSON.stringify({ u: l.url || '', p: l.passphrase || '' })))) + '~'; };
+async function copyConn() {
+  const code = connCode();
+  try { await navigator.clipboard.writeText(code); askAlert('Connection code copied. Keep it in your password manager, not in the same email as a backup.'); }
+  catch (e) { ui.dialog = { title: 'Copy this connection code', message: 'Press and hold in the box, choose Select All, then Copy.', code, cancel: false, ok: 'done' }; }
+  render();
+}
+function useConn() {
+  const box = $('connText'), m = /PLC1:([A-Za-z0-9+\/=]+)/.exec(box ? box.value : '');
+  try {
+    const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
+    if (!/^https:\/\//i.test(o.u || '') || !o.p) throw new Error('bad');
+    setLink({ url: o.u.trim(), passphrase: String(o.p).trim() });
+    ui.linkMsg = 'Connection saved.';
+    if (box) box.value = '';
+    render();
+    if (S.settings.linked) doSync();
+  } catch (e) { askAlert('That connection code could not be read. Paste the whole code, starting with PLC1: and ending with ~.'); render(); }
+}
+
 async function restoreCode() {
   const box = $('restoreText');
   try {
@@ -1997,6 +2019,8 @@ const ACTIONS = {
   shareCode: () => { shareCode(); return false; },
   copyCode: () => { copyCode(); return false; },
   restoreCode: () => { restoreCode(); return false; },
+  copyConn: () => { copyConn(); return false; },
+  useConn: () => { useConn(); return false; },
   restoreNotes: () => { restoreNotesOnly(); return false; },
   import: () => { const f = $('importFile'); if (f) f.click(); return false; },
 };

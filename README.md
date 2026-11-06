@@ -80,3 +80,6 @@ The profile button (top right) opens Settings: theme (auto, charcoal, black, pap
 - Review shows Spending and every other pot or goal in a swipeable row. Rounding differences go straight to Spending, so there is no month-end check.
 - Applying or updating the monthly budget asks first and can be undone. Erase, clear and restore need a typed word.
 - Themes: Terminal (default), Tannhauser, Mono, Icedancer, Vice, Unit-01 (dark). Every text colour is checked to at least 4.5:1 contrast (WCAG 2.x).
+
+
+**Connection code.** Settings → Bank accounts → "copy connection code" gives a short `PLC1:…~` text with only your server address and passphrase. Keep it in a password manager; on a new or restored device paste it once under Bank accounts. It is never part of a backup code.
