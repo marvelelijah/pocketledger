@@ -1,85 +1,56 @@
-# PocketLedger (web app)
+# PocketLedger
 
-A personal budgeting app that runs in your iPhone's browser and installs to the home screen. No build step. Starts with sample data so you can try everything.
+A personal budgeting app that runs in your iPhone's browser and installs to the home screen. It sorts your spending, learns how you categorize things, and keeps every number on your own phone. No build step, no accounts, no tracking.
 
 **Live app: https://elijahhalford.com/pocketledger/**
 
-## Install on your iPhone
-This repo is published with GitHub Pages. Open the live app link above in **Safari**, then **Share → Add to Home Screen**. Every change pushed to `main` goes live automatically; close and reopen the app to pick it up.
+## Install
+Open the live link in **Safari**, then **Share → Add to Home Screen**. The repository is served by GitHub Pages and every push to `main` goes live; close and reopen the app to pick up a new version (Settings shows the version at the bottom). To change the home-screen icon, delete the app and add it again, since iOS only reads the icon when it is added.
 
-## How it works
-- **Review (opens first):** a bar at the top shows how much of this month's spending money is left. Tap **＋ Purchase** when you buy something, then tap a pot to deduct from it. Purchases are rounded when deducted (nearest dollar by default; change it in the Budget tab's Month-end check).
-- **Theme:** four palettes (Harbor, Dune, Graphite, Plum), each in light, dark or auto (Settings → Appearance), with a "deep glass" finish: frosted cards with a color edge that wraps the window, soft shadows, and a faint colored glow behind everything in dark mode. Depth motion: the glow behind the cards is two layers that drift at different speeds as you scroll and shift as you tilt the phone (or move the mouse), and the light on each card's edge turns with the tilt; switch it off with Settings → Appearance → Depth motion or Animations off. Terminal-style typography (IBM Plex Mono, lowercase labels) and rounded corners. Colors follow 60-30-10: 60% background and surfaces, 30% brand color, 10% call-to-action color. Emoji are tinted to their category color. Pop-ups, menus and confirmations are all inside the app, and any sheet can be dragged down to close.
-- **Home:** your pots (Spending, Savings, plus any you add with "＋ Add pot or goal"). Tap a pot to open its page: balance, goal progress, money in, money out. Tap a transaction to edit it, or use **Select** to move several at once.
-- **Income:** regular sources are matched automatically by bank text. A source marked "varies month to month" (like freelance) has no expected amount. Use ＋ to count any other deposit as extra income.
-- **Budget (always manual):** this month's income deposits are listed under each source and totaled for you (tap Edit only to fix a difference). Then set constant expenses and the savings percentage and tap Apply. Updating a month replaces its numbers so nothing double counts. 
-- **Month-end check:** compares what you deducted (rounded) with what you really spent, optionally against your real money, and lets you add or take the difference from a pot or split it across all pots.
-- **Budget history:** tap a month to see its earnings, expenses, savings, adjustments and every transaction involved.
-- **To-do:** a money to-do list and notes.
+The app starts with made-up sample data so you can try everything. *Review → Clear sample data & start fresh* removes it.
 
-## Your data and backups
-Everything you enter is stored in the browser on your phone. The web address only serves the app's code, and this repository contains no real financial data (only made-up sample transactions).
-- **Email myself a backup code** (Settings → Backup & restore): opens the share sheet; choose Mail and send it to yourself. To restore after your data is erased, paste the whole email into "Restore from code". A web page can't send email by itself, so this is one tap each time. The Review screen reminds you after 7 days.
-- **Save file / Import file** and **Copy code** work too.
-- **Start fresh:** the sample data is clearly labeled on Review; "Clear sample data & start fresh" removes it so only your own purchases remain.
+## It learns as you use it
+PocketLedger gets better at sorting your money the more you use it, and everything it learns stays on your device.
 
-## Keeping it private
-- This repo is public so GitHub Pages can serve it for free. Anyone can read the code, but not your data.
-- **Never commit** a backup file or code, or an API key. `.gitignore` blocks the usual backup file names.
-- Don't paste a backup code into issues, commits or anywhere public. It contains your financial data.
-- If you want the code itself hidden too, make the repo private and host the same files on a private-friendly host such as Netlify or Cloudflare Pages.
-- The page asks search engines not to index it (`noindex`), which is a courtesy, not security.
+- **Your categories win, and spread.** When you set a category on a transaction, the app remembers it for that merchant, applies it to every matching purchase (past and future) and treats it as certain. The transaction detail says "You set this category".
+- **Names and confidence are cross-checked.** Each purchase is read three ways: a list of common merchants, common words in the bank text, and (when linked) the bank's own merchant name and category. When they agree, confidence goes up; when they disagree, it goes down. The detail screen explains why it was read that way. Names are plain nouns ("Kroger", "Corner Coffee"), never "Purchase at…".
+- **Income sources learn their bank text.** *Income → Income history* cross-checks your own records against deposits in your bank to learn which bank text belongs to which employer, creates the income sources, and sets their keywords, so future deposits are matched automatically. Sources marked "varies" (like freelance) are tracked without an expected amount.
+- **Fixed expenses recognize themselves.** Each constant expense gets a bank-text keyword (guessed from its name, editable). Matching charges skip Review and are marked "Fixed expense".
+- **Skips Review by itself.** Card payments and transfers between your own accounts are recognized and kept in Activity, marked "Between your accounts".
+- **Account-aware suggestions.** Every account is reviewed on its own, and a savings account suggests the Savings pot first.
+- **Goal projections.** Each goal shows the month it would be reached at the current percentage, and what a few more percent would change. Goals show their real percent (a $700 pot with a $350 goal reads 200%).
+- **Auto-sync.** With a linked bank, the app syncs on open, when you return to it, when the phone reconnects, and every few minutes while open.
+
+Nothing is sent anywhere to learn: the rules live in the app's storage on your phone, travel only inside your own backup code, and are cleared by *Clear sample data & start fresh* or *Erase*.
+
+## What's in the app
+- **Review** (opens first): pinned pots at the top, then each account's new purchases to sort into a pot. Search by name, amount, date, category or pot. "Mark all as sorted" clears the list when you've caught up elsewhere.
+- **Dashboard:** your pots (Spending, Savings, and any you add), accounts grouped by bank, and totals for Earned, Spent and Deductible. Tap a pot for its balance, goal progress and every transaction in and out.
+- **Activity:** every transaction by day, searchable. Entries you add by hand can be edited or deleted.
+- **Budget:** income sources and this month's deposits, earnings, constant expenses, savings and goal percentages, and the result. *Apply* asks first and can be undone; updating a month replaces its numbers so nothing double counts. *Paste a list* reads expenses from text. Budget history lists each past month, and **Statements** shows a monthly report (income, spending habits, categories vs last month, top places, budget vs actual, goals, accounts and every transaction) you can save as a PDF, share or export as CSV. Statements are built on the device.
+- **Categories:** built-in plus your own (pick an emoji, mark it tax deductible).
+- **Make it rain:** applying a new budget ends with a "Make it rain!" button; shake the phone and dollar bills fall.
+
+## Look and feel
+Four palettes (Harbor, Dune, Graphite, Plum), each in light, dark or auto, with a "deep glass" finish: frosted cards with a colored edge that wraps each window, soft shadows, and a slowly drifting glow behind everything that also shifts as you scroll and tilt the phone. Windows open and close with a smooth slide; every button reacts to a tap and gives a small haptic. Every text and button color pairing is at least 4.5:1 (WCAG 2.x), and dark mode is checked against the brightest point of its glow. Text size and an Animations switch are in Settings.
+
+## Your data and privacy
+Everything you enter lives in the browser on your phone. The web address serves only the app's code, and this repository contains no real financial data, only made-up samples.
+- **Backup:** *Settings → Backup & restore* can email you a backup code (opens the share sheet), copy it, or save a file. A reminder appears after 7 days. To restore, paste the whole code under "Restore from code".
+- **App lock (optional):** a numeric passcode on an on-screen number pad, auto-lock delay, and an option to ask for the passcode before backup, restore, erase and statement export. The passcode is stored only as a salted hash and is never in backups. The lock keeps people out of the app; it does not encrypt stored data, so keep your phone's own passcode on.
+- **Demo mode:** shows the app with entirely made-up data; your real data and bank link are never read in demo mode.
+- **Never commit** a backup file or code, an API key or a connection code. `.gitignore` blocks the usual backup names. Don't paste a backup code anywhere public: it contains your financial data.
+- The repo is public so GitHub Pages can serve it for free. If you want the code hidden too, make it private and host the same files on a private-friendly host. The page asks search engines not to index it, which is a courtesy, not security.
+
+## Linking real bank accounts (optional)
+*Settings → Bank accounts*. The app talks to your own private Cloudflare Worker (`server/worker.js`), which holds the Plaid keys; follow the step-by-step guide in [`server/README.md`](server/README.md). A **connection code** (*copy connection code*) carries only your server address and passphrase, so a new or restored device needs one paste; keep it in a password manager. It is never part of a backup. Until you link, the app runs on sample data or hand-entered purchases.
 
 ## Files
-`server/worker.js` is the optional bank-link server. `data.js` holds the logic (categories, simplifier, pots, budget, month-end check). `app.js` is the interface. `style.css`, `index.html`, `sw.js` (offline), `manifest.webmanifest`.
-
-## Linking real bank accounts
-Profile button → Settings → Bank accounts. It talks to your own private Cloudflare Worker (`server/worker.js`) which holds the Plaid keys; follow the step-by-step guide in `server/README.md`. Until then the app runs on sample data or hand-entered purchases.
-
-## Settings
-The profile button (top right) opens Settings: appearance (light, dark, auto and color palette), text size, animations, default pot, backup reminder, bank linking, backup & restore, and erase.
-
-## Later
-- **Credit score:** make `creditProvider.fetchLatest()` return `{ score, bureau, date }` and set `FEATURES.creditScore = true`.
-
-
-## Newer features
-
-- **Review by account:** each bank account gets its own list (a savings-account fee never mixes with checking or cards), with chips to look at one account. A savings account suggests the Savings pot first.
-- **Search:** Review, Activity and To-do & Notes all have a search box (name, amount, date, category, pot).
-- **Auto-sync:** syncs when the app opens, when you come back to it, when the phone reconnects, and every few minutes while open. The top bar shows the last sync; tap it to retry.
-- **Home accounts:** every account your banks send, grouped by bank. Tap one for balances, this month's totals and recent transactions. *Settings → Bank accounts → choose accounts* adds accounts a bank didn't send the first time.
-- **Income history:** *Income → Income history* reads your own "money made" lists (paste or choose files), shows year and month totals, which sources are still paying, sets up income sources, and cross-checks deposits in your bank to learn which bank text belongs to which employer. These records live only on your phone; they are never part of this repository.
-
-## Names, confidence and automatic sorting
-
-- **Names are nouns:** "Kroger", "Corner Coffee", "Card payment", never "Purchase at…" or "Deposit from…".
-- **Confidence is cross-checked** from three places: a list of common merchants, common words in the name, and (once linked) the bank's own merchant name and category. When they agree confidence goes up; when they disagree it goes down. Categories you set yourself always win. The transaction detail says why it was read that way.
-- **Skips Review by itself:** card payments and transfers between your own accounts, and any charge that contains a fixed expense's bank text (Budget → Constant monthly expenses). They stay in Activity, marked "Between your accounts" or "Fixed expense".
-- **Review → "mark all as already sorted"** clears everything waiting, for when you've caught up outside the app.
-- **Dashboard → Deductible** opens the list of what is being counted, by month and by name. Settings → Categories lets you add your own categories (and mark them tax deductible) or delete them.
-- **First run:** a title screen ("~/Pocket Ledger by Elijah Halford"), then a short, skippable tour; Settings → This device → "show the tour again". Buttons give a small haptic tap using the switch trick from the ios-haptics library (switch off under This device). Theme has Home Screen icon looks (Classic, Theme, Inverted, Prompt, Light, Night) that you can save as an image. Defaults are the Vice palette with rounded corners.
-- **Make it rain:** applying a new budget opens the Dashboard with a pulsing "make it rain!" text. Shake the phone while the "make it rain!" text is showing (iPhone asks for motion access once, at the end of the tour or when you apply the budget; tap the text to ask again): the colors rotate through the rainbow and dollar bills fall until you stop.
-- **Goals** show their real percent, so a pot at $700 with a $350 goal reads 200%. In Budget, each goal shows the month it would be reached at the current percent, and what a few more percent would change.
-- **Statements → save as PDF** writes a real PDF on the device and opens the share sheet (Save to Files).
-- **Budget → Paste a list** reads your monthly expenses from text (Name, amount per line; "Savings 20%" sets the percentage).
-
-## Screens, demo mode and editing
-- One floating button switches screens: it opens an isometric stack of the screens. Swipe or scroll to shuffle, tap the front one to open it. Settings → *Open on* picks the screen the app starts on.
-- Settings → *Demo mode* shows the app with entirely made-up data (amber frame and a DEMO tag). Your real data and bank link are never read in demo mode and come back when you exit.
-- Entries you add by hand can be edited or deleted from their detail sheet.
-- Settings shows the app version at the bottom so you can confirm you are on the latest copy.
-
-## Latest changes
-- Four tabs (Review, Dashboard, Activity, Budget). Income sources and this month's deposits live in Budget. Windows in Budget and Settings can be collapsed and stay that way.
-- **Monthly statements:** when a month ends, Home shows a notification; Budget > Statements lists every month. Each has income, spending habits (per-day average, no-spend days, priciest day, weekday), categories vs last month, top places, budget vs actual, goal progress, pot balances, accounts and every transaction. Save as PDF, share, or CSV. Built on the device, sent nowhere. The demo has one ready.
-- **Security:** optional app lock (passcode on an on-screen number pad), auto-lock delay, passcode before backup/restore/erase/statement export. The passcode is stored only as a salted hash and is not in backups. The lock keeps people out of the app; it does not encrypt the stored data.
-- **Currency:** follows the phone's region unless you pick one in Settings. Rounding is "Nearest $" (or your currency's symbol) or exact cents.
-- **Home-screen app:** solid status-bar strip, safe-area padding, edge swipe-back disabled. Icon: a teal pocket with an amber coin.
-- A **Finance** category covers Roth IRA, 401(k) and brokerage transfers.
-- Review shows Spending and every other pot or goal in a swipeable row. Rounding differences go straight to Spending, so there is no month-end check.
-- Applying or updating the monthly budget asks first and can be undone. Erase, clear and restore need a typed word.
-- Colors: four palettes in light and dark. Every text and button color pairing is at least 4.5:1 (WCAG 2.x); dark mode is checked against the brightest point of its background glow.
-
-
-**Connection code.** Settings → Bank accounts → "copy connection code" gives a short `PLC1:…~` text with only your server address and passphrase. Keep it in a password manager; on a new or restored device paste it once under Bank accounts. It is never part of a backup code.
+| File | What it is |
+| --- | --- |
+| `index.html`, `style.css` | The page and all styling (palettes, glass, motion) |
+| `data.js` | Logic with no screen code: categories, name simplifier, learning, pots, income, budget, statements |
+| `app.js` | The screens and interactions |
+| `lock.js` | The optional app lock and number pad |
+| `sw.js`, `manifest.webmanifest`, `app-icon-*.png` | Offline support and home-screen install |
+| `server/` | The optional bank-link Worker and its setup guide |

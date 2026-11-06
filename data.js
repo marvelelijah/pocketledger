@@ -1,12 +1,6 @@
 /* PocketLedger data layer: categories, simplifier, mock provider, state, pots, income, budget.
    No DOM access here, so the logic can be tested on its own. */
 
-const FEATURES = {
-  // Credit score is deliberately off for now. To enable: implement creditProvider.fetchLatest()
-  // (below), then set this to true. The Home screen card is already built.
-  creditScore: false,
-};
-
 const BASE_CATS = {
   food:          { title: 'Food & Drink',   color: '#f97316', icon: '🍴' },
   groceries:     { title: 'Groceries',      color: '#22c55e', icon: '🛒' },
@@ -89,9 +83,7 @@ function currencyCode() {
   return c && c !== 'auto' ? c : deviceCurrency();
 }
 const fmtCache = {};
-let HIDE_AMOUNTS = false;   // "hide amounts" privacy setting
 function usd(n) {
-  if (HIDE_AMOUNTS) return '••••';
   const code = currencyCode();
   const f = fmtCache[code] || (fmtCache[code] = new Intl.NumberFormat('en-US', { style: 'currency', currency: code }));
   return f.format(n || 0);
@@ -309,10 +301,6 @@ const accountProvider = {
   },
 };
 
-const creditProvider = {
-  async fetchLatest() { return null; }, // { score: 742, bureau: 'Equifax', date: ISO } when implemented
-};
-
 /* ---------- state & persistence ---------- */
 
 /* Demo mode keeps a separate, made-up copy of the app so you can show it off. Your real data and bank link are never read or shown. */
@@ -374,11 +362,10 @@ function defaultState() {
     learned: {},
     customCats: [],       // categories you made yourself: { id, title, icon, deduct, color }
     statementsSeen: [],   // months whose statement you have opened or dismissed
-    todos: [],
+    todos: [],   // the to-do/notes screens are gone; any saved ones are kept so old backups still round-trip
     notes: [],
     lastSync: null,
     lastExport: null,
-    creditScore: null,
   };
 }
 
@@ -538,7 +525,6 @@ async function sync() {
     S.accounts = await accountProvider.fetchAccounts();
     const raw = await accountProvider.fetchTransactions();
     ingest(raw);
-    if (FEATURES.creditScore) S.creditScore = await creditProvider.fetchLatest();
     S.lastSync = new Date().toISOString();
     syncError = null;
   } catch (e) {
@@ -795,7 +781,7 @@ function addManualTx(kind, amount, name, potId, date) {
   return tx.id;
 }
 
-/* Removes the sample transactions and starts every pot at $0. Your income sources, expenses, to-dos and notes stay. */
+/* Removes the sample transactions and starts every pot at $0. Your income sources and expenses stay. */
 function startFresh() {
   S.useSampleData = false;
   S.accounts = [];
@@ -886,7 +872,6 @@ const taxDeductibleTotal = year => S.transactions
 /* ---------- monthly budget (always applied by you, never automatically) ---------- */
 
 /* Only income with a fixed expected amount; variable income (like freelance) is added by hand each month. */
-const expectedMonthlyEarnings = () => S.incomeSources.filter(s => !s.variable).reduce((a, s) => a + (s.expectedAmount || 0), 0);
 const fixedTotal = () => S.fixedExpenses.reduce((a, e) => a + (e.amount || 0), 0);
 const runFor = d => S.budgetRuns.find(r => r.monthKey === monthKey(d));
 const runByKey = key => S.budgetRuns.find(r => r.monthKey === key);
@@ -1225,27 +1210,6 @@ function applyExpenseList(parsed, mode) {
   if (parsed.pct != null) S.savingsPercent = Math.min(Math.max(parsed.pct, 0), 100);
   save();
 }
-
-/* ---------- to-do list & notes ---------- */
-
-function addTodo(text) {
-  text = String(text || '').trim();
-  if (!text) return;
-  S.todos.unshift({ id: uid(), text, done: false, created: new Date().toISOString() });
-  save();
-}
-function toggleTodo(id) { const t = S.todos.find(x => x.id === id); if (t) { t.done = !t.done; save(); } }
-function deleteTodo(id) { S.todos = S.todos.filter(t => t.id !== id); save(); }
-function clearDoneTodos() { S.todos = S.todos.filter(t => !t.done); save(); }
-
-function addNote() {
-  const n = { id: uid(), title: '', body: '', updated: new Date().toISOString() };
-  S.notes.unshift(n);
-  save();
-  return n.id;
-}
-function updateNote(id, fields) { const n = S.notes.find(x => x.id === id); if (n) { Object.assign(n, fields, { updated: new Date().toISOString() }); save(); } }
-function deleteNote(id) { S.notes = S.notes.filter(n => n.id !== id); save(); }
 
 /* ---------- backup reminder ---------- */
 

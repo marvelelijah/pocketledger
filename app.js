@@ -6,7 +6,7 @@ const modalRoot = document.getElementById('modal-root');
 
 const TAB_KEYS = ['review', 'home', 'activity', 'budget'];
 const ui = {
-  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, newCat: { title: '', icon: '', deduct: false }, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', psearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
+  tab: (S.settings && TAB_KEYS.includes(S.settings.startTab)) ? S.settings.startTab : 'review', prevTab: 'review', linkMsg: '', linkItems: null, modal: null, newCat: { title: '', icon: '', deduct: false }, picker: null, dialog: null, skipGhost: {}, bulkTarget: null, filter: null, search: '', rsearch: '', racct: 'all', openAcct: {}, afilter: null, xref: null, syncing: false, resetScroll: false,
   potId: null, selectMode: false, selected: {},
   budgetInputs: {}, editEarn: {}, resetEarn: {}, openRuns: {}, checkMonth: null, actual: null, adjTarget: 'spending',
 };
@@ -122,7 +122,6 @@ function homeView() {
     <div class="card tappable" data-action="openDeduct"><div class="muted small">Deductible</div><div class="stat" style="color:var(--sage)" ${counted('deduct', taxDeductibleTotal(now.getFullYear()))}>${usd(taxDeductibleTotal(now.getFullYear()))}</div></div>
   </div>
 
-  ${FEATURES.creditScore ? creditCard() : ''}
 
   ${accountsHTML()}`;
 }
@@ -174,13 +173,6 @@ function accountsHTML() {
     ${lastSaveError ? `<div class="err">Couldn't save: ${esc(lastSaveError)}</div>` : ''}
     ${S.settings.linked ? '<div class="muted small" style="margin-top:6px">Missing an account? Settings → Bank accounts → choose accounts.</div>' : ''}
   </div>`;
-}
-
-function creditCard() {
-  const c = S.creditScore;
-  return `<div class="card"><div class="muted small">Credit score</div>
-    ${c ? `<div class="big">${c.score}</div><div class="muted small">${esc(c.bureau)} · ${fmtShort(c.date)}</div>`
-        : '<div class="muted">Not connected</div>'}</div>`;
 }
 
 /* ---------- a pot's own page ---------- */
@@ -501,7 +493,6 @@ function incomeHistoryView() {
 
 /* ---------- budget ---------- */
 
-const srcById = id => S.incomeSources.find(s => s.id === id);
 
 function earningAmounts() {
   const now = new Date();
@@ -725,45 +716,6 @@ function patchCheck() {
   if (t) t.textContent = usd(potsTotal());
 }
 
-/* ---------- to-do & notes ---------- */
-
-const planHit = (q, ...parts) => { const w = q.toLowerCase().split(/\s+/).filter(Boolean); const h = parts.join(' ').toLowerCase(); return w.every(x => h.includes(x)); };
-
-function todoListHTML() {
-  const q = ui.psearch;
-  const todos = S.todos.filter(t => planHit(q, t.text));
-  const open = todos.filter(t => !t.done), done = todos.filter(t => t.done);
-  const row = t => `<div class="todo ${t.done ? 'done' : ''}">
-    <input type="checkbox" ${t.done ? 'checked' : ''} data-change="todoDone" data-id="${t.id}">
-    <span class="todo-text">${esc(t.text)}</span>
-    <button class="link" data-action="delTodo" data-id="${t.id}" aria-label="Delete">✕</button></div>`;
-  return `${open.map(row).join('') || `<div class="muted" style="padding:8px 0">${q ? 'No tasks match.' : 'Nothing to do. Add something above.'}</div>`}
-      ${done.length ? `<div class="day">Done</div>${done.map(row).join('')}
-        ${q ? '' : '<button class="link small" data-action="clearDone">Clear completed</button>'}` : ''}`;
-}
-
-function noteListHTML() {
-  const notes = S.notes.filter(n => planHit(ui.psearch, n.title, n.body));
-  return `${notes.length ? notes.map(n => `<div class="note" data-action="openNote" data-id="${n.id}">
-      <div class="t1">${esc(n.title || 'Untitled note')}</div>
-      <div class="muted small note-prev">${esc((n.body || '').slice(0, 120)) || 'Empty'}</div>
-      <div class="muted small">${fmtShort(n.updated)}</div></div>`).join('')
-      : `<div class="muted" style="padding:8px 0">${ui.psearch ? 'No notes match.' : 'No notes yet.'}</div>`}`;
-}
-
-function planView() {
-  return `<h1>To-do &amp; Notes</h1>
-  ${searchBox('psearch', ui.psearch, 'psearch', 'Search tasks and notes')}
-  <div class="card"><h2>Money to-do list</h2>
-    <div class="row" style="gap:8px"><input id="todoText" placeholder="Add a task or goal…" style="flex:1">
-      <button class="btn primary" data-action="addTodo">Add</button></div>
-    <div id="todoList" style="margin-top:8px">${todoListHTML()}</div>
-  </div>
-  <div class="card"><div class="row"><h2 style="margin:0">Notes</h2><button class="link" data-action="addNote">＋ New note</button></div>
-    <div id="noteList">${noteListHTML()}</div>
-  </div>`;
-}
-
 function syncLabel() {
   if (!S.settings.linked || !linkConfigured()) return '';
   if (ui.syncing) return '↻ syncing…';
@@ -839,7 +791,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 o';
+const APP_VERSION = '2026-11-06 p';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1087,17 +1039,6 @@ function moveModal() {
     <button class="btn primary full" data-action="doMove">Move</button>`);
 }
 
-function noteModal() {
-  const n = S.notes.find(x => x.id === ui.modal.id);
-  if (!n) return sheet('Note', emptyBox('Not found', ''));
-  return sheet('Note', `
-    <div class="card stack">
-      <input placeholder="Title" value="${esc(n.title)}" data-change="noteTitle" data-id="${n.id}" data-live="1">
-      <textarea rows="12" placeholder="Write here…" data-change="noteBody" data-id="${n.id}" data-live="1">${esc(n.body)}</textarea>
-    </div>
-    <button class="btn danger full" data-action="delNote" data-id="${n.id}">Delete note</button>`);
-}
-
 /* In-app replacements for the phone's own pop-up menus and alerts. */
 function selBtn(field, id, style, w) {
   const d = pickDef(field, id);
@@ -1260,11 +1201,8 @@ function statementModal(key) {
 }
 
 /* A plain, printable version of the statement: black on white, one file, nothing loaded from the internet. */
+
 function statementDoc(st) {
-  const was = HIDE_AMOUNTS; HIDE_AMOUNTS = false;
-  try { return statementDocInner(st); } finally { HIDE_AMOUNTS = was; }
-}
-function statementDocInner(st) {
   const m = x => usd(x);
   const sec = (t, body) => `<h2>${esc(t)}</h2>${body}`;
   const tbl = (rows, head) => `<table>${head ? '<tr>' + head.map(h => `<th>${esc(h)}</th>`).join('') + '</tr>' : ''}${rows.map(r => '<tr>' + r.map((c, i) => `<td class="${i ? 'r' : ''}">${c}</td>`).join('') + '</tr>').join('')}</table>`;
@@ -1307,11 +1245,8 @@ async function shareFile(name, type, content, title) {
 }
 /* A real PDF, written by hand on this device (Courier, Letter size). No print dialog and nothing loaded from the internet,
    so "save as PDF" works the same in Safari, from the home screen, and on a computer. */
+
 function statementPdf(st) {
-  const was = HIDE_AMOUNTS; HIDE_AMOUNTS = false;
-  try { return statementPdfInner(st); } finally { HIDE_AMOUNTS = was; }
-}
-function statementPdfInner(st) {
   const COLS = 96, m = x => usd(x);
   const lines = [];                                   // { t: text, b: bold }
   const add = (t, b) => lines.push({ t: String(t), b: !!b });
@@ -1440,7 +1375,6 @@ function modalHTML() {
     case 'sources': return sourcesModal();
     case 'potEdit': return potEditModal();
     case 'move': return moveModal();
-    case 'note': return noteModal();
     case 'pasteExp': return pasteExpModal();
     case 'deductible': return deductibleModal();
     case 'statement': return statementModal(m.key);
@@ -1699,24 +1633,6 @@ async function restoreCode() {
   render();
 }
 
-/* Reads a backup but takes only the to-do list and notes; nothing else on this device changes. Anything already here is kept. */
-async function restoreNotesOnly() {
-  const box = $('restoreText');
-  try {
-    const obj = await decodeBackup(box ? box.value : '');
-    let nt = 0, nn = 0;
-    const haveT = new Set(S.todos.map(t => t.id + '|' + t.text)), haveN = new Set(S.notes.map(n => n.id + '|' + n.title + '|' + n.body));
-    for (const t of obj.todos || []) if (!haveT.has(t.id + '|' + t.text)) { S.todos.push(t); nt++; }
-    for (const n of obj.notes || []) if (!haveN.has(n.id + '|' + n.title + '|' + n.body)) { S.notes.push(n); nn++; }
-    S.notes.sort((a, b) => String(b.updated || '').localeCompare(String(a.updated || '')));
-    save();
-    if (box) box.value = '';
-    askAlert(nt + nn ? 'Brought back ' + nt + ' to-do' + (nt === 1 ? '' : 's') + ' and ' + nn + ' note' + (nn === 1 ? '' : 's') + '. Nothing else was changed.' : 'That backup had no notes or to-dos that are missing here.');
-  } catch (e) {
-    askAlert('That code could not be read: ' + (e.message || 'unknown problem') + '. Paste the whole code, including PL1: at the start and ~ at the end.');
-  }
-  render();
-}
 
 /* ---------- linking ---------- */
 
@@ -2013,13 +1929,6 @@ const ACTIONS = {
   undoBudget: () => askConfirm('Put this month\'s budget back the way it was before the last change?', 'undo', () => { undoBudget(); render(); }),
   toggleRun: d => { ui.openRuns[d.key] = !ui.openRuns[d.key]; },
 
-  // to-do & notes
-  addTodo: () => { const el = $('todoText'); if (el && el.value.trim()) { addTodo(el.value); } },
-  delTodo: d => deleteTodo(d.id),
-  clearDone: () => clearDoneTodos(),
-  addNote: () => { ui.modal = { type: 'note', id: addNote() }; },
-  openNote: d => { ui.modal = { type: 'note', id: d.id }; },
-  delNote: d => askConfirm('Delete this note?', 'delete', () => { deleteNote(d.id); ui.modal = null; }, true),
 
   // backup
   export: () => { exportData(); return false; },
@@ -2028,8 +1937,6 @@ const ACTIONS = {
   restoreCode: () => { restoreCode(); return false; },
   copyConn: () => { copyConn(); return false; },
   useConn: () => { useConn(); return false; },
-  restoreNotes: () => { restoreNotesOnly(); return false; },
-  import: () => { const f = $('importFile'); if (f) f.click(); return false; },
 };
 
 document.addEventListener('click', e => {
@@ -2046,8 +1953,7 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && e.target.id !== 'todoText' && !/^(checkbox|radio|button|submit|file)$/.test(e.target.type)) { e.preventDefault(); e.target.blur(); return; }   // Enter finishes whatever is being typed
-  if (e.key === 'Enter' && e.target && e.target.id === 'todoText') { ACTIONS.addTodo(); render(); }
+  if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|file)$/.test(e.target.type)) { e.preventDefault(); e.target.blur(); return; }   // Enter finishes whatever is being typed
 });
 
 /* Keeps only emoji (the first two), dropping letters, numbers and symbols. */
@@ -2068,11 +1974,6 @@ function handleField(el, final) {
     case 'rsearch':
       ui.rsearch = v;
       setHTMLIfChanged($('rvList'), reviewListHTML());
-      return;
-    case 'psearch':
-      ui.psearch = v;
-      setHTMLIfChanged($('todoList'), todoListHTML());
-      setHTMLIfChanged($('noteList'), noteListHTML());
       return;
     // budget
     case 'earnInput': ui.budgetInputs[d.id] = num(v); patchBudget(); return;
@@ -2119,26 +2020,11 @@ function handleField(el, final) {
     case 'moveFrom': m.from = v; return;
     case 'moveTo': m.to = v; return;
     case 'moveAmount': m.amount = num(v); return;
-    // to-do & notes
-    case 'todoDone': toggleTodo(d.id); render(); return;
-    case 'noteTitle': updateNote(d.id, { title: v }); return;
-    case 'noteBody': updateNote(d.id, { body: v }); return;
     case 'histFiles':
       if (final && el.files && el.files.length) {
         Promise.all([...el.files].map(f => f.text())).then(texts => {
           try { const r = importIncomeHistory(texts.join('\n')); ui.xref = null; askAlert('Read ' + r.added + ' payments from ' + r.years.join(', ') + '.'); }
           catch (err) { askAlert(err.message); }
-          render();
-        });
-      }
-      return;
-    case 'import':
-      if (final && el.files && el.files[0]) {
-        el.files[0].text().then(text => {
-          try {
-            const obj = JSON.parse(text);
-            askConfirm('Replace everything on this device with this file?', 'restore', () => { replaceState(obj); ui.budgetInputs = {}; ui.actual = null; }, true);
-          } catch (err) { askAlert('That file could not be imported.'); }
           render();
         });
       }

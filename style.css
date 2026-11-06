@@ -220,12 +220,6 @@ textarea { resize: vertical; }
 .hist-head { padding: 8px 0; cursor: pointer; }
 .hist-body { padding-bottom: 8px; }
 .pctbox { display: flex; align-items: center; gap: 4px; }
-.todo { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
-.todo:first-child { border-top: 0; }
-.todo-text { flex: 1; }
-.todo.done .todo-text { text-decoration: line-through; color: var(--fg-dim); }
-.note { padding: 10px 0; border-top: 1px solid var(--line); cursor: pointer; }
-.note-prev { white-space: pre-line; max-height: 2.8em; overflow: hidden; }
 
 .stick { position: fixed; top: var(--hdr-h, env(safe-area-inset-top)); left: 0; right: 0; z-index: 5; margin: 0 auto; max-width: 640px; box-sizing: border-box; padding: 6px 20px 2px; transform: translateZ(0); }
 .stick-ph { height: 0; }
@@ -298,9 +292,6 @@ html { overflow-x: hidden; } body { overflow-x: clip; }
 .profile { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); padding: 4px 10px; color: var(--fg-dim); font-size: calc(12px * var(--ts, 1)); text-transform: lowercase; }
 .profile b { color: var(--sage); font-weight: 700; }
 .profile:active { transform: scale(.95); }
-.swatches { display: flex; gap: 12px; }
-.swatch { width: 34px; height: 34px; border: 1px solid var(--line); }
-.swatch.on { outline: 1px solid var(--fg); outline-offset: 3px; }
 .info { line-height: 1.9; }
 .spendbar { background: var(--raise); }
 [data-motion="off"] *, [data-motion="off"] *::before, [data-motion="off"] *::after { animation-duration: .001ms !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
@@ -412,7 +403,7 @@ input, textarea, .profile,
 .seg button { border: 1px solid var(--line); border-radius: var(--r); transition: background-color .2s, color .2s, border-color .2s, transform .22s; }
 .chip, .badge, .pill, .pip,
 .bar { border-radius: 999px; }
-.ic, .swatch { border-radius: var(--r-s); }
+.ic { border-radius: var(--r-s); }
 .sheet { border-radius: 20px 20px 0 0; }
 .grab { border-radius: 999px; }
 #tabbar button.on::before { border-radius: 999px; }
