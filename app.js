@@ -839,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 m';
+const APP_VERSION = '2026-11-06 n';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -916,6 +916,7 @@ function settingsView() {
     <div class="muted small" style="margin:12px 0 6px">New category</div>
     <div class="field"><span>Name</span><input class="wide" placeholder="e.g. Equipment" value="${esc(ui.newCat.title)}" data-change="newCatTitle" data-live="1" autocomplete="off" style="text-align:right"></div>
     <div class="field"><span>Emoji</span><input class="wide" placeholder="🏷️" value="${esc(ui.newCat.icon)}" data-change="newCatIcon" data-live="1" autocomplete="off" style="text-align:right"></div>
+    <div class="emojipick">${CAT_EMOJIS.map(e => `<button class="chip ${ui.newCat.icon === e ? 'on' : ''}" data-action="catPickEmoji" data-pot="${e}">${e}</button>`).join('')}</div>
     ${seg([['yes', 'Tax deductible'], ['no', 'Not deductible']], ui.newCat.deduct ? 'yes' : 'no', 'catNewDed')}
     <div class="btn-row"><button class="btn primary" data-action="catAdd">add category</button></div>
   ${CE}
@@ -1532,6 +1533,7 @@ function render() {
   ui.skipGhost = {};
   modalRoot.innerHTML = (ui.modal ? modalHTML() : '') + (ui.picker ? pickerHTML() : '') + (ui.dialog ? dialogHTML() : '');
   [...modalRoot.children].forEach(el => { if (!beforeNames.includes(el.dataset.layer)) el.classList.add('in'); });
+  document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=file])').forEach(i => i.setAttribute('enterkeyhint', 'done'));
   layoutStick();
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
@@ -1821,6 +1823,7 @@ const ACTIONS = {
   closeSettings: () => { ui.tab = ui.prevTab && ui.prevTab !== 'settings' ? ui.prevTab : 'review'; ui.resetScroll = true; },
   setPalette: d => { S.settings.palette = d.pot; save(); themeFade(); return false; },
   setMode: d => { S.settings.mode = d.pot; save(); themeFade(); return false; },
+  catPickEmoji: d => { ui.newCat.icon = d.pot; },
   catNewDed: d => { ui.newCat.deduct = d.pot === 'yes'; },
   catAdd: () => {
     const n = ui.newCat;
@@ -2032,6 +2035,7 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target && e.target.tagName === 'INPUT' && e.target.id !== 'todoText' && !/^(checkbox|radio|button|submit|file)$/.test(e.target.type)) { e.preventDefault(); e.target.blur(); return; }   // Enter finishes whatever is being typed
   if (e.key === 'Enter' && e.target && e.target.id === 'todoText') { ACTIONS.addTodo(); render(); }
 });
 
@@ -2507,7 +2511,7 @@ document.addEventListener('click', e => {
   const sum = e.target.closest && e.target.closest('details.coll > summary, details.info > summary');
   if (!sum) return;
   const d = sum.parentElement;
-  e.preventDefault();
+  if (!e.target.closest('[data-haptic-trigger]')) e.preventDefault();   // cancelling a tap on the haptic label would cancel its tap feedback too
   if (d._busy) return;
   if (motionOff() || !d.animate) { d.open = !d.open; return; }
   const opening = !d.open;

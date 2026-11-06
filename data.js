@@ -322,7 +322,9 @@ try { DEMO = typeof localStorage !== 'undefined' && localStorage.getItem(DEMO_KE
 function setDemo(on) { try { if (on) localStorage.setItem(DEMO_KEY, '1'); else localStorage.removeItem(DEMO_KEY); } catch (e) { /* ignore */ } }
 const STORAGE_KEY = DEMO ? 'pocketledger.demo.v1' : 'pocketledger.v1';   // normal key name kept so existing data is found and migrated
 const STATE_VERSION = 2;
-const POT_ICONS = ['💳', '🏦', '🎯', '✈️', '🏠', '🚗', '📷', '🎁', '🛟', '🎓'];
+const POT_ICONS = ['💳', '🏦', '🎯', '✈️', '🏠', '🚗', '📷', '🎁', '🛟', '🎓', '🏖️', '💍', '👶', '🐶', '🛠️', '🎮', '📱', '💻', '🩺', '🎄', '🚲', '🛋️', '👕', '🍽️', '📚', '🌴', '⚽', '🎸', '🧳', '💰'];
+/* tap-to-pick emoji for your own categories */
+const CAT_EMOJIS = ['🍔', '☕', '🍕', '🍺', '🛒', '🚗', '🚌', '🅿️', '⛽', '🏠', '💡', '💧', '📶', '📱', '💻', '🎬', '🎮', '🎵', '📚', '🎓', '💊', '🏥', '🦷', '🐶', '🐱', '👶', '🎁', '✈️', '🏨', '👕', '💇', '🏋️', '🔧', '🧾', '💼', '🏦', '🧴', '🌱', '🎟️', '📷', '🛠️', '🧹', '🔒', '🏷️'];
 /* Pots saved while the app briefly used plain symbols get their emoji back. */
 const ICON_UPGRADE = { '◈': '💳', '◆': '🏦', '◎': '🎯', '➤': '✈️', '⌂': '🏠', '◭': '🚗', '◉': '📷', '✧': '🎁', '◍': '🛟', '✦': '🎓' };
 
