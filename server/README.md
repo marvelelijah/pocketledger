@@ -181,3 +181,12 @@ Before using a real bank, remove the pretend one so fake purchases don't mix wit
 ## Deploying from GitHub (optional)
 
 `wrangler.jsonc` sits at the top of the repository and points at `server/worker.js`. In Cloudflare: your Worker → Settings → Builds → connect `marvelelijah/pocketledger`, branch `main`, deploy command `npx wrangler deploy`, and leave the root directory empty. Every push then redeploys the Worker, and the values in `wrangler.jsonc` (not secrets) are applied.
+
+## Daily cloud backups
+
+The app sends one **encrypted** backup a day to this Worker, which keeps the last 14 days in the same KV namespace as the bank links. The phone encrypts it (AES-256-GCM, key derived from your passphrase) before sending, so the stored text is unreadable scrambled data. Needs `server/worker.js` version `2026-11-06 b` or newer: redeploy it (or let the GitHub connection redeploy it) after pulling this update.
+
+- **Find them:** Cloudflare dashboard → **Storage & databases → Workers KV** → your `pocketledger` namespace → **KV Pairs**. The keys starting with `backup:` are the backups, one per day.
+- **Restore after a wipe:** open the app, paste your connection code (*Settings → Bank accounts*), then *Settings → Backup & restore → Cloud backup → restore* on a day.
+- **If you change `APP_PASSPHRASE`,** older cloud backups can't be unlocked with the new one, so make a fresh backup (*back up now*) right after changing it.
+- Turn it off any time under *Cloud backup* in the app. The Worker itself holds your passphrase, so this protects against a lost phone and a stranger browsing KV, not against someone with full control of your Cloudflare account.

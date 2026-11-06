@@ -13,7 +13,7 @@
 const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 
 /* Shown in the app (Settings > check connection) so you can tell which version of this file is running. */
-const WORKER_VERSION = '2026-11-06 a';
+const WORKER_VERSION = '2026-11-06 b';
 
 export default {
   async fetch(req, env) {
@@ -43,6 +43,9 @@ export default {
       if (route === 'POST /exchange') return json(await exchange(env, body), 200, cors);
       if (route === 'GET /sync') return json(await sync(env), 200, cors);
       if (route === 'POST /refresh') return json(await refresh(env), 200, cors);
+      if (route === 'POST /backup') return json(await putBackup(env, body), 200, cors);
+      if (route === 'GET /backups') return json(await listBackups(env), 200, cors);
+      if (route === 'GET /backup') return json(await getBackup(env, url.searchParams.get('day')), 200, cors);
       if (route === 'POST /unlink') return json(await unlink(env, body), 200, cors);
       return json({ error: 'Not found' }, 404, cors);
     } catch (e) {
@@ -204,6 +207,28 @@ async function refresh(env) {
     catch (e) { out.errors.push((item.institution || 'A bank') + ': ' + (e.message || e.code || 'refresh failed')); }
   }
   return out;
+}
+
+/* Daily backups from the app. The app encrypts each one on the phone before sending, so what is stored here is unreadable text.
+   One key per day ("backup:2026-11-06"), each kept for 14 days. Find them in Cloudflare: Storage & databases > Workers KV > your namespace. */
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+async function putBackup(env, body) {
+  const day = String(body.day || '');
+  if (!DAY.test(day)) throw Object.assign(new Error('Bad day'), { status: 400 });
+  const data = String(body.data || '');
+  if (!data.startsWith('LB1.') || data.length > 20 * 1024 * 1024) throw Object.assign(new Error('Bad backup'), { status: 400 });
+  await env.LEDGER.put('backup:' + day, data, { expirationTtl: 14 * 86400, metadata: { at: Number(body.at) || Date.now(), size: data.length } });
+  return { ok: true, day };
+}
+async function listBackups(env) {
+  const l = await env.LEDGER.list({ prefix: 'backup:' });
+  return { backups: l.keys.map(k => ({ day: k.name.slice(7), at: (k.metadata && k.metadata.at) || 0, size: (k.metadata && k.metadata.size) || 0 })).sort((a, b) => b.day.localeCompare(a.day)) };
+}
+async function getBackup(env, day) {
+  if (!DAY.test(String(day || ''))) throw Object.assign(new Error('Bad day'), { status: 400 });
+  const data = await env.LEDGER.get('backup:' + day);
+  if (!data) throw Object.assign(new Error('No backup for that day.'), { status: 404 });
+  return { day, data };
 }
 
 async function unlink(env, body) {

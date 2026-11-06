@@ -681,6 +681,16 @@ function backupCard() {
     <button class="btn primary full" data-action="shareCode">Email myself a backup code</button>
     <div class="muted small" style="margin:6px 0 10px">Opens the share sheet. Choose Mail and send it to yourself. It can't send by itself; a web page has no way to email on its own.</div>
     <div class="btn-row"><button class="btn" data-action="copyCode">Copy code</button><button class="btn" data-action="export">Save file</button></div>
+    <div class="day">Cloud backup</div>
+    ${DEMO ? '<div class="muted small">Not used in demo mode.</div>' : !linkConfigured() ? '<div class="muted small">Once your link server is connected, the app also backs itself up there every day, encrypted, so a wiped or lost phone isn\'t the end of it.</div>' : `
+      <div class="muted small" style="margin-bottom:6px">Every day the app sends an encrypted backup to your own Cloudflare Worker and keeps the last 14 days. Only this app can unlock them (the key comes from your passphrase).</div>
+      ${seg([['on', 'on'], ['off', 'off']], S.settings.cloudBackup === false ? 'off' : 'on', 'setCloud')}
+      <div class="small ${cbState().ok === false ? 'neg' : 'muted'}" style="margin-top:6px">${cbState().ok === false ? esc(cbState().msg || 'The last try failed.') : cbState().at ? 'Last saved ' + esc(fmtShort(cbState().at)) + '.' : 'Nothing sent yet. The first one goes a few seconds after you open the app.'}</div>
+      <div class="btn-row"><button class="btn" data-action="cloudNow">back up now</button></div>
+      ${ui.cloudErr ? `<div class="small neg">${esc(ui.cloudErr)}</div>` : ''}
+      ${(ui.cloudList || []).map(b => `<div class="field"><span>${esc(b.day)}${b.at ? ' · ' + esc(new Date(b.at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })) : ''}</span><button class="link" data-action="cloudRestore" data-day="${esc(b.day)}">restore</button></div>`).join('')}
+      ${ui.cloudList && !ui.cloudList.length && !ui.cloudErr ? '<div class="muted small">None in the cloud yet.</div>' : ''}
+      <details class="info"><summary>Where are they, and after a wipe?</summary><div class="muted small" style="margin-top:6px">In Cloudflare: <b>Storage &amp; databases → Workers KV</b> → your <b>pocketledger</b> namespace → <b>KV Pairs</b>. They are the keys starting with <b>backup:</b>, one per day, and look like scrambled text on purpose.<br>After a wipe: open the app, paste your connection code (Bank accounts), then come back here and tap restore on a day.</div></details>`}
     <div class="day">Automatic backups</div>
     <div class="muted small" style="margin-bottom:6px">A backup is saved on this phone every day you open the app, and the last 7 days are kept. They stay on this phone only, so they cover a mistake, not a lost phone.</div>
     ${(ui.autoBackups || []).length ? ui.autoBackups.map(b => `<div class="field"><span>${esc(new Date(b.at).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}</span><span class="hdr-r"><button class="link" data-action="abCopy" data-day="${esc(b.day)}">copy</button><button class="link" data-action="abRestore" data-day="${esc(b.day)}">restore</button></span></div>`).join('') : `<div class="muted small">${ui.autoBackups ? 'None yet. The first one is made a few seconds after you open the app.' : 'Loading…'}</div>`}
@@ -795,7 +805,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 w';
+const APP_VERSION = '2026-11-06 x';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1640,6 +1650,56 @@ const abLoad = () => abAll().then(l => { ui.autoBackups = l; if (ui.tab === 'set
 setTimeout(abSave, 4000);
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') abSave(); });
 
+/* ---------- cloud backup: the same backup code, encrypted on the phone, sent to your own Cloudflare Worker once a day ---------- */
+const CB_KEY = 'pocketledger.cloudbackup';
+const cbState = () => { try { return JSON.parse(localStorage.getItem(CB_KEY)) || {}; } catch (e) { return {}; } };
+const cbSet = o => { try { localStorage.setItem(CB_KEY, JSON.stringify(Object.assign(cbState(), o))); } catch (e) { /* ignore */ } };
+async function cbKey(pass, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function cbSeal(text, pass) {
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await cbKey(pass, salt), new TextEncoder().encode(text)));
+  return 'LB1.' + bytesToB64(salt) + '.' + bytesToB64(iv) + '.' + bytesToB64(ct);
+}
+async function cbOpen(blob, pass) {
+  const [tag, s, i, c] = String(blob).split('.');
+  if (tag !== 'LB1' || !c) throw new Error('Not a cloud backup');
+  try { return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(i) }, await cbKey(pass, b64ToBytes(s)), b64ToBytes(c))); }
+  catch (e) { throw new Error('Couldn\'t unlock it. It was made with a different passphrase.'); }
+}
+const cloudOn = () => !DEMO && linkConfigured() && S.settings.cloudBackup !== false;
+const cbErr = e => /not found/i.test(e.message || '') ? 'Your Cloudflare Worker needs the newer server/worker.js (see server/README.md).' : (e.message || 'Failed');
+async function cloudSave(force) {
+  if (!cloudOn() || !window.crypto || !crypto.subtle) return;
+  if (S.useSampleData && !(typeof Simple !== 'undefined' && Simple.active())) return;
+  const st = cbState();
+  if (!force && st.ok && Date.now() - (st.at || 0) < 6 * 3600e3) return;       // at most every 6 hours; the day's backup is overwritten
+  try {
+    const data = await cbSeal(await encodeBackup(), getLink().passphrase);
+    await linkApi('/backup', { day: localDay(new Date()), at: Date.now(), data });
+    cbSet({ at: Date.now(), ok: true, msg: '' });
+  } catch (e) { cbSet({ ok: false, msg: cbErr(e) }); }
+  ui.cloudList = null;
+  if (ui.tab === 'settings') { cloudLoad(); renderWhenIdle(); }
+}
+async function cloudLoad() {
+  if (!linkConfigured() || DEMO) return;
+  try { ui.cloudList = (await linkApi('/backups')).backups || []; ui.cloudErr = ''; }
+  catch (e) { ui.cloudList = []; ui.cloudErr = cbErr(e); }
+  if (ui.tab === 'settings') renderWhenIdle();
+}
+async function cloudRestore(day) {
+  try {
+    const r = await linkApi('/backup?day=' + encodeURIComponent(day));
+    restoreObj(await decodeBackup(await cbOpen(r.data, getLink().passphrase)));
+  } catch (e) { askAlert(cbErr(e)); }
+  render();
+}
+setTimeout(cloudSave, 7000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') cloudSave(); });
+
 /* A separate, tiny code that holds only the server address and passphrase, for keeping in a password manager. Never part of a backup. */
 const connCode = () => { const l = getLink(); return 'PLC1:' + btoa(unescape(encodeURIComponent(JSON.stringify({ u: l.url || '', p: l.passphrase || '' })))) + '~'; };
 document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.k === 'linkedit') ui.linkEdit = d.open; }, true);
@@ -1794,8 +1854,11 @@ const ACTIONS = {
   // settings
   abCopy: async d => { const b = (ui.autoBackups || []).find(x => x.day === d.day); if (!b) return false; try { await navigator.clipboard.writeText(b.code); askAlert('Backup code copied. Paste it into a note or email to yourself.'); } catch (e) { ui.dialog = { title: 'Copy this backup code', message: 'Press and hold in the box, choose Select All, then Copy.', code: b.code, cancel: false, ok: 'done' }; } render(); return false; },
   abRestore: async d => { const b = (ui.autoBackups || []).find(x => x.day === d.day); if (!b) return false; try { restoreObj(await decodeBackup(b.code)); } catch (e) { askAlert('That backup could not be read.'); } render(); return false; },
+  setCloud: d => { S.settings.cloudBackup = d.pot === 'on'; save(); if (d.pot === 'on') cloudSave(true); },
+  cloudNow: () => { cloudSave(true); return false; },
+  cloudRestore: d => { cloudRestore(d.day); return false; },
   openSettings: () => {
-    abLoad();
+    abLoad(); ui.cloudList = null; cloudLoad();
     if (ui.tab !== 'settings') ui.prevTab = ui.tab; ui.tab = 'settings'; ui.resetScroll = true;
     if (linkConfigured() && !ui.linkItems) linkApi('/status').then(st => { ui.linkItems = st.items || []; if (ui.tab === 'settings') renderWhenIdle(); }).catch(() => {});
   },
