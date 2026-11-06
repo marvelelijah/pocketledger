@@ -102,7 +102,7 @@ Tips: names are case-sensitive; paste values with no extra spaces; the passphras
 
 ## Part 3. Connect the app and link a practice bank (about 5 minutes)
 
-Do this on your **phone**, in the PocketLedger app.
+Do this on your **phone**, in the Ledgend app.
 
 1. Tap the **profile button** (top right) → scroll to **Bank accounts**.
 2. Under **Your link server**, paste the **Worker address** into the first box and your **passphrase** into the second box.
@@ -171,7 +171,7 @@ Before using a real bank, remove the pretend one so fake purchases don't mix wit
 
 ## Safety, in plain words
 - The app is **read-only**. It can see purchases and balances; it cannot move money.
-- You sign in to your bank inside Plaid's window. PocketLedger never sees your bank password.
+- You sign in to your bank inside Plaid's window. Ledgend never sees your bank password.
 - Your Plaid secret and your bank's access key live only in your Cloudflare account.
 - The server answers only requests that carry your passphrase and come from your site.
 - The server address and passphrase are stored only on your phone and are left out of backups.

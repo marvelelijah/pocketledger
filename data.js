@@ -1,4 +1,4 @@
-/* PocketLedger data layer: categories, simplifier, mock provider, state, pots, income, budget.
+/* Ledgend data layer: categories, simplifier, mock provider, state, pots, income, budget.
    No DOM access here, so the logic can be tested on its own. */
 
 const BASE_CATS = {
@@ -1257,7 +1257,7 @@ async function decodeBackup(text) {
     raw = await pipeBytes(bytes, new DecompressionStream('gzip'));
   }
   const obj = JSON.parse(new TextDecoder().decode(raw));
-  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.pots)) throw new Error('Not a PocketLedger backup');
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.pots)) throw new Error('Not a Ledgend backup');
   return obj;
 }
 

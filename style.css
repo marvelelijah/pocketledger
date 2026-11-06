@@ -1,4 +1,4 @@
-/* PocketLedger: four palettes, each in light and dark, with a "deep glass" finish.
+/* Ledgend: four palettes, each in light and dark, with a "deep glass" finish.
    60-30-10: 60% background and surfaces, 30% brand color, 10% call-to-action color. Every text/background pair is at least 4.5:1;
    the palette values below are generated and checked (dark mode is checked against the brightest point of its background glow). */
 :root, [data-theme="dark"] {

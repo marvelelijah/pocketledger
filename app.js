@@ -1,4 +1,4 @@
-/* PocketLedger UI. Plain JavaScript, no build step. */
+/* Ledgend UI. Plain JavaScript, no build step. */
 
 const app = document.getElementById('app');
 const tabbar = document.getElementById('tabbar');
@@ -753,7 +753,7 @@ function renderWhenIdle(tries) {
 
 function topbar() {
   const nm = (S.settings.name || '').trim();
-  const handle = DEMO ? 'demo@pocketledger' : (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@pocketledger';
+  const handle = DEMO ? 'demo@ledgend' : (nm.toLowerCase().replace(/[^a-z0-9]+/g, '') || 'you') + '@ledgend';
   return `<div class="topbar"><span class="prompt">${esc(handle)}${DEMO ? '<span class="demo-tag">DEMO</span>' : ''}${syncLabel() ? `<button class="syncstat" id="syncStat" data-action="syncTop">${esc(syncLabel())}</button>` : ''}</span>
     <button class="profile" data-action="openSettings" aria-label="Settings">${nm ? '<b>' + esc(nm[0].toUpperCase()) + '</b>' : emo('👤')}</button></div>`;
 }
@@ -1209,10 +1209,10 @@ function statementDoc(st) {
   const habits = [['Spent per day', m(st.dailyAvg)], ['Purchases', st.count + ' (average ' + m(st.avgPurchase) + ')'], ['No-spend days', st.noSpendDays + ' of ' + st.elapsed],
     ...(st.priciestDay ? [['Priciest day', 'day ' + st.priciestDay.day + ': ' + m(st.priciestDay.total)]] : []), ...(st.busiestWeekday ? [['Biggest spending weekday', st.busiestWeekday.name + 's: ' + m(st.busiestWeekday.total)]] : []), ['Bills', m(st.recurring)]];
   const pc = (a, b) => b ? ` (${a >= b ? '+' : '−'}${Math.abs(Math.round((a - b) / b * 100))}% vs last month)` : '';
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PocketLedger statement ${esc(st.label)}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Ledgend statement ${esc(st.label)}</title>
 <style>@page{margin:16mm}body{font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#111;background:#fff;max-width:760px;margin:24px auto;padding:0 16px}h1{font-size:22px;margin:0}h2{font-size:14px;margin:22px 0 6px;border-bottom:1px solid #111;padding-bottom:3px;text-transform:lowercase}
 table{width:100%;border-collapse:collapse}td,th{padding:3px 6px 3px 0;text-align:left;vertical-align:top;border-bottom:1px solid #ddd}td.r,th:last-child{text-align:right}.bar{height:6px;background:#e5e5e5}.bar i{display:block;height:100%;background:#111}.muted{color:#666}.big td{font-size:15px}tr{break-inside:avoid}</style></head><body>
-<h1>PocketLedger statement</h1><div class="muted">${esc(st.label)}${st.partial ? ' (so far)' : ''} · made ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}</div>
+<h1>Ledgend statement</h1><div class="muted">${esc(st.label)}${st.partial ? ' (so far)' : ''} · made ${new Date().toLocaleDateString('en-US', { dateStyle: 'long' })}</div>
 ${sec('Summary', tbl([['Income', m(st.income)], ['Spent', m(st.spent)], ...(st.invested ? [['Saved & invested', m(st.invested)]] : []), ['Kept (income − spent)', m(st.kept)], ...(st.savingsRate != null ? [['Kept of income', pctTxt(Math.max(st.savingsRate, 0))]] : []), ...(st.prev.has ? [['Spending change', (st.prev.spent ? pc(st.spent, st.prev.spent).replace(/^ \(|\)$/g, '') : 'n/a')]] : [])]))}
 ${sec('Spending habits', tbl(habits))}
 ${sec('Where it went', tbl(st.byCat.map(c => [esc(c.title) + `<div class="bar"><i style="width:${Math.round(c.pct * 100)}%"></i></div>`, m(c.total) + ' · ' + pctTxt(c.pct)]), ['Category', 'Amount']))}
@@ -1224,7 +1224,7 @@ ${sec('Pots at month end', tbl(st.pots.map(p => [esc(p.name), m(p.closing) + (p.
 ${st.incomeBy.length ? sec('Income', tbl(st.incomeBy.map(i => [esc(i.name), m(i.total)]))) : ''}
 ${st.accounts.length ? sec('Accounts (balances today)', tbl(st.accounts.map(a => [esc(a.name) + (a.mask ? ' ··' + esc(a.mask) : ''), (a.owed ? '−' : '') + m(Math.abs(a.balance))]))) : ''}
 ${sec('Transactions (' + st.txs.length + ')', tbl(st.txs.map(t => [shortDay(t.date) + ' ' + esc(t.name) + `<div class="muted">${esc((CATS[t.category] || CATS.other).title)} · ${esc(t.account)}${t.raw && t.raw !== t.name ? ' · Original: ' + esc(t.raw) : ''}</div>`, (t.amount > 0 ? '+' : '−') + m(Math.abs(t.amount))])))}
-<p class="muted" style="margin-top:24px">Made on your device by PocketLedger. Nothing was sent anywhere.</p></body></html>`;
+<p class="muted" style="margin-top:24px">Made on your device by Ledgend. Nothing was sent anywhere.</p></body></html>`;
 }
 
 function statementCsv(st) {
@@ -1275,7 +1275,7 @@ function statementPdf(st) {
   const bar = p => { const n = Math.round(Math.max(0, Math.min(1, p)) * 20); return '[' + '#'.repeat(n) + '.'.repeat(20 - n) + ']'; };
   const sgn = v => (v > 0 ? '+' : '-') + m(Math.abs(v));
 
-  add('POCKETLEDGER STATEMENT', true);
+  add('LEDGEND STATEMENT', true);
   add(st.label + (st.partial ? ' (so far)' : '') + '  |  made ' + new Date().toLocaleDateString('en-US', { dateStyle: 'long' }));
 
   head('Summary');
@@ -1314,7 +1314,7 @@ function statementPdf(st) {
     row(shortDay(t.date) + '  ' + t.name, sgn(t.amount));
     wrap((CATS[t.category] || CATS.other).title + ' | ' + t.account + (t.raw && t.raw !== t.name ? ' | Original: ' + t.raw : ''), COLS - 6, '').forEach(x => add('      ' + x));
   });
-  gap(); add('Made on your device by PocketLedger. Nothing was sent anywhere.');
+  gap(); add('Made on your device by Ledgend. Nothing was sent anywhere.');
 
   /* ---- bytes ---- */
   const hex = s => {
@@ -1346,7 +1346,7 @@ function statementPdf(st) {
     let s = 'BT\n9 TL\n40 744 Td\n';
     pg.forEach(l => { s += '/' + (l.b ? 'F2' : 'F1') + ' 9 Tf\n<' + hex(l.t) + '> Tj T*\n'; });
     s += 'ET\n';
-    s += 'BT\n/F1 8 Tf\n40 24 Td\n<' + hex('PocketLedger statement ' + st.label + '   page ' + (pi + 1) + ' of ' + pages.length) + '> Tj\nET\n';
+    s += 'BT\n/F1 8 Tf\n40 24 Td\n<' + hex('Ledgend statement ' + st.label + '   page ' + (pi + 1) + ' of ' + pages.length) + '> Tj\nET\n';
     objs[n - 1] = '<< /Length ' + s.length + ' >>\nstream\n' + s + 'endstream';
     objs[n] = '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ' + n + ' 0 R >>';
     kids.push((n + 1) + ' 0 R');
@@ -1363,7 +1363,7 @@ function statementPdf(st) {
 }
 function printStatement(key) {
   const st = monthStatement(key);
-  shareFile('pocketledger-statement-' + key + '.pdf', 'application/pdf', statementPdf(st), 'PocketLedger statement');
+  shareFile('ledgend-statement-' + key + '.pdf', 'application/pdf', statementPdf(st), 'Ledgend statement');
 }
 
 function modalHTML() {
@@ -1549,11 +1549,11 @@ function closeModal() {
 
 async function exportData() {
   const json = JSON.stringify(S, null, 2);
-  const name = 'pocketledger-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+  const name = 'ledgend-backup-' + new Date().toISOString().slice(0, 10) + '.json';
   try {
     const file = new File([json], name, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: 'PocketLedger backup' });   // lets you "Save to Files"
+      await navigator.share({ files: [file], title: 'Ledgend backup' });   // lets you "Save to Files"
       S.lastExport = new Date().toISOString(); save(); render();
       return;
     }
@@ -1568,14 +1568,14 @@ async function exportData() {
   S.lastExport = new Date().toISOString(); save(); render();
 }
 
-const BACKUP_HEADER = 'PocketLedger backup. Keep this email private; it contains your financial data.\nTo restore: Budget tab > Backup & restore > paste this whole email > Restore from code.\n\n';
+const BACKUP_HEADER = 'Ledgend backup. Keep this email private; it contains your financial data.\nTo restore: Budget tab > Backup & restore > paste this whole email > Restore from code.\n\n';
 
 async function shareCode() {
   const code = await encodeBackup();
   const text = BACKUP_HEADER + code.replace(/(.{64})/g, '$1\n');
   try {
     if (navigator.share) {
-      await navigator.share({ title: 'PocketLedger backup ' + new Date().toISOString().slice(0, 10), text });
+      await navigator.share({ title: 'Ledgend backup ' + new Date().toISOString().slice(0, 10), text });
       S.lastExport = new Date().toISOString(); save(); render();
       return;
     }
@@ -1779,8 +1779,8 @@ const ACTIONS = {
   openStatement: d => { ui.modal = { type: 'statement', key: d.id }; markStatementSeen(d.id); },
   dismissStatement: d => { markStatementSeen(d.id); },
   stmtPrint: () => { if (ui.modal && ui.modal.key) printStatement(ui.modal.key); },
-  stmtShare: () => { const k = ui.modal && ui.modal.key; if (k) shareFile('pocketledger-statement-' + k + '.html', 'text/html', statementDoc(monthStatement(k)), 'PocketLedger statement ' + k); },
-  stmtCsv: () => { const k = ui.modal && ui.modal.key; if (k) shareFile('pocketledger-statement-' + k + '.csv', 'text/csv', statementCsv(monthStatement(k)), 'PocketLedger statement ' + k); },
+  stmtShare: () => { const k = ui.modal && ui.modal.key; if (k) shareFile('ledgend-statement-' + k + '.html', 'text/html', statementDoc(monthStatement(k)), 'Ledgend statement ' + k); },
+  stmtCsv: () => { const k = ui.modal && ui.modal.key; if (k) shareFile('ledgend-statement-' + k + '.csv', 'text/csv', statementCsv(monthStatement(k)), 'Ledgend statement ' + k); },
   openDeduct: () => { ui.modal = { type: 'deductible', year: new Date().getFullYear() }; },
   dedYear: d => { ui.modal.year = +d.id; },
   pasteExpenses: () => { ui.modal = { type: 'pasteExp', text: '' }; },
@@ -2190,7 +2190,7 @@ function haptic() { if (!IS_IOS && S.settings.haptics !== false && navigator.vib
 const TOUR_KEY = 'pocketledger.tour';
 const tourSeen = () => { try { return localStorage.getItem(TOUR_KEY) === '1'; } catch (e) { return true; } };
 const TOUR = [
-  { i: '👋', t: 'Hi, I\'m PocketLedger', p: 'Your pocket-sized money buddy. This quick tour takes about a minute, and I promise there\'s no quiz at the end.' },
+  { i: '👋', t: 'Hi, I\'m Ledgend', p: 'Your pocket-sized money buddy. This quick tour takes about a minute, and I promise there\'s no quiz at the end.' },
   { i: '🔗', t: 'Link your accounts', p: 'Tap the round initial at the top right to open Settings, then Bank accounts. Enter your link server address and passphrase, tap "check connection", then "link a bank" and choose which accounts to share. It\'s read-only, so I can look but never move money. Not ready? Add purchases by hand with the + button.' },
   { i: '📥', t: 'Review', p: 'New purchases from your bank land here, like mail. Tap a pot (Spending, Savings, whatever you\'ve made) to sort each one, or say "not a spend" for things like moving your own money.' },
   { i: '🧠', t: 'I learn as you go', p: 'Tell me once that QuikTrip is gas and I\'ll remember it. The more you sort, the smarter I get, and the fewer taps you need.' },
@@ -2245,7 +2245,7 @@ function showSplash() {
   try { again = !!sessionStorage.getItem('pl.splash'); sessionStorage.setItem('pl.splash', '1'); } catch (e) { /* still show it */ }
   if (again) { const sp = document.getElementById('splash'); if (sp) sp.remove(); if (!tourSeen() && !document.documentElement.dataset.locked) setTimeout(() => tourShow(0), 300); return; }
   let el = document.getElementById('splash');
-  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div><h1>Pocket Ledger</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
+  if (!el) { el = document.createElement('div'); el.id = 'splash'; el.innerHTML = '<div><h1>ledgend</h1><div class="by">by Elijah Halford</div></div>'; document.body.appendChild(el); }
   // the tour is built underneath the title, so the title fades straight into it
   setTimeout(() => { if (!tourSeen() && !document.documentElement.dataset.locked) tourShow(0); }, 1100);
   setTimeout(() => el.classList.add('out'), 1300);
@@ -2273,7 +2273,7 @@ window.addEventListener('popstate', () => {
 function applySettings() {
   const st = S.settings, root = document.documentElement;
   const theme = themeKey();
-  if (DEMO) { root.dataset.demo = '1'; document.title = 'PocketLedger · DEMO'; }
+  if (DEMO) { root.dataset.demo = '1'; document.title = 'Ledgend · DEMO'; }
   root.dataset.theme = theme; root.dataset.palette = PALETTES.some(p => p[0] === st.palette) ? st.palette : 'harbor'; root.dataset.motion = st.motion; root.dataset.haptics = st.haptics === false ? 'off' : 'on';
   root.style.setProperty('--ts', st.textSize);
   depthSchedule();

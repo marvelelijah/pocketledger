@@ -1,6 +1,6 @@
 {
-  "name": "PocketLedger",
-  "short_name": "PocketLedger",
+  "name": "Ledgend",
+  "short_name": "Ledgend",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

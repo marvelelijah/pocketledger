@@ -1,4 +1,4 @@
-/* PocketLedger app lock. Plain JavaScript, loaded after app.js.
+/* Ledgend app lock. Plain JavaScript, loaded after app.js.
    What it is: a screen lock in front of the app, opened with a numeric passcode on an on-screen number pad.
    What it is not: encryption. Your data still sits in this browser's storage; the lock keeps people who pick up
    your phone out of the app, and your phone's own passcode is what protects the storage itself.

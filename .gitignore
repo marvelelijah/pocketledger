@@ -1,5 +1,6 @@
 # Never commit real financial data
 pocketledger-backup-*.json
+ledgend-backup-*.json
 *.pocketledger
 *backup*.txt
 .env

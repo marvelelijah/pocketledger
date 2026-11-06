@@ -1,4 +1,4 @@
-/* PocketLedger link server: a tiny Cloudflare Worker that sits between your phone and Plaid.
+/* Ledgend link server: a tiny Cloudflare Worker that sits between your phone and Plaid.
    Your Plaid secret and your bank access tokens live ONLY here (as Cloudflare secrets / KV),
    never in the app and never on GitHub. Setup steps are in server/README.md.
 
@@ -89,7 +89,7 @@ const putItems = (env, items) => env.LEDGER.put('items', JSON.stringify(items));
 
 async function linkToken(env, body) {
   const req = {
-    client_name: 'PocketLedger',
+    client_name: 'Ledgend',
     language: 'en',
     country_codes: ['US'],
     user: { client_user_id: 'me' },

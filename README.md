@@ -1,8 +1,8 @@
-# PocketLedger
+# ~/ledgend
 
-A personal budgeting app that runs in your iPhone's browser and installs to the home screen. It sorts your spending, learns how you categorize things, and keeps every number on your own phone. No build step, no accounts, no tracking.
+*Ledger + legend.* A personal budgeting app that runs in your iPhone's browser and installs to the home screen. It sorts your spending, learns how you categorize things, and keeps every number on your own phone. No build step, no accounts, no tracking.
 
-**Live app: https://elijahhalford.com/pocketledger/**
+**Live app: https://elijahhalford.com/pocketledger/** (the address and repository keep the original name `pocketledger`, so existing installs, data and bank links keep working)
 
 ## Install
 Open the live link in **Safari**, then **Share → Add to Home Screen**. The repository is served by GitHub Pages and every push to `main` goes live; close and reopen the app to pick up a new version (Settings shows the version at the bottom). To change the home-screen icon, delete the app and add it again, since iOS only reads the icon when it is added.
@@ -10,7 +10,7 @@ Open the live link in **Safari**, then **Share → Add to Home Screen**. The rep
 The app starts with made-up sample data so you can try everything. *Review → Clear sample data & start fresh* removes it.
 
 ## It learns as you use it
-PocketLedger gets better at sorting your money the more you use it, and everything it learns stays on your device.
+Ledgend gets better at sorting your money the more you use it, and everything it learns stays on your device.
 
 - **Your categories win, and spread.** When you set a category on a transaction, the app remembers it for that merchant, applies it to every matching purchase (past and future) and treats it as certain. The transaction detail says "You set this category".
 - **Names and confidence are cross-checked.** Each purchase is read three ways: a list of common merchants, common words in the bank text, and (when linked) the bank's own merchant name and category. When they agree, confidence goes up; when they disagree, it goes down. The detail screen explains why it was read that way. Names are plain nouns ("Kroger", "Corner Coffee"), never "Purchase at…".
