@@ -839,7 +839,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 l';
+const APP_VERSION = '2026-11-06 m';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1506,14 +1506,14 @@ function layoutStick() {
   const st = document.querySelector('.stick'), ph = document.querySelector('.stick-ph');
   if (!st || !ph) return;
   const top = parseFloat(getComputedStyle(st).top) || 0;
-  const docTop = ph.getBoundingClientRect().top + document.body.scrollTop;
+  const docTop = ph.getBoundingClientRect().top + window.scrollY;
   ph.style.height = Math.max(0, top + st.offsetHeight - docTop + 6) + 'px';
 }
 window.addEventListener('resize', layoutStick);
 function render() {
   RB = runningBalances();
   captureSegs();
-  const y = document.body.scrollTop;
+  const y = window.scrollY;
   const oldSheet = modalRoot.querySelector('.sheet');
   const sheetY = oldSheet ? oldSheet.scrollTop : 0;
   const tabChanged = ui.tab !== lastTab;
@@ -1536,7 +1536,7 @@ function render() {
   syncHistory();
   document.body.style.overflow = now.length ? 'hidden' : '';
 
-  document.body.scrollTop = ui.resetScroll ? 0 : y;
+  window.scrollTo(0, ui.resetScroll ? 0 : y);
   ui.resetScroll = false;
   const newSheet = modalRoot.querySelector('.sheet');
   if (newSheet && oldSheet) newSheet.scrollTop = sheetY;
@@ -1988,7 +1988,7 @@ const ACTIONS = {
     askConfirm(msg, run ? 'update' : 'apply', () => {
       applyBudget(c.rows); ui.budgetInputs = {}; ui.resetEarn = {}; ui.tab = 'home';
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      render(); document.body.scrollTop = 0;
+      render(); window.scrollTo(0, 0);
       if (navigator.webdriver) { rainArm(); showRainMsg(); return; }
       /* iOS keeps an "Undo Typing" history for everything typed on the page, and a shake would offer it. A fresh page has none, so the app reloads
          (the budget is already saved) and then waits for the shake. */
@@ -2198,7 +2198,7 @@ function shakeReset() {
   const ae = document.activeElement;
   if (ae && ae !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) ae.blur();
   if (ui.modal || ui.picker || ui.dialog || ui.tab !== 'home') { ui.modal = null; ui.picker = null; ui.dialog = null; ui.tab = 'home'; render(); }
-  document.body.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 function rainShake() {
   shakeReset();
@@ -2355,7 +2355,7 @@ showSplash();
 /* The on-screen keyboard shrinks the visible area; pop-ups follow it so what you type stays in view. */
 if (window.visualViewport) {
   const vv = window.visualViewport, rs = document.documentElement.style;
-  const fit = () => { rs.setProperty('--vvh', vv.height + 'px'); rs.setProperty('--vvt', vv.offsetTop + 'px'); rs.setProperty('--vvb', Math.max(0, window.innerHeight - vv.height - vv.offsetTop) + 'px'); };
+  const fit = () => { rs.setProperty('--vvh', vv.height + 'px'); rs.setProperty('--vvt', vv.offsetTop + 'px'); };
   vv.addEventListener('resize', fit); vv.addEventListener('scroll', fit); fit();
 }
 document.addEventListener('focusin', e => {
@@ -2414,7 +2414,7 @@ function depthFrame() {
     return;
   }
   depth.cx += (depth.tx - depth.cx) * 0.14; depth.cy += (depth.ty - depth.cy) * 0.14;
-  const y = Math.max(document.body.scrollTop || 0, 0), st = root.style;
+  const y = Math.max(window.scrollY || 0, 0), st = root.style;
   st.setProperty('--p1x', (-depth.cx * 44).toFixed(1) + 'px'); st.setProperty('--p1y', (-120 * Math.tanh(y * 0.11 / 120) - depth.cy * 44).toFixed(1) + 'px');   // drift eases to a stop so the glow never leaves the screen
   st.setProperty('--p2x', (-depth.cx * 90).toFixed(1) + 'px'); st.setProperty('--p2y', (-170 * Math.tanh(y * 0.28 / 170) - depth.cy * 80).toFixed(1) + 'px');
   const ang = Math.round(depth.cx * 14);
@@ -2423,7 +2423,7 @@ function depthFrame() {
   if (Math.abs(depth.tx - depth.cx) > 0.002 || Math.abs(depth.ty - depth.cy) > 0.002) depthSchedule();
 }
 function depthSchedule() { if (!depth.raf) depth.raf = requestAnimationFrame(depthFrame); }
-document.body.addEventListener('scroll', depthSchedule, { passive: true });
+window.addEventListener('scroll', depthSchedule, { passive: true });
 window.addEventListener('deviceorientation', e => {
   if (e.beta == null || e.gamma == null) return;
   if (!depth.base) depth.base = { b: e.beta, g: e.gamma };
@@ -2511,40 +2511,42 @@ document.addEventListener('click', e => {
   if (d._busy) return;
   if (motionOff() || !d.animate) { d.open = !d.open; return; }
   const opening = !d.open;
-  const before = d.getBoundingClientRect().height;
+  /* The window whose glass has to follow: the dropdown itself, or for a small "Good to know" toggle the window it sits in. */
+  const chrome = d.classList.contains('coll') ? d : d.closest('details.coll');
+  const before = d.getBoundingClientRect().height, chromeBefore = chrome ? chrome.getBoundingClientRect().height : 0;
   const follow = [];
   for (let n = d; n && n.id !== 'app' && n !== document.body; n = n.parentElement) for (let m = n.nextElementSibling; m; m = m.nextElementSibling) follow.push(m);
   const cs = getComputedStyle(d);
-  const bw = parseFloat(cs.borderTopWidth) || 0, padB = parseFloat(cs.paddingBottom) || 0;
+  const padB = parseFloat(cs.paddingBottom) || 0;
   let closedH, delta;
   if (opening) { closedH = before; d.open = true; delta = d.getBoundingClientRect().height - before; }
-  else { const sy = document.body.scrollTop; d.open = false; closedH = d.getBoundingClientRect().height; d.open = true; document.body.scrollTop = sy; delta = before - closedH; }   // measure the real closed height, no guessing (and keep the scroll the browser would otherwise clamp)
+  else { const sy = window.scrollY; d.open = false; closedH = d.getBoundingClientRect().height; d.open = true; window.scrollTo(0, sy); delta = before - closedH; }   // measure the real closed height, no guessing (and keep the scroll the browser would otherwise clamp)
   if (delta < 2) { d.open = opening; return; }
   d._busy = true;
-  const full = closedH + delta;
   const opt = { duration: 260, easing: 'cubic-bezier(.2,.8,.2,1)', fill: 'forwards' };
   const sign = opening ? -1 : 0, to = opening ? 0 : -1;
   const anims = follow.map(m => m.animate([{ transform: `translateY(${sign * delta}px)` }, { transform: `translateY(${to * delta}px)` }], opt));
   /* the window's own glass (background, edge, shadow) is drawn by a stand-in that grows or shrinks, so its rounded corners and shadow stay right the whole way */
   const shell = document.createElement('div');
-  const hasChrome = d.classList.contains('coll');
-  if (hasChrome) {
+  if (chrome) {
+    const bw = parseFloat(getComputedStyle(chrome).borderTopWidth) || 0;
+    const h0 = chromeBefore, h1 = chromeBefore + (opening ? delta : -delta);
     shell.className = 'card flipshell';
     shell.style.cssText = `top:${-bw}px;left:${-bw}px;right:${-bw}px;`;
-    d.insertBefore(shell, d.firstChild);
-    d.classList.add('flipping');
-    anims.push(shell.animate([{ height: (opening ? closedH : full) + 'px' }, { height: (opening ? full : closedH) + 'px' }], opt));
+    chrome.insertBefore(shell, chrome.firstChild);
+    chrome.classList.add('flipping');
+    anims.push(shell.animate([{ height: h0 + 'px' }, { height: h1 + 'px' }], opt));
   }
   const body = d.querySelector(':scope > .coll-body') || sum.nextElementSibling;
-  const cut = Math.max(0, delta - padB - bw), hide = `inset(-12px -12px ${cut}px -12px)`, show = 'inset(-12px -12px 0px -12px)';
+  const cut = Math.max(0, delta - (d === chrome ? padB : 0)), hide = `inset(-12px -12px ${cut}px -12px)`, show = 'inset(-12px -12px 0px -12px)';
   if (body) anims.push(body.animate([{ clipPath: opening ? hide : show }, { clipPath: opening ? show : hide }], opt));
   // closing a window that was keeping the page long: glide the scroll up instead of letting the page snap at the end
   let scrollAnim = 0;
   if (!opening) {
-    const sc = document.body, maxNow = sc.scrollHeight - sc.clientHeight, maxNew = Math.max(0, maxNow - delta), y0 = sc.scrollTop;
+    const maxNow = document.documentElement.scrollHeight - window.innerHeight, maxNew = Math.max(0, maxNow - delta), y0 = window.scrollY;
     if (y0 > maxNew + 1) {
       const t0 = performance.now(), ease = t => 1 - Math.pow(1 - t, 4);
-      const step = now => { const t = Math.min(1, (now - t0) / 260); sc.scrollTop = y0 + (maxNew - y0) * ease(t); if (t < 1) scrollAnim = requestAnimationFrame(step); };
+      const step = now => { const t = Math.min(1, (now - t0) / 260); window.scrollTo(0, y0 + (maxNew - y0) * ease(t)); if (t < 1) scrollAnim = requestAnimationFrame(step); };
       scrollAnim = requestAnimationFrame(step);
     }
   }
@@ -2554,8 +2556,9 @@ document.addEventListener('click', e => {
     if (!d._busy || d._anims !== anims) return; d._busy = false;
     cancelAnimationFrame(scrollAnim);
     if (!opening) d.open = false;
-    d.classList.remove('flipping'); shell.remove();
+    if (chrome) { chrome.style.transition = 'none'; chrome.classList.remove('flipping'); shell.remove(); }   // hand the glass back with no fade, so there is no seam
     anims.forEach(x => x.cancel());
+    if (chrome) { void chrome.offsetHeight; requestAnimationFrame(() => { chrome.style.transition = ''; }); }
   };
   d._anims = anims;
   anims[anims.length - 1].onfinish = finish;

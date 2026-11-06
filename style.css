@@ -592,19 +592,19 @@ html::after { animation: ambB 23s ease-in-out infinite alternate; }
 
 /* open/close stand-in for the window's glass */
 .flipshell { position: absolute !important; margin: 0 !important; padding: 0 !important; z-index: -1; pointer-events: none; overflow: visible; }
-details.flipping { background: none !important; box-shadow: none !important; border-color: transparent !important; }
+details.flipping { background: none !important; box-shadow: none !important; border-color: transparent !important; transition: none !important; }
 details.flipping::before { display: none !important; }
 
 /* the icon picker is a short fixed grid: nothing in it scrolls */
 .sheet.nogscroll { overflow: hidden; overscroll-behavior: none; touch-action: none; }
 .scrim[data-layer="picker"] .nogscroll ~ * { touch-action: none; }
 
-/* The page scrolls inside the body, which starts just below the status bar. Content is simply cut off there, so the background glow carries
-   all the way up behind the clock with no blur, no strip and no colour change to hide. (Light mode puts a dark plate behind the white clock.) */
-html { height: 100%; overflow: hidden; }
-body { position: fixed; top: env(safe-area-inset-top); left: 0; right: 0; bottom: var(--vvb, 0px); overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0; min-height: 0; }
-html[data-standalone] #app { padding-top: 16px; }
-#statusmask { display: none; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: #0d1b1e; z-index: 7; pointer-events: none; }
-html[data-tone="light"][data-standalone] #statusmask { display: block; }
+/* Solid plate behind the status bar: whatever iOS does to content scrolling under it (its own blur), only this plate is under it. It fades out below the bar with a plain alpha fade (no blur). */
+body { padding-top: env(safe-area-inset-top); }
+html, body { min-height: 100vh; min-height: 100dvh; }
+html[data-standalone] #app { padding-top: 22px; }
+#statusmask { display: block; position: fixed; top: 0; left: 0; right: 0; height: calc(env(safe-area-inset-top) + 14px); z-index: 7; pointer-events: none;
+  background: linear-gradient(to bottom, var(--bg) env(safe-area-inset-top), transparent); }
+html[data-tone="light"] #statusmask { background: linear-gradient(to bottom, #0d1b1e env(safe-area-inset-top), transparent); }   /* the clock stays white, so light mode keeps a dark plate behind it */
 /* number pad keys react the instant a finger lands */
 #lockov .numpad .key { touch-action: manipulation; -webkit-user-select: none; user-select: none; }
