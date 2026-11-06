@@ -52,5 +52,5 @@ Everything you enter lives in the browser on your phone. The web address serves 
 | `data.js` | Logic with no screen code: categories, name simplifier, learning, pots, income, budget, statements |
 | `app.js` | The screens and interactions |
 | `lock.js` | The optional app lock and number pad |
-| `sw.js`, `manifest.webmanifest`, `app-icon-*.png` | Offline support and home-screen install |
+| `sw.js`, `manifest.webmanifest`, `ledgend-icon-*.png` | Offline support and home-screen install |
 | `server/` | The optional bank-link Worker and its setup guide |
