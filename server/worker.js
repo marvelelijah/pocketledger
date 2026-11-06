@@ -13,7 +13,7 @@
 const PLAID = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 
 /* Shown in the app (Settings > check connection) so you can tell which version of this file is running. */
-const WORKER_VERSION = '2026-11-05 b';
+const WORKER_VERSION = '2026-11-06 a';
 
 export default {
   async fetch(req, env) {
@@ -42,6 +42,7 @@ export default {
       if (route === 'POST /link-token') return json(await linkToken(env, body), 200, cors);
       if (route === 'POST /exchange') return json(await exchange(env, body), 200, cors);
       if (route === 'GET /sync') return json(await sync(env), 200, cors);
+      if (route === 'POST /refresh') return json(await refresh(env), 200, cors);
       if (route === 'POST /unlink') return json(await unlink(env, body), 200, cors);
       return json({ error: 'Not found' }, 404, cors);
     } catch (e) {
@@ -190,6 +191,18 @@ async function sync(env) {
     }
   }
   await putItems(env, items);
+  return out;
+}
+
+/* Asks Plaid to check each bank for new purchases right now, instead of waiting for its next scheduled check (1 to 4 times a day).
+   The answer comes a little later: the app syncs again a few seconds after this. Never fails the caller. */
+async function refresh(env) {
+  const items = await getItems(env);
+  const out = { requested: 0, errors: [] };
+  for (const item of items) {
+    try { await plaid(env, '/transactions/refresh', { access_token: item.access_token }); out.requested++; }
+    catch (e) { out.errors.push((item.institution || 'A bank') + ': ' + (e.message || e.code || 'refresh failed')); }
+  }
   return out;
 }
 

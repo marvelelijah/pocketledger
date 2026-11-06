@@ -840,7 +840,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-05 h';
+const APP_VERSION = '2026-11-06 a';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -1595,8 +1595,10 @@ function animateUI(entering) {
 
 async function doSync() {
   ui.syncing = true; render();
+  await refreshBank();
   await sync();
   ui.syncing = false; render();
+  if (refreshOk) setTimeout(() => autoSync(true), 12000);   // the bank answers a few seconds after being asked
 }
 
 function closeModal() {

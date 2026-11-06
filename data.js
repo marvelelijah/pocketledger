@@ -1398,7 +1398,20 @@ function ingestLinked(res) {
   save();
 }
 
-let syncInfo = '', syncDetail = '', bankProblems = [];
+let syncInfo = '', syncDetail = '', bankProblems = [], refreshNote = '', refreshOk = false;
+/* Manual refresh only: ask the bank for news right now (at most every 2 minutes; older servers without this just skip it). */
+async function refreshBank() {
+  refreshOk = false; refreshNote = '';
+  if (!(S.settings.linked && linkConfigured())) return;
+  try {
+    const last = +localStorage.getItem('pl.refreshAt') || 0;
+    if (Date.now() - last < 120000) return;
+    localStorage.setItem('pl.refreshAt', String(Date.now()));
+    const r = await linkApi('/refresh', {});
+    refreshOk = !!(r && r.requested);
+    if (r && r.errors && r.errors.length) refreshNote = 'Instant refresh: ' + r.errors[0];
+  } catch (e) { /* server not updated yet: normal sync still runs */ }
+}
 async function syncLinked() {
   try {
     let res, guard = 0, got = 0, accts = 0, older = 0;
@@ -1418,7 +1431,7 @@ async function syncLinked() {
       + (ups.length ? 'Your bank last sent Plaid new data: ' + ups.map(u => (ups.length > 1 ? u.institution + ' ' : '') + when(u.ok)).join('; ') + '. Purchases made after that appear once the bank sends its next update.' : '');
     syncInfo = accts + ' account' + (accts === 1 ? '' : 's') + ', ' + got + ' new purchase' + (got === 1 ? '' : 's') + ' from the bank'
       + (older ? ' (' + older + ' older than ' + S.settings.countFrom + ', kept in Activity as history only)' : '')
-      + (got === 0 ? '. Banks often take a few minutes to send history after linking, so tap sync now again shortly.' : '.') + (syncDetail ? ' ' + syncDetail : '');
+      + (got === 0 ? '. Banks often take a few minutes to send history after linking, so tap sync now again shortly.' : '.') + (syncDetail ? ' ' + syncDetail : '') + (refreshNote ? ' ' + refreshNote : '');
   } catch (e) { syncError = e.message || String(e); }
   save();
 }
