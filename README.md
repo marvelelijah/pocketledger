@@ -19,6 +19,7 @@ Ledgend gets better at sorting your money the more you use it, and everything it
 - **Skips Review by itself.** Card payments and transfers between your own accounts are recognized and kept in Activity, marked "Between your accounts".
 - **Account-aware suggestions.** Every account is reviewed on its own, and a savings account suggests the Savings pot first.
 - **Goal projections.** Each goal shows the month it would be reached at the current percentage, and what a few more percent would change. Goals show their real percent (a $700 pot with a $350 goal reads 200%).
+- **Pending purchases keep your sorting.** When a bank replaces a pending purchase with the posted one, even without linking them (gas stations often do), your sorting moves to the posted purchase instead of sending it back to Review. A pending purchase's price can be edited (*Edit amount* in its detail) until the bank posts the final one.
 - **Auto-sync.** With a linked bank, the app syncs on open, when you return to it, when the phone reconnects, and every few minutes while open.
 
 Nothing is sent anywhere to learn: the rules live in the app's storage on your phone, travel only inside your own backup code, and are cleared by *Clear sample data & start fresh* or *Erase*.

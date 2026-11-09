@@ -358,6 +358,7 @@ function defaultState() {
     budgetUndo: null,    // what the month looked like before the last Apply/Update
     adjustments: [],      // month-end redistributions
     learned: {},
+    recentGone: [],       // sorted purchases the bank dropped (usually a pending one that posted under a new id), so their sorting can follow the posted one
     customCats: [],       // categories you made yourself: { id, title, icon, deduct, color }
     statementsSeen: [],   // months whose statement you have opened or dismissed
     todos: [],   // the to-do/notes screens are gone; any saved ones are kept so old backups still round-trip
@@ -553,7 +554,7 @@ function ingest(raws, opts) {
     const tx = {
       id: r.id, accountID: r.accountID, rawName: r.rawName, date: r.date, amount: r.amount,
       simpleName: s.phrase, confidence: s.confidence, category: s.category, why: s.why, userConfirmed: false,
-      merchant: r.merchant || '', pfc: r.pfc || null, acctLabel: accLabel(r.accountID),
+      merchant: r.merchant || '', pfc: r.pfc || null, pending: !!r.pending, acctLabel: accLabel(r.accountID),
       pot: null, isIgnored: false, ignoredWhy: null, incomeSourceID: null, extraIncomeLabel: null, extraIncomePot: null,
     };
     if (r.amount < 0) {
@@ -1334,12 +1335,52 @@ function forgetBankAccounts(itemId, institution) {
   S.accounts = S.accounts.filter(a => !(a.itemId === itemId || (!a.itemId && institution && a.institution === institution)));
 }
 
+/* Pending purchases often post under a new id, and not always linked to the old one (gas stations especially, where the hold and the final price differ).
+   Whenever the bank drops a purchase you had sorted, remember the sorting; when a same-merchant, same-account, near-in-time purchase turns up unsorted
+   (in this update or a later one), the sorting moves to it, so it doesn't land back in Review. */
+const nameKey = n => String(n || '').toUpperCase().replace(/[^A-Z]/g, '');
+const sameName = (a, b) => a && b && (a === b || (a.length >= 8 && b.length >= 8 && a.slice(0, 8) === b.slice(0, 8)));
+function rememberGone(removed) {
+  S.recentGone = (S.recentGone || []).filter(g => Date.now() - g.at < 14 * 864e5).slice(-60);
+  for (const id of removed || []) {
+    const x = txById(id);
+    if (x && isExpense(x) && (x.pot || x.isIgnored)) S.recentGone.push({ id: x.id, pot: x.pot || null, ign: !!x.isIgnored, why: x.ignoredWhy || null, acct: x.accountID, key: nameKey(x.rawName), date: x.date, at: Date.now() });
+  }
+}
+function reclaimSorting() {
+  const gone = S.recentGone || [];
+  if (!gone.length) return;
+  const keep = [];
+  for (const g of gone) {
+    const cand = S.transactions.filter(t => t.id !== g.id && needsReview(t) && t.accountID === g.acct && String(t.id).startsWith('plaid-')
+      && sameName(nameKey(t.rawName), g.key) && Math.abs(new Date(t.date) - new Date(g.date)) <= 6 * 864e5)
+      .sort((a, b) => Math.abs(new Date(a.date) - new Date(g.date)) - Math.abs(new Date(b.date) - new Date(g.date)));
+    const t = cand[0];
+    if (!t) { keep.push(g); continue; }
+    if (g.pot && potById(g.pot)) assign(t.id, g.pot); else if (g.ign) ignoreTx(t.id, g.why || undefined);
+  }
+  S.recentGone = keep;
+}
+
+/* A pending purchase's price is often a guess (gas stations hold one amount and post another). You can type the real one; the pot follows. */
+/* Purchases the bank still lists as pending. Ones synced before the app tracked this have no flag, so recent bank purchases count too. */
+const canEditAmount = t => !!t && isExpense(t) && (t.pending === true || (t.pending === undefined && String(t.id).startsWith('plaid-') && Date.now() - new Date(t.date) < 4 * 864e5));
+function setPendingAmount(id, amount) {
+  const t = txById(id), a = round2(Math.abs(amount));
+  if (!canEditAmount(t) || !(a > 0)) return false;
+  t.amount = -a; t.amountEdited = true;
+  if (t.pot) assign(t.id, t.pot);
+  save();
+  return true;
+}
+
 /* res = { accounts, added, modified, removed } from the server */
 function ingestLinked(res) {
   mergeAccounts(res);
   if (!S.settings.countFrom) S.settings.countFrom = firstOfMonthISO();
   const from = new Date(S.settings.countFrom + 'T00:00:00');
-  const norm = t => ({ id: t.id, accountID: t.accountID, rawName: t.rawName, amount: round2(t.amount), date: new Date(t.date).toISOString(), merchant: t.merchant || '', pfc: t.pfc || null });
+  const norm = t => ({ id: t.id, accountID: t.accountID, rawName: t.rawName, amount: round2(t.amount), date: new Date(t.date).toISOString(), merchant: t.merchant || '', pfc: t.pfc || null, pending: !!t.pending });
+  rememberGone(res.removed);                     // before anything is deleted: note which sorted purchases the bank is dropping
   for (const t of res.added || []) {
     const old = t.pendingId && txById(t.pendingId);
     if (old) {                                   // the bank replaced a pending purchase with the posted one: keep your sorting
@@ -1353,10 +1394,13 @@ function ingestLinked(res) {
   for (const t of res.modified || []) {
     const x = txById(t.id), n = norm(t);
     if (!x) { ingest([n], { countFrom: from }); continue; }
-    x.amount = n.amount; x.date = n.date; x.rawName = n.rawName;
+    x.pending = n.pending; x.date = n.date; x.rawName = n.rawName;
+    if (!x.pending) delete x.amountEdited;
+    if (!(x.amountEdited && x.pending)) x.amount = n.amount;   // an amount you typed for a pending purchase stays until it posts
     if (x.pot) assign(x.id, x.pot);              // re-deduct if the amount changed
   }
   for (const id of res.removed || []) removeTx(id);
+  reclaimSorting();
   S.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
   healOrphans();
   boostRepeats();

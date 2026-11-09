@@ -72,7 +72,7 @@ function txRow(t, tag, opts) {
     </div>
     <div class="right">
       <div class="amt ${t.amount > 0 ? 'pos' : ''}">${usd(t.amount)}</div>
-      <div class="meta">${label ? esc(label) : ''} ${badge(t)}</div>
+      <div class="meta">${label ? esc(label) : ''} ${t.pending ? '<span class="badge b-mid">pending</span>' : ''} ${badge(t)}</div>
       ${RB[t.id] !== undefined ? `<div class="bal">bal ${usd(RB[t.id])}</div>` : ''}
     </div>
   </div>`;
@@ -805,7 +805,7 @@ function linkStatus() {
   return ['not linked', 'b-mid'];
 }
 
-const APP_VERSION = '2026-11-06 x';
+const APP_VERSION = '2026-11-09 a';
 
 const LINKED_ROW = (i, mine) => {
   const prob = bankProblems.find(p => p.startsWith(i.institution + ':'));
@@ -970,6 +970,7 @@ function txModal(id) {
       <div class="field"><span class="muted">Date &amp; time</span><div class="cp" data-copy="${esc(fmtFull(t.date))}" style="text-align:right">${fmtFull(t.date)}</div></div>
       <div class="field"><span class="muted">Account</span><div>${esc(accountName(t.accountID))}</div></div>
       ${String(t.id).startsWith('man-') ? `<button class="btn full" style="margin-top:8px" data-action="editTx" data-id="${esc(t.id)}">Edit</button>` : ''}
+      ${canEditAmount(t) ? `<div class="muted small" style="margin-top:8px">${t.pending ? 'Still pending: the' : 'If this is still pending, the'} bank may change the price when it posts (gas stations often do). ${t.amountEdited ? 'You set this amount; the bank\'s final price replaces it when it posts.' : ''}</div><button class="btn full" style="margin-top:8px" data-action="editPending" data-id="${esc(t.id)}">Edit amount</button>` : ''}
     </div>
     <div class="card"><h2>How it was read</h2>
       <div class="field"><span class="muted">Simplified as</span><div class="cp" data-copy="${esc(t.simpleName)}" style="text-align:right">${esc(t.simpleName)}</div></div>
@@ -983,6 +984,17 @@ function txModal(id) {
       ${c.taxDeductible ? '<div class="muted small" style="margin-top:8px">Counted toward your tax-deductible total.</div>' : ''}
     </div>
     ${pots}`);
+}
+
+function pendAmtModal() {
+  const m = ui.modal, t = txById(m.id);
+  if (!t) return sheet('Edit amount', emptyBox('Not found', ''));
+  return sheet('Edit pending amount', `
+    <div class="card stack">
+      <div class="muted small">${esc(t.simpleName)} is still pending. Type what you actually paid and its pot is adjusted to match. When the bank posts the final price, that replaces this.</div>
+      <div class="field"><span>Amount</span><input type="number" inputmode="decimal" step="any" placeholder="0.00" value="${m.amount || ''}" data-change="pendAmt" data-live="1" style="width:130px" autofocus></div>
+    </div>
+    <button class="btn primary full" data-action="savePendAmt">Save</button>`);
 }
 
 function addTxModal() {
@@ -1401,6 +1413,7 @@ function modalHTML() {
     case 'tx': return txModal(m.id);
     case 'extra': return extraModal();
     case 'addTx': return addTxModal();
+    case 'pendAmt': return pendAmtModal();
     case 'sources': return sourcesModal();
     case 'potEdit': return potEditModal();
     case 'move': return moveModal();
@@ -1993,6 +2006,12 @@ const ACTIONS = {
   addTx: () => { ui.modal = { type: 'addTx', kind: 'purchase', amount: 0, name: '', pot: potById(S.settings.defaultPot) ? S.settings.defaultPot : 'spending' }; },
   txKind: d => { ui.modal.kind = d.pot; },
   txPot: d => { ui.modal.pot = d.pot; },
+  editPending: d => { const t = txById(d.id); if (t) ui.modal = { type: 'pendAmt', id: t.id, amount: Math.abs(t.amount) }; },
+  savePendAmt: () => {
+    const m = ui.modal;
+    if (!setPendingAmount(m.id, m.amount)) { askAlert('Enter an amount above $0.'); return; }
+    ui.modal = { type: 'tx', id: m.id };
+  },
   saveTx: () => {
     const m = ui.modal;
     if (m.editId) {
@@ -2119,6 +2138,7 @@ function handleField(el, final) {
     case 'setcat': if (final) { setCategory(d.id, v); render(); } return;
     case 'extraLabel': m.label = v; return;
     case 'txAmount': m.amount = num(v); return;
+    case 'pendAmt': m.amount = num(v); return;
     case 'txName': m.name = v; return;
     case 'txDate': m.date = v; return;
     case 'spendAvail': if (final) { setSpendingAvailable(num(v)); render(); } return;
